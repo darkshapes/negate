@@ -11,16 +11,28 @@ entrypoint synthetic image classifier
 >
 > Requires [uv](https://github.com/astral-sh/uv)
 
-```
+```bash
 git clone https://github.com/darkshapes/negate.git
 cd negate
 uv sync
 ```
 
+<sub>macos/linux</sub>
+
+```bash
+source .venv/bin/activate
+```
+
+<sub>windows</sub>
+
+```powershell
+Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
+```
+
 ## Test:
 
 ```
-python -m tests.test_extract -rPvv
+python -m tests.test_extract -v
 ```
 
 ## Scan A Folder or File
@@ -41,9 +53,15 @@ options:
 ## Call from another application
 
 ```
+import asyncio
+
 from negate import ResidualExtractor
+
 residual_extractor = ResidualExtractor(image_path, output_folder, verbose=verbose)
+
 async def async_main() -> tuple:
     fractal, texture = await residual_extractor.process_residuals()
     return (fractal, texture)
+
+asyncio.run(async_main())
 ```
