@@ -172,7 +172,7 @@ def main() -> None:
     output_folder = Path(__file__).resolve().parent.parent / ".output"
 
     parser = argparse.ArgumentParser(description="Extract Laplacian residuals from images.")
-    parser.add_argument("-i", "--input", type=str, default=input_folder, help="Input folder containing images.")
+    parser.add_argument("-i", "--input", type=str, default=input_folder, help="Input folder containing images or individual image.")
     parser.add_argument("-o", "--output", type=str, default=output_folder, help="Output folder for residuals.")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
 
