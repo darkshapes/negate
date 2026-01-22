@@ -42,4 +42,8 @@ options:
 
 ```
 from negate import ResidualExtractor
+residual_extractor = ResidualExtractor(image_path, output_folder, verbose=verbose)
+async def async_main() -> tuple:
+    fractal, texture = await residual_extractor.process_residuals()
+    return (fractal, texture)
 ```
