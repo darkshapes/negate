@@ -29,11 +29,11 @@ Functions:
 import numpy as np
 import cv2
 from tqdm import tqdm
+from numpy.typing import NDArray
 
 
 class ResidualExtractor:
-    """
-        Extracts Laplacian residuals and computes fractal and texture features from images.\n
+    """Extracts Laplacian residuals and computes fractal and texture features from images.\n
     Attributes:
         input_folder (str): Folder containing input images.
         output_folder (str): Folder to save the extracted residuals.
@@ -44,10 +44,9 @@ class ResidualExtractor:
         box_count(): Calculates the fractal dimension using the box-counting method.
         texture_complexity(): Computes texture complexity from the residual image.
         extract_and_save_residuals(): Extracts residuals and saves them to disk.
-        process_residuals(): Processes saved residuals to compute features.
-    """
+        process_residuals(): Processes saved residuals to compute features."""
 
-    def __init__(self, input_folder, output_folder, verbose=False) -> None:
+    def __init__(self, input_folder: str, output_folder: str, verbose: bool = False) -> None:
         """Initializes the ResidualExtractor with input and output folders.\n
         :param input_folder: Path to the folder containing images.
         :param output_folder: Path to the folder for saving residuals.
@@ -62,12 +61,12 @@ class ResidualExtractor:
 
         self.dataset = load_dataset("darkshapes/a_slice", cache_dir=self.input_folder, download_mode=DownloadMode.FORCE_REDOWNLOAD).cast_column("image", Image(decode=False))
 
-    def laplacian_residual(self):
+    def laplacian_residual(self) -> NDArray:
         """Computes Laplacian residuals using a 3x3 kernel."""
         kernel = np.array([[0, 1, 0], [1, -4, 1], [0, 1, 0]])
         return cv2.filter2D(self.image.astype(np.float32), -1, kernel)
 
-    def box_count(self, Z, threshold=0.01):
+    def box_count(self, Z, threshold=0.01) -> NDArray:
         """Calculates the fractal dimension using the box-counting method."""
         Z = np.abs(Z)
         sizes = np.logspace(2, 7, num=6, base=2, dtype=int)  # box sizes
@@ -83,7 +82,7 @@ class ResidualExtractor:
         coeffs = np.polyfit(np.log(sizes), np.log(counts), 1)
         return -coeffs[0]  # FD
 
-    def texture_complexity(self, R, D=16):
+    def texture_complexity(self, R, D=16) -> NDArray:
         """Computes texture complexity from the residual image."""
         R = np.abs(R)
         h, w = R.shape
@@ -97,7 +96,7 @@ class ResidualExtractor:
             TCs.append(tc)
         return np.array(TCs)
 
-    def extract_and_save_residuals(self):
+    def extract_and_save_residuals(self) -> None:
         """Extracts Laplacian residuals and saves them to disk."""
         import os
         from pathlib import Path
@@ -115,7 +114,7 @@ class ResidualExtractor:
                 np.save(residual_path, residual)
             self.residuals.append(residual_path)
 
-    def process_residuals(self):
+    def process_residuals(self) -> None:
         """Processes saved residuals to compute fractal and texture features."""
         self.fractal_features = []
         self.texture_features = []
@@ -127,7 +126,7 @@ class ResidualExtractor:
             self.texture_features.append(tc.mean())
 
 
-def main():
+def main() -> None:
     """Main entry point to run the extraction and analysis process."""
 
     import os
