@@ -24,6 +24,13 @@ dependencies = [
     "pillow>=12.1.0",
     "scikit-learn>=1.8.0",
 ]
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "ruff>=0.14.13",
+]
+
+
 [project.urls]
 Homepage      = "https://github.com/darkshapes/negate"
 
