@@ -31,15 +31,17 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 
 ## Test:
 
-```
+```sh
 python -m tests.test_extract -v
 ```
 
 ## Scan A Folder or File
 
-```
+```bash
 usage: negate [-h] [-i INPUT] [-o OUTPUT] [-v]
+```
 
+```
 Extract Laplacian residuals from images.
 
 options:
@@ -52,7 +54,7 @@ options:
 
 ## Call from another application
 
-```
+```py
 import asyncio
 
 from negate import ResidualExtractor
