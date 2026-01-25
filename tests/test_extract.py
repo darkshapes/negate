@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
+
 from pathlib import Path
 
 from datasets import Image, load_dataset
@@ -9,7 +10,7 @@ from negate import ResidualExtractor
 import pandas as pd
 
 
-def test_with_dataset(verbose: bool = False) -> None:
+def with_dataset(verbose: bool = False) -> None:
     """Download the dataset from a remote source and store it in the input folder."""
     import asyncio
     from matplotlib import pyplot as plt
@@ -26,20 +27,20 @@ def test_with_dataset(verbose: bool = False) -> None:
     texture_synthetic = []
 
     async def async_main() -> tuple:
-        fractal, texture = await residual_extractor.process_residuals()
-        return (fractal, texture)
+        residuals = await residual_extractor.process_residuals()
+        return residuals
 
     for index in synthetic_images["train"]:
         image_path = Path(index["image"]["path"]).resolve()
         residual_extractor = ResidualExtractor(image_path, output_folder, verbose=verbose)
-        fractal, texture = asyncio.run(async_main())
-        fractal_synthetic.extend(fractal)
-        texture_synthetic.extend(texture)
+        residuals = asyncio.run(async_main())
+        fractal_synthetic.extend(residuals["fractal_complexity"])
+        texture_synthetic.extend(residuals["texture_complexity"])
 
     residual_extractor = ResidualExtractor(ground_truth_folder, output_folder, verbose=verbose)
-    fractal, texture = asyncio.run(async_main())
-    fractal_features.extend(fractal)
-    texture_features.extend(texture)
+    residuals = asyncio.run(async_main())
+    fractal_features.extend(residuals["fractal_complexity"])
+    texture_features.extend(residuals["texture_complexity"])
 
     plt.figure(figsize=(8, 5))
     plt.hist(fractal_features, bins=30, alpha=0.7, label="Human")
@@ -62,7 +63,7 @@ def test_with_dataset(verbose: bool = False) -> None:
     plt.show()
 
 
-def test_with_dataset_v2(verbose: bool = False) -> None:
+def with_dataset_v2(verbose: bool = False) -> None:
     """Download the dataset from a remote source and store it in the input folder."""
     import asyncio
     from matplotlib import pyplot as plt
@@ -78,18 +79,18 @@ def test_with_dataset_v2(verbose: bool = False) -> None:
     texture_synthetic = []
 
     async def async_main() -> tuple:
-        fractal, texture = await residual_extractor.process_residuals()
-        return (fractal, texture)
+        residuals = await residual_extractor.process_residuals()
+        return residuals
 
     residual_extractor = ResidualExtractor(ground_truth_folder, output_folder, verbose=verbose)
-    fractal, texture = asyncio.run(async_main())
-    fractal_features.extend(fractal)
-    texture_features.extend(texture)
+    residuals = asyncio.run(async_main())
+    fractal_features.extend(residuals["fractal_complexity"])
+    texture_features.extend(residuals["texture_complexity"])
 
     residual_extractor = ResidualExtractor(synthetic_folder, output_folder, verbose=verbose)
-    fractal, texture = asyncio.run(async_main())
-    fractal_synthetic.extend(fractal)
-    texture_synthetic.extend(texture)
+    residuals = asyncio.run(async_main())
+    fractal_synthetic.extend(residuals["fractal_complexity"])
+    texture_synthetic.extend(residuals["texture_complexity"])
 
     plt.figure(figsize=(8, 5))
     plt.hist(fractal_features, bins=30, alpha=0.7, label="Human")
@@ -118,5 +119,5 @@ if __name__ == "__main__":
         verbose = True
 
     # pytest.main([__file__])
-    test_with_dataset(verbose)
-    test_with_dataset_v2(verbose)
+    with_dataset(verbose)
+    with_dataset_v2(verbose)

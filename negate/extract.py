@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
+
 """
 ResidualExtractor for Laplacian Residuals and Texture Analysis
 
@@ -26,14 +27,19 @@ Functions:
         Main entry point to run the extraction and analysis process.
 """
 
+import argparse
 import asyncio
 from pathlib import Path
+from sys import modules as sys_modules
 from typing import Any
 
 import cv2
 import numpy as np
+import pandas as pd
 from numpy.typing import NDArray
 from tqdm import tqdm
+
+from negate.quantify import graph_result, flag_synthetic_or_human_origin
 
 
 class ResidualExtractor:
@@ -51,7 +57,7 @@ class ResidualExtractor:
         extract_and_save_residuals(): Extracts residuals and saves them to disk.
         process_residuals(): Processes saved residuals to compute features."""
 
-    def __init__(self, input: Path, output_folder: Path, verbose: bool = False) -> None:
+    def __init__(self, input: Path, output_folder: Path | None = None, origin: str | None = None, verbose: bool = False) -> None:
         """Initializes the ResidualExtractor with input and output folders.\n
         :param input_folder: Path to the folder containing images.
         :param output_folder: Path to the folder for saving residuals.
@@ -61,9 +67,10 @@ class ResidualExtractor:
         self.output_folder = output_folder
         self.verbose = verbose
         self.console(("input", self.input), ("output", self.output_folder))
-        self.console(("type input", type(self.input)))
+        self.console(("input class type", type(self.input)))
         self.console(("input is dir", self.input.is_dir()))
         self.console(("input is file", self.input.is_file()))
+        self.origin = origin
 
     async def _load_single_image(self, image_path: str) -> np.ndarray | None:
         """Load a single image in grayscale."""
@@ -110,12 +117,12 @@ class ResidualExtractor:
         for size in sizes:
             S = cv2.resize(Z, (size, size), interpolation=cv2.INTER_NEAREST)
             count = np.sum(S > threshold)
-            try:
-                counts.append(count)
-            except RuntimeWarning as _:
-                if self.verbose:
-                    self.console(("Divide by zero error for", self.image_path), ("/n", ".. continuing"))
-        coeffs = np.polyfit(np.log(sizes), np.log(counts), 1)
+            counts.append(count)
+        try:
+            coeffs = np.polyfit(np.log(sizes), np.log(counts), 1)
+        except RuntimeWarning as _:
+            if self.verbose:
+                self.console(("Divide by zero error for", self.input), ("/n", ".. continuing"))
         return -coeffs[0]  # FD
 
     def texture_complexity(self, R, D=16) -> NDArray:
@@ -133,27 +140,37 @@ class ResidualExtractor:
             TCs.append(tc)
         return np.array(TCs)
 
-    async def process_residuals(self) -> tuple[list[NDArray], list[NDArray]]:
+    async def process_residuals(self) -> dict[str, list[NDArray]] | pd.DataFrame:
         """Asynchronously processes images to compute fractal and texture features.\n
         :returns: Tuple of lists containing fractal dimensions and texture
         complexity values for each input image."""
         self.console(("process", "running..."))
         self.fractal_features = []
         self.texture_features = []
-
+        dataframe_rows = []
         self.images = await self._load_images()
 
         async def process_single(idx: int) -> None:
             self.image = self.images[idx]
             residual = await asyncio.get_running_loop().run_in_executor(None, self.laplacian_residual)
+            if self.output_folder:
+                residual_path = Path(self.output_folder) / f"{Path(self.image_paths[idx]).stem}.npy"
+                np.save(residual_path, residual)
             fractal_dimension = await asyncio.get_running_loop().run_in_executor(None, self.box_count, residual)
             self.fractal_features.append(fractal_dimension)
             tc = await asyncio.get_running_loop().run_in_executor(None, self.texture_complexity, residual)
-            self.texture_features.append(tc.mean())
+            texture_dimension = tc.mean()
+            self.texture_features.append(texture_dimension)
+            self.console((f"fractal complexity of {self.image_paths[idx]} : ", fractal_dimension))
+            self.console((f"texture complexity of {self.image_paths[idx]} : ", texture_dimension))
+            dataframe_rows.append({"image_path": self.image_paths[idx], "fractal_complexity": fractal_dimension, "texture_complexity": texture_dimension, "origin": self.origin})
 
         await asyncio.gather(*[process_single(self.image_path) for self.image_path in range(len(self.image_paths))])
 
-        return self.fractal_features, self.texture_features
+        if "pytest" in sys_modules:
+            return {"fractal_complexity": self.fractal_features, "texture_complexity": self.texture_features}
+        else:
+            return pd.DataFrame(dataframe_rows)
 
     def console(self, *args: tuple[str, Any]) -> None:
         if self.verbose:
@@ -161,37 +178,38 @@ class ResidualExtractor:
                 print(f"{arg}", self.sep, f"{pair}")
 
 
-def main() -> None:
+def main() -> dict[str, list[NDArray]] | pd.DataFrame:
     """Main entry point to run the extraction and analysis process."""
 
-    import argparse
-
-    from matplotlib import pyplot as plt
-
     input_folder = Path(__file__).resolve().parent.parent / "assets"
-    output_folder = Path(__file__).resolve().parent.parent / ".output"
 
     parser = argparse.ArgumentParser(description="Extract Laplacian residuals from images.")
-    parser.add_argument("-i", "--input", type=str, default=input_folder, help="Input folder containing images or individual image.")
-    parser.add_argument("-o", "--output", type=str, default=output_folder, help="Output folder for residuals.")
+    parser.add_argument("-i", "--input", type=str, default=input_folder, help="Input folder or individual image.")
+    parser.add_argument("-g", "--graph", action="store_true", help="Graph the distribution of residuals on a plot")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
+    parser.add_argument("-o", "--output", type=str, default=None, required=False, help="(OPTIONAL) Output folder for residuals.")
 
     args = parser.parse_args()
     input_folder = Path(args.input)
-    output_folder = Path(args.output)
+    if args.output:
+        output_folder = Path(args.output)
+    else:
+        output_folder = None
     verbose = args.verbose
+    plot_graph = args.graph
     residual_extractor = ResidualExtractor(input_folder, output_folder, verbose)
 
-    async def async_main() -> None:
-        fractal_features, texture_features = await residual_extractor.process_residuals()
-        plt.figure(figsize=(8, 5))
-        plt.hist(fractal_features, bins=30, alpha=0.7, label="Fractal Dimension")
-        plt.hist(texture_features, bins=30, alpha=0.7, label="Complexity")
-        plt.title("Fractal and Texture Complexity Distributions for Synthetic Images")
-        plt.xlabel("FD + TC Value")
-        plt.ylabel("Frequency")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
+    async def async_main() -> dict[str, list[NDArray]] | pd.DataFrame:
+        residuals = await residual_extractor.process_residuals()
+        flag_synthetic_or_human_origin(residuals)
+        # print(residuals)
+        if plot_graph:
+            graph_result(residuals)
+        return residuals
 
-    asyncio.run(async_main())
+    residuals = asyncio.run(async_main())
+    return residuals
+
+
+if __name__ == "__main__":
+    main()
