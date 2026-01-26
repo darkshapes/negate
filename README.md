@@ -5,6 +5,8 @@
 
 entrypoint synthetic image classifier
 
+[![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)
+
 ## About
 
 A command-line tool and Python library for processing and analyzing images, extracting Laplacian residuals to measure fractal and texture complexity, and other comparative analysis methods to discriminate synthetic images from real ones.
