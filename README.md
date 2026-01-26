@@ -54,18 +54,22 @@ python -m tests.test_extract -v
 ## Scan A Folder or File
 
 ```bash
-usage: negate [-h] [-i INPUT] [-o OUTPUT] [-v]
-```
+usage: negate [-h] [-i INPUT] [-g] [-v] [-o OUTPUT]
 
-```
 Extract Laplacian residuals from images.
 
 options:
   -h, --help           show this help message and exit
-  -i, --input INPUT    Input folder containing images or individual image.
-  -o, --output OUTPUT  Output folder for residuals.
+  -i, --input INPUT    Input folder or individual image.
+  -g, --graph          Graph the distribution of residuals on a plot
   -v, --verbose        Enable verbose output.
+  -o, --output OUTPUT  (OPTIONAL) Output folder for residuals.
+```
 
+## Train Model:
+
+```sh
+python -m negate.train
 ```
 
 ## Call from another application
@@ -74,7 +78,7 @@ options:
 import asyncio
 from pathlib import Path
 
-from negate import ResidualExtractor
+from negate import ResidualExtractor, flag_origin
 
 image_path = "some/image/path.jpg"
 output_folder = ".output"
@@ -83,9 +87,9 @@ residual_extractor = ResidualExtractor(image_path, output_folder, verbose=False)
 
 async def async_main() -> tuple[list,list]:
     fractal, texture = await residual_extractor.process_residuals()
-    return (fractal, texture)
+    return residual_extractor
 
-result = asyncio.run(async_main())
+residual_extractor = asyncio.run(async_main())
+flag_origin(residual_extractor)
+
 ```
-
-Special thanks to <https://github.com/Sandeep-git1/Deepfake_image_detection> for initial prototype.

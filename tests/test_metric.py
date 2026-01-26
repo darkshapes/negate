@@ -14,9 +14,7 @@ def try_extract_synthetic():
         return residuals
 
     residuals = asyncio.run(async_main())
-    fractal_stats = residuals["fractal_complexity"]
-    texture_stats = residuals["texture_complexity"]
-    return fractal_stats, texture_stats
+    return residual_extractor
 
 
 def try_extract_human():
@@ -28,14 +26,13 @@ def try_extract_human():
 
     residuals = asyncio.run(async_main())
 
-    fractal_stats = residuals["fractal_complexity"]
-    texture_stats = residuals["texture_complexity"]
-    return fractal_stats, texture_stats
+    return residual_extractor
 
 
 if __name__ == "__main__":
-    synthetic_stats = try_extract_synthetic()
-    human_origin_stats = try_extract_human()
     from negate.quantify import graph_comparison
 
-    graph_comparison(synthetic_stats, human_origin_stats)
+    synthetic_stats = try_extract_synthetic()
+    human_origin_stats = try_extract_human()
+
+    graph_comparison(synthetic_stats.data_frame, human_origin_stats.data_frame)

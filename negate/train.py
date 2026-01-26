@@ -3,7 +3,6 @@ from pathlib import Path
 
 import joblib
 import pandas as pd
-from datasets import Image, load_dataset
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
@@ -36,6 +35,8 @@ def train_model(
 def main():
     """Entry point for training model with residual data."""
 
+    residual_extractor = ResidualExtractor(input=Path("assets/synthetic_v2"), verbose=True)
+
     async def async_main() -> pd.DataFrame:
         """
         Asynchronously processes residual data.
@@ -43,12 +44,7 @@ def main():
         residuals = await residual_extractor.process_residuals()
         return residuals
 
-    input_folder = Path(__file__).resolve().parent.parent / "assets"
-    residuals = []
-    synthetic_images = load_dataset("darkshapes/a_slice", cache_dir=input_folder).cast_column("image", Image(decode=False))
-    for index in synthetic_images["train"][:23]:
-        image_path = Path(index["image"]["path"]).resolve()
-        residual_extractor = ResidualExtractor(input=Path("assets/synthetic_v2"), verbose=True)
+    residuals = asyncio.run(async_main())
 
     synthetic_fractal = pd.DataFrame(residuals["fractal_complexity"])
     synthetic_texture = pd.DataFrame(residuals["texture_complexity"])

@@ -39,7 +39,7 @@ import pandas as pd
 from numpy.typing import NDArray
 from tqdm import tqdm
 
-from negate.quantify import graph_result, flag_synthetic_or_human_origin
+from negate.quantify import graph_result, flag_origin
 
 
 class ResidualExtractor:
@@ -94,7 +94,7 @@ class ResidualExtractor:
 
         for image_path in iterator:
             self.console(("loading", image_path))
-            image = await self._load_single_image(image_path)
+            image = await self._load_single_image(str(image_path))
             if image is not None:
                 images.append(image)
             else:
@@ -140,14 +140,14 @@ class ResidualExtractor:
             TCs.append(tc)
         return np.array(TCs)
 
-    async def process_residuals(self) -> dict[str, list[NDArray]] | pd.DataFrame:
+    async def process_residuals(self) -> pd.DataFrame:
         """Asynchronously processes images to compute fractal and texture features.\n
         :returns: Tuple of lists containing fractal dimensions and texture
         complexity values for each input image."""
         self.console(("process", "running..."))
         self.fractal_features = []
         self.texture_features = []
-        dataframe_rows = []
+        data_frame = []
         self.images = await self._load_images()
 
         async def process_single(idx: int) -> None:
@@ -163,14 +163,12 @@ class ResidualExtractor:
             self.texture_features.append(texture_dimension)
             self.console((f"fractal complexity of {self.image_paths[idx]} : ", fractal_dimension))
             self.console((f"texture complexity of {self.image_paths[idx]} : ", texture_dimension))
-            dataframe_rows.append({"image_path": self.image_paths[idx], "fractal_complexity": fractal_dimension, "texture_complexity": texture_dimension, "origin": self.origin})
+            data_frame.append({"image_path": self.image_paths[idx], "fractal_complexity": fractal_dimension, "texture_complexity": texture_dimension, "origin": self.origin})
 
         await asyncio.gather(*[process_single(self.image_path) for self.image_path in range(len(self.image_paths))])
 
-        if "pytest" in sys_modules:
-            return {"fractal_complexity": self.fractal_features, "texture_complexity": self.texture_features}
-        else:
-            return pd.DataFrame(dataframe_rows)
+        self.data_frame = pd.DataFrame(data_frame)
+        return self.data_frame
 
     def console(self, *args: tuple[str, Any]) -> None:
         if self.verbose:
@@ -178,13 +176,16 @@ class ResidualExtractor:
                 print(f"{arg}", self.sep, f"{pair}")
 
 
-def main() -> dict[str, list[NDArray]] | pd.DataFrame:
+def main(input: str | None = None, output: str | None = None, graph: str | None = None, verbose: str | None = None) -> pd.DataFrame:
     """Main entry point to run the extraction and analysis process."""
 
-    input_folder = Path(__file__).resolve().parent.parent / "assets"
+    if not input:
+        input_folder = Path(__file__).resolve().parent.parent / "assets"
+    if output:
+        output = Path(output)
 
     parser = argparse.ArgumentParser(description="Extract Laplacian residuals from images.")
-    parser.add_argument("-i", "--input", type=str, default=input_folder, help="Input folder or individual image.")
+    parser.add_argument("-i", "--input", type=str, default=input, help="Input folder or individual image.")
     parser.add_argument("-g", "--graph", action="store_true", help="Graph the distribution of residuals on a plot")
     parser.add_argument("-v", "--verbose", action="store_true", help="Enable verbose output.")
     parser.add_argument("-o", "--output", type=str, default=None, required=False, help="(OPTIONAL) Output folder for residuals.")
@@ -192,19 +193,16 @@ def main() -> dict[str, list[NDArray]] | pd.DataFrame:
     args = parser.parse_args()
     input_folder = Path(args.input)
     if args.output:
-        output_folder = Path(args.output)
-    else:
-        output_folder = None
-    verbose = args.verbose
-    plot_graph = args.graph
-    residual_extractor = ResidualExtractor(input_folder, output_folder, verbose)
+        output = Path(args.output)
+    verbose = args.verbose or verbose
+    plot_graph = args.graph or graph
+    residual_extractor = ResidualExtractor(input_folder, output, verbose)
 
     async def async_main() -> dict[str, list[NDArray]] | pd.DataFrame:
         residuals = await residual_extractor.process_residuals()
-        flag_synthetic_or_human_origin(residuals)
-        # print(residuals)
+        flag_origin(residuals)
         if plot_graph:
-            graph_result(residuals)
+            graph_result(residual_extractor.data_frame)
         return residuals
 
     residuals = asyncio.run(async_main())

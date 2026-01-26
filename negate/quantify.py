@@ -1,8 +1,9 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from numpy import real
 import re, pandas as pd
+import os
+import joblib
 
 
 def graph_result(residuals) -> None:
@@ -22,40 +23,48 @@ def graph_comparison(synthetic_stats, human_origin_stats) -> None:
     from matplotlib import pyplot as plt
     import seaborn as sns
 
-    sns.histplot(synthetic_stats[0], label="Synthetic Fractal Complexity", color="red", kde=True)
-    sns.histplot(human_origin_stats[0], label="Human Origin Fractal Complexity", color="aqua", kde=True)
+    sns.scatterplot(x=synthetic_stats["fractal_complexity"], y=synthetic_stats["texture_complexity"], label="Synthetic", color="red")
+    sns.scatterplot(x=human_origin_stats["fractal_complexity"], y=human_origin_stats["texture_complexity"], label="Human Origin", color="aqua")
     plt.legend()
     plt.show()
 
-    sns.histplot(synthetic_stats[1], label="Synthetic Texture Complexity", color="red", kde=True)
-    sns.histplot(human_origin_stats[1], label="Human Origin Texture Complexity", color="aqua", kde=True)
+    sns.histplot(synthetic_stats, label="Synthetic Fractal Complexity", color="red", kde=True)
+    sns.histplot(human_origin_stats, label="Human Origin Fractal Complexity", color="aqua", kde=True)
     plt.legend()
     plt.show()
 
-    print(f"synthetic {[i.describe() for i in synthetic_stats]}")
-    print(f"human origin {[i.describe() for i in human_origin_stats]}")
-    print(f"synthetic {[i.quantile(0.25) for i in synthetic_stats]}")
-    print(f"synthetic {[i.quantile(0.75) for i in synthetic_stats]}")
-    print(f"human origin {[i.quantile(0.25) for i in synthetic_stats]}")
-    print(f"human origin {[i.quantile(0.75) for i in synthetic_stats]}")
+    print(f"synthetic {synthetic_stats.describe()}")
+    print(f"human origin {[human_origin_stats.describe()]}")
     lower, upper = -2.20, -1.80  # choose from visual inspection
-    human_origin_outliers = [(human_origin_stats[0] < lower) | (human_origin_stats[0] > upper), (human_origin_stats[0] < lower)]
-    synthetic_inliers = [(synthetic_stats[0] >= lower) & (synthetic_stats[0] <= upper), (synthetic_stats[0] >= lower)]
+    human_origin_outliers = [
+        (human_origin_stats["fractal_complexity"] < lower) | (human_origin_stats["fractal_complexity"] > upper),
+        (human_origin_stats["fractal_complexity"] < lower),
+    ]
+    synthetic_inliers = [(synthetic_stats["fractal_complexity"] >= lower) & (synthetic_stats["fractal_complexity"] <= upper), (synthetic_stats["fractal_complexity"] >= lower)]
     print(f"human_origin boolean : {human_origin_outliers}")
     print(f"synthetic boolean: {synthetic_inliers}")
 
 
-def flag_synthetic_or_human_origin(residuals: list) -> None:
-    fractal = pd.DataFrame(residuals["fractal_complexity"])
-    texture = pd.DataFrame(residuals["texture_complexity"])
-    residuals = pd.concat([fractal, texture], axis=1)
+def flag_origin(residuals: list) -> None:
+    X_new = pd.DataFrame(residuals["fractal_complexity"])
 
-    X_new = extract_features(Path("assets/real/img_001.png"))
-    pred = model.predict(X_new)
+    fractal_model = joblib.load(os.path.join(os.path.dirname(__file__), "fractal_classifier.joblib"))
+
+    pred = fractal_model.predict(X_new)
     label_map = {0: "synthetic", 1: "real"}
     print(f"Predicted class: {label_map[pred[0]]}")
-    proba = model.predict_proba(X_new)[0]
+    proba = fractal_model.predict_proba(X_new)[0]
     print(f"Confidence: synthetic={proba[0]:.2f}, real={proba[1]:.2f}")
+
+    texture_model = joblib.load(os.path.join(os.path.dirname(__file__), "texture_classifier.joblib"))
+    X_new = pd.DataFrame(residuals["texture_complexity"])
+
+    pred = texture_model.predict(X_new)
+    label_map = {0: "synthetic", 1: "real"}
+    print(f"Predicted class: {label_map[pred[0]]}")
+    proba = texture_model.predict_proba(X_new)[0]
+    print(f"Confidence: synthetic={proba[0]:.2f}, real={proba[1]:.2f}")
+
     # return pd.concat([fractal, texture], axis=1)
     # lower, upper = -2.20, -1.80  # choose from visual inspection
     # mu_syn = residuals["fractal_complexity"].mean()
