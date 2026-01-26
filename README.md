@@ -5,7 +5,7 @@
 
 entrypoint synthetic image classifier
 
-[![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)
+[![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg?branch=main)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)
 
 ## About
 
