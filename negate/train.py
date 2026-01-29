@@ -1,70 +1,76 @@
-import asyncio
-from pathlib import Path
+# SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
+# <!-- // /*  d a r k s h a p e s */ -->
 
-import joblib
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+import xgboost as xgb
+from datasets import Dataset
+from numpy.random import default_rng
+from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 
-from negate import ResidualExtractor
+
+@dataclass
+class TrainResult:
+    """Container for all objects produced by `analyze`."""
+
+    X_train: Any
+    pca: Any
+    d_matrix_test: Any
+    model: Any
+    scale_pos_weight: float
+    X_train_pca: Any
+    y_test: Any
+    labels: Any
+    feature_matrix: Any
+    seed: int
 
 
-def train_model(
-    model_name,
-    X,
-    y,
-):
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+def grade(features_dataset: Dataset) -> TrainResult:
+    feature_matrix = np.array([sample["features"] for sample in features_dataset])
+    labels = np.array([sample["label"] for sample in features_dataset])
 
-    model = RandomForestClassifier(random_state=3)
-    try:
-        model.fit(X_train, y_train)
-    except ValueError as exc:
-        print(f"Model not fitted due to error: {exc}")
-        return
+    rng = default_rng(1)
+    random_state = lambda: int(np.round(rng.random() * 0xFFFFFFFF))
+    seed = random_state()
+    X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=seed)
 
-    y_pred = model.predict(X_test)
-    print(f"Accuracy: {accuracy_score(y_test, y_pred)}")
-    print(model.feature_importances_)
+    pca = PCA(n_components=0.95, random_state=seed)
+    X_train_pca = pca.fit_transform(X_train)
+    X_test_pca = pca.transform(X_test)
 
-    joblib.dump(model, model_name)
-    print(f"Model saved to {model_name}")
+    scale_pos_weight = np.sum(y_train == 0) / np.sum(y_train == 1)
+    d_matrix_train = xgb.DMatrix(X_train_pca, label=y_train)
+    d_matrix_test = xgb.DMatrix(X_test_pca, label=y_test)
 
+    training_parameters = {
+        "objective": "binary:logistic",
+        "eval_metric": ["logloss", "aucpr"],
+        "max_depth": 4,
+        "learning_rate": 0.1,
+        "subsample": 0.8,
+        "colsample_bytree": 0.8,
+        "scale_pos_weight": scale_pos_weight,
+        "seed": seed,
+    }
 
-def main():
-    """Entry point for training model with residual data."""
+    evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
+    evaluation_result = {}
 
-    residual_extractor = ResidualExtractor(input=Path("assets/synthetic_v2"), verbose=True)
-
-    async def async_main() -> pd.DataFrame:
-        """
-        Asynchronously processes residual data.
-        """
-        residuals = await residual_extractor.process_residuals()
-        return residuals
-
-    residuals = asyncio.run(async_main())
-
-    synthetic_fractal = pd.DataFrame(residuals["fractal_complexity"])
-    synthetic_texture = pd.DataFrame(residuals["texture_complexity"])
-
-    residual_extractor = ResidualExtractor(input=Path("assets/real"), verbose=True)
-
-    residuals = asyncio.run(async_main())
-    human_origin_fractal = pd.DataFrame(residuals["fractal_complexity"])
-    human_origin_texture = pd.DataFrame(residuals["texture_complexity"])
-    X = pd.concat([human_origin_fractal, synthetic_fractal], axis=1)
-
-    y = human_origin_fractal["fractal_complexity"].astype("category").cat.codes
-
-    train_model("fractal_classifier.joblib", X, y)
-    X = pd.concat([human_origin_texture, synthetic_texture], axis=1)
-
-    y = human_origin_texture["texture_complexity"].astype("category").cat.codes
-
-    train_model("texture_classifier.joblib", X, y)
-
-
-if __name__ == "__main__":
-    main()
+    model = xgb.train(
+        training_parameters, d_matrix_train, num_boost_round=200, evals=evaluation_parameters, early_stopping_rounds=10, evals_result=evaluation_result, verbose_eval=20
+    )
+    return TrainResult(
+        X_train=X_train,
+        pca=pca,
+        d_matrix_test=d_matrix_test,
+        model=model,
+        scale_pos_weight=scale_pos_weight,
+        X_train_pca=X_train_pca,
+        y_test=y_test,
+        labels=labels,
+        feature_matrix=feature_matrix,
+        seed=seed,
+    )
