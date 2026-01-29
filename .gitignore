@@ -11,3 +11,5 @@ assets/
 .venv
 .DS_Store
 *.lock
+.datasets/
+.continue/
