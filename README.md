@@ -17,9 +17,9 @@ A command-line tool and Python library for processing and analyzing images, extr
 
 ## Results Overview
 
-![Bar and grid graph comparing variance of the synthetic and real images](variance_20260130_154140.png)
-![Graph comparing before and after pca transform operation of dataset](pca_transform_20260130_154144.png)
-![Graph comparing confusion matrix of the synthetic and real images](confusion_matrix_20260130_154142.png)
+![Bar and grid graph comparing variance of the synthetic and real images](results/variance_20260130_154140.png)
+![Graph comparing before and after pca transform operation of dataset](results/pca_transform_20260130_154144.png)
+![Graph comparing confusion matrix of the synthetic and real images](results/confusion_matrix_20260130_154142.png)
 
 ## Install
 
