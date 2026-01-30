@@ -33,15 +33,15 @@ def grade(features_dataset: Dataset) -> TrainResult:
     """Train an XGBoost model from a feature dataset.\n
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
-    feature_matrix = np.array([sample["features"] for sample in features_dataset])
-    labels = np.array([sample["label"] for sample in features_dataset])
+    feature_matrix = np.array([sample["features"] for sample in features_dataset])  # type: ignore no overloads
+    labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)
     random_state = lambda: int(np.round(rng.random() * 0xFFFFFFFF))
     seed = random_state()
     X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=seed)
 
-    pca = PCA(n_components=0.95, random_state=seed)  # dimensionality .95
+    pca: PCA = PCA(n_components=0.95, random_state=seed)  # dimensionality .95
     X_train_pca = pca.fit_transform(X_train)
     X_test_pca = pca.transform(X_test)
 

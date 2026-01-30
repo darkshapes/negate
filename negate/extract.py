@@ -53,8 +53,7 @@ class FeatureExtractor:
         """Set up the extractor with a VAE model.\n
         :param model: Repository ID of the VAE.
         :param device: Target device.
-        :param dtype: Data type for tensors.
-        :return: None."""
+        :param dtype: Data type for tensors."""
 
         self.device = device
         self.dtype = dtype
@@ -75,7 +74,7 @@ class FeatureExtractor:
 
         self.vae = vae_model
 
-    def cleanup(self) -> None:  # type:ignore
+    def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
 
         import gc
@@ -103,10 +102,10 @@ class FeatureExtractor:
             color_tensor = self.transform(color_image)
             residual_tensor = self.transform(residual_image)
 
-            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)
+            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)  # type_ignore residual tensor
 
             with torch.no_grad():
-                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()
+                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore latent_dist
                 mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
                 feature_vec = mean_latent.flatten()
 

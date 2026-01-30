@@ -4,13 +4,14 @@
 from pathlib import Path
 
 import numpy as np
-from datasets import Dataset, Image, concatenate_datasets, interleave_datasets, load_dataset
+from datasets import Dataset, Image, concatenate_datasets, load_dataset
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
     """Detect and remove NaN labels.\n
     :param dataset: Dataset with a ``label`` column.
     :return: Dataset without rows containing NaN labels."""
+
     import numpy as np
 
     lbls = np.array(dataset["label"])
@@ -26,6 +27,7 @@ def load_remote_dataset(repo: str, folder_path: Path) -> Dataset:
     :param repo: Repository ID of the dataset.
     :param folder_path: Local path to cache the dataset.
     :return: Dataset with a ``label`` column added and NaNs removed."""
+
     remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split="train").cast_column("image", Image(decode=True))
     remote_dataset = remote_dataset.add_column("label", [1] * len(remote_dataset))
     remote_dataset = detect_nans(remote_dataset)
@@ -36,6 +38,7 @@ def generate_dataset(input_path: Path) -> Dataset:
     """Generates a dataset from images in the given folder.\n
     :param input_path: Path to the folder containing image files.
     :return: Dataset containing images and labels with NaNs removed."""
+
     from PIL import Image as PillowImage
 
     validated_paths = []

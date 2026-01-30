@@ -10,7 +10,18 @@ import numpy as np
 import xgboost as xgb
 from datasets import Dataset
 
-from negate import TrainResult, build_datasets, dataset_to_nparray, features, generate_dataset, grade, in_console, save_model, save_to_onnx
+from negate import (
+    TrainResult,
+    build_datasets,
+    dataset_to_nparray,
+    features,
+    generate_dataset,
+    grade,
+    in_console,
+    save_model,
+    save_to_onnx,
+    to_graph,
+)
 
 
 def predict(image_path: Path) -> np.ndarray:
@@ -41,8 +52,8 @@ def predict(image_path: Path) -> np.ndarray:
 
 def training_run(file_or_folder_path: Path | None = None) -> None:
     """Train model using dataset at path.\n
-    :param path: Dataset root.
-    :return: None."""
+    :param path: Dataset root."""
+
     print("Training selected.")
     dataset: Dataset = build_datasets(file_or_folder_path)
     features_dataset: Dataset = features(dataset)
@@ -50,13 +61,14 @@ def training_run(file_or_folder_path: Path | None = None) -> None:
     save_model(train_result)
     save_to_onnx(train_result)
     in_console(train_result)
+    to_graph(train_result)
 
 
 def main() -> None:
     """CLI entry point.\n
     :raises ValueError: Missing image path.
-    :raises NotImplementedError: Unsupported command.
-    :return: None."""
+    :raises NotImplementedError: Unsupported command."""
+
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
