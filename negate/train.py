@@ -49,19 +49,19 @@ def grade(features_dataset: Dataset) -> TrainResult:
         "objective": "binary:logistic",
         "eval_metric": ["logloss", "aucpr"],
         "max_depth": 4,
-        "learning_rate": 0.1,
-        "subsample": 0.8,
-        "colsample_bytree": 0.8,
+        "learning_rate": 0.1,  # keep as float
+        "subsample": 0.8,  # keep as float
+        "colsample_bytree": 0.8,  # keep as float
         "scale_pos_weight": scale_pos_weight,
         "seed": seed,
     }
-
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
 
     model = xgb.train(
         training_parameters, d_matrix_train, num_boost_round=200, evals=evaluation_parameters, early_stopping_rounds=10, evals_result=evaluation_result, verbose_eval=20
     )
+
     return TrainResult(
         X_train=X_train,
         pca=pca,

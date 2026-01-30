@@ -15,7 +15,7 @@ A command-line tool and Python library for processing and analyzing images, extr
 
 Demonstration of the provided test results and visualizations on our synthetic [darkshapes/a_slice dataset](https://huggingface.co/darkshapes/a_slice) and private works of human origin provided by consent from the generous artists at https://purelyhuman.xyz.
 
-![Bar and grid graph comparing variance of the synthetic images](results/Figure_0.png)
+![Bar and grid graph comparing variance of the synthetic images](results/variance_0129261712.png)
 
 ## Install
 

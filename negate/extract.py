@@ -3,13 +3,14 @@
 
 from enum import Enum
 
+import numpy as np
 import torch
 import torchvision.transforms as T
 from datasets import Dataset
 from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
 from huggingface_hub import snapshot_download
-
-from negate import build_datasets
+from PIL.Image import Image, fromarray
+from skimage.filters import laplace
 
 
 class DeviceName(str, Enum):
@@ -18,6 +19,24 @@ class DeviceName(str, Enum):
     CPU = "cpu"
     CUDA = "cuda"
     MPS = "mps"
+
+
+class Residual:
+    def __init__(self, dtype: np.typing.DTypeLike = np.float32):
+        """Initialize the residual class"""
+
+        self.dtype = dtype
+        self.dtype_name = repr(dtype).split(".")[-1]
+
+    def __call__(self, image: Image) -> Image:
+        """Convert the input image to grayscale, apply a Laplace filter,
+        and replicate the result across three channels."""
+
+        greyscale = image.convert("L")
+        numeric_image = np.array(greyscale, dtype=self.dtype)
+        residual = laplace(numeric_image, ksize=3).astype(self.dtype)
+        residual_image: Image = fromarray(np.uint8(residual), mode="L").convert("RGB")
+        return residual_image
 
 
 class FeatureExtractor:
@@ -34,7 +53,7 @@ class FeatureExtractor:
         self.dtype = dtype
         self.model = model
         self.vae: AutoencoderKL | None = None
-
+        self.residual_transform = Residual()
         if self.vae is None:
             self.create_vae()
 
@@ -65,23 +84,27 @@ class FeatureExtractor:
 class BatchFeatures:
     def __call__(self, feature_extractor: FeatureExtractor, dataset: Dataset):
         """Extract VAE features from a batch of images."""
+
         assert hasattr(feature_extractor, "vae")
-        images = []
+        features_list = []
 
         for image in dataset["image"]:
-            image_tensor = feature_extractor.transform(image.convert("RGB"))
-            images.append(image_tensor)
+            color_image = image.convert("RGB")
+            gray_image = image.convert("L")
+            residual_image = feature_extractor.residual_transform(gray_image)
 
-        batch_tensor = torch.stack(images).to(feature_extractor.device, dtype=feature_extractor.dtype)
+            # Convert to tensors
+            color_tensor = feature_extractor.transform(color_image)
+            residual_tensor = feature_extractor.transform(residual_image)
 
-        # Extract features using VAE encoder (use tiled encoding if u want)
-        with torch.no_grad():
-            latents = feature_extractor.vae.encode(batch_tensor).latent_dist.sample()
-            # Convert to float32 for numpy compatibility (bfloat16 not supported by numpy)
-            features = latents.cpu().float().numpy()
-        # The samples are like [16, 128, 128] which is very large tbh. in any case i treat them all as features and flatten them,
-        # but you can probably come up with a smarter way to do feature processing
-        features_list = [features[i].flatten() for i in range(len(features))]
+            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(feature_extractor.device, dtype=feature_extractor.dtype)
+
+            with torch.no_grad():
+                latents_2_dim_h_w = feature_extractor.vae.encode(batch_tensor).latent_dist.sample()
+                mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
+                feature_vec = mean_latent.flatten()
+
+            features_list.append(feature_vec)
 
         return {"features": features_list}
 
