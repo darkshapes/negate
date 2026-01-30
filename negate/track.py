@@ -1,15 +1,21 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-import numpy as np
+import os
+from pprint import pprint
+
 import matplotlib.pyplot as plt
-from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
-from datetime import datetime
-from negate import TrainResult
+import numpy as np
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, roc_auc_score
+
+from negate import TrainResult, get_time
 
 
 def in_console(train_result: TrainResult) -> None:
-    """Print diagnostics and plots for a trained model."""
+    """Print diagnostics and plots for a trained model.\n
+    :param train_result: Result object from training."""
+    import json
+
     X_train = train_result.X_train
     pca = train_result.pca
     d_matrix_test = train_result.d_matrix_test
@@ -21,51 +27,67 @@ def in_console(train_result: TrainResult) -> None:
     feature_matrix = train_result.feature_matrix
     seed = train_result.seed
 
-    print(f"""
-    Original dimensions: {X_train.shape[1]}")
-    PCA reduced dimensions: {X_train_pca.shape[1]}
-    Explained variance ratio: {pca.explained_variance_ratio_.sum():.4f}
-    Number of components selected: {pca.n_components_}
-    """)
-
-    print(f"Scale pos weight (negative/positive): {scale_pos_weight:.2f}")
-    print(f"\nBest iteration: {model.best_iteration}")
-    print(f"Best score: {model.best_score:.4f}")
     y_pred_proba = model.predict(d_matrix_test)
     y_pred = (y_pred_proba > 0.5).astype(int)
 
-    # Calculate metrics
     accuracy = accuracy_score(y_test, y_pred)
     roc_auc = roc_auc_score(y_test, y_pred_proba)
     f1_macro = f1_score(y_test, y_pred, average="macro")
     f1_weighted = f1_score(y_test, y_pred, average="weighted")
+    timestamp = get_time()
 
-    print(f"""
-    Feature matrix shape: {feature_matrix.shape}\n
-    Labels shape: {labels.shape}\n
+    results = {
+        "timestamp": timestamp,
+        "original_dim": X_train.shape[1],
+        "pca_dim": X_train_pca.shape[1],
+        "n_components": pca.n_components_,
+        "explained_var": pca.explained_variance_ratio_.sum(),
+        "cumulative:": np.cumsum(pca.explained_variance_ratio_),
+        "scale_pos_weight": scale_pos_weight,
+        "best_iter": model.best_iteration,
+        "best_score": model.best_score,
+        "accuracy": accuracy,
+        "roc_auc": roc_auc,
+        "f1_macro": f1_macro,
+        "f1_weighted": f1_weighted,
+        "feature_shape": feature_matrix.shape,
+        "labels_shape": labels.shape,
+        "label_dist": {
+            "real": int(np.sum(labels == 0)),
+            "synthetic": int(np.sum(labels == 1)),
+            "real_pct": np.sum(labels == 0) / len(labels) * 100,
+            "synthetic_pct": np.sum(labels == 1) / len(labels) * 100,
+        },
+        "imbalance_ratio": np.sum(labels == 0) / np.sum(labels == 1),
+        "seed": seed,
+    }
 
-    \nLabel distribution:
-        Real (0): {np.sum(labels == 0)} samples ({np.sum(labels == 0) / len(labels) * 100:.1f}%)\n
-        Synthetic (1): {np.sum(labels == 1)} samples ({np.sum(labels == 1) / len(labels) * 100:.1f}%)\n
-        Class imbalance ratio: {np.sum(labels == 0) / np.sum(labels == 1):.2f}:1\n
-        Random state seed: {seed}
-    """)
+    pprint(results)
+    results_file = os.path.join("results", f"results_{timestamp}.json")
+    result_format = {k: str(v) for k, v in results.items()}
+    with open(results_file, "tw", encoding="utf-8") as out_file:
+        json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
 
     separator = lambda: print("=" * 60)
-
     separator()
     print("CLASSIFICATION RESULTS")
     separator()
-    print(f"""
-Accuracy: {accuracy:.4f}
-ROC-AUC: {roc_auc:.4f}
-F1 Score (Macro): {f1_macro:.4f})
-F1 Score (Weighted): {f1_weighted:.4f}""")
-    separator()
-    print("DETAILED CLASSIFICATION REPORT")
-    separator()
     print(classification_report(y_test, y_pred, target_names=["Real", "Synthetic"]))
 
+
+def to_graph(train_result: TrainResult) -> None:
+    """Save and show PCA variance plots for a trained model.\n
+    :param train_result: Result object from training."""
+    timestamp = get_time()
+
+    X_train = train_result.X_train
+    X_train_pca = train_result.X_train_pca
+    labels = train_result.labels
+    y_plot = labels[: X_train.shape[0]]
+    y_pred_proba = train_result.model.predict(train_result.d_matrix_test)
+    y_pred = (y_pred_proba > 0.5).astype(int)
+
+    pca = train_result.pca
     plt.figure(figsize=(10, 5))
     plt.subplot(1, 2, 1)
     plt.plot(np.cumsum(pca.explained_variance_ratio_), color="aqua")
@@ -80,5 +102,44 @@ F1 Score (Weighted): {f1_weighted:.4f}""")
     plt.ylabel("Explained Variance Ratio")
     plt.title("First 20 Components")
     plt.tight_layout()
-    plt.savefig(os.path.join("results", f"variance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
+    plt.savefig(os.path.join("results", f"variance_{timestamp}.png"))
+    plt.show()
+
+    cm = confusion_matrix(train_result.y_test, y_pred)
+    fig, ax = plt.subplots()
+    cax = ax.imshow(cm, interpolation="nearest", cmap="Reds")
+
+    ax.set_xticks(np.arange(cm.shape[1]))
+    ax.set_yticks(np.arange(cm.shape[0]))
+    ax.set_xticklabels(["Real", "Synthetic"])
+    ax.set_yticklabels(["Real", "Synthetic"])
+    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
+
+    for i in range(cm.shape[0]):
+        for j in range(cm.shape[1]):
+            ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+
+    ax.set_xlabel("Predicted")
+    ax.set_ylabel("Actual")
+    ax.set_title("Confusion Matrix")
+    fig.colorbar(cax)
+    plt.savefig(os.path.join("results", f"confusion_matrix_{timestamp}.png"))
+    plt.show()
+
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.scatter(X_train[:, 0], X_train[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
+    plt.xlabel("Feature 1")
+    plt.ylabel("Feature 2")
+    plt.title("Original Data (First Two Features)")
+    plt.colorbar(label="Prediction")
+
+    plt.subplot(1, 2, 2)
+    plt.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
+    plt.xlabel("Principal Component 1")
+    plt.ylabel("Principal Component 2")
+    plt.title("PCA Transformed Data")
+    plt.colorbar(label="Prediction")
+    plt.tight_layout()
+    plt.savefig(os.path.join("results", f"pca_transform_{timestamp}.png"))
     plt.show()

@@ -14,3 +14,5 @@ assets/
 .datasets/
 .continue/
 models/
+results/features_residual/
+results/residual_analysis/

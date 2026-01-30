@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -11,10 +12,26 @@ from numpy.random import default_rng
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 
+get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+@dataclass
+class TrainingParameters:
+    """Container holding main model parameters"""
+
+    objective: str = "binary:logistic"
+    eval_metric: list = field(default_factory=lambda: ["logloss", "aucpr"])
+    max_depth: int = 4
+    learning_rate: float = 0.1
+    subsample: float = 0.8
+    colsample_bytree: float = 0.8
+    scale_pos_weight: float | None = None
+    seed: int | None = None
+
 
 @dataclass
 class TrainResult:
-    """Container for all objects produced by `analyze`."""
+    """Container holding all artifacts produced by :func:`grade`."""
 
     X_train: Any
     pca: Any
@@ -26,18 +43,22 @@ class TrainResult:
     labels: Any
     feature_matrix: Any
     seed: int
+    num_features: int
 
 
 def grade(features_dataset: Dataset) -> TrainResult:
-    feature_matrix = np.array([sample["features"] for sample in features_dataset])
-    labels = np.array([sample["label"] for sample in features_dataset])
+    """Train an XGBoost model from a feature dataset.\n
+    :param features_dataset: Dataset of samples containing ``features`` and ``label``.
+    :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
+    feature_matrix = np.array([sample["features"] for sample in features_dataset])  # type: ignore no overloads
+    labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)
     random_state = lambda: int(np.round(rng.random() * 0xFFFFFFFF))
     seed = random_state()
     X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=seed)
 
-    pca = PCA(n_components=0.95, random_state=seed)
+    pca: PCA = PCA(n_components=0.95, random_state=seed)  # dimensionality .95
     X_train_pca = pca.fit_transform(X_train)
     X_test_pca = pca.transform(X_test)
 
@@ -45,16 +66,11 @@ def grade(features_dataset: Dataset) -> TrainResult:
     d_matrix_train = xgb.DMatrix(X_train_pca, label=y_train)
     d_matrix_test = xgb.DMatrix(X_test_pca, label=y_test)
 
-    training_parameters = {
-        "objective": "binary:logistic",
-        "eval_metric": ["logloss", "aucpr"],
-        "max_depth": 4,
-        "learning_rate": 0.1,  # keep as float
-        "subsample": 0.8,  # keep as float
-        "colsample_bytree": 0.8,  # keep as float
-        "scale_pos_weight": scale_pos_weight,
-        "seed": seed,
-    }
+    params = TrainingParameters(
+        scale_pos_weight=scale_pos_weight,
+        seed=seed,
+    )
+    training_parameters = asdict(params)
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
 
@@ -73,4 +89,5 @@ def grade(features_dataset: Dataset) -> TrainResult:
         labels=labels,
         feature_matrix=feature_matrix,
         seed=seed,
+        num_features=model.num_features(),
     )
