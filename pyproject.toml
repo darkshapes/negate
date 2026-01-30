@@ -74,6 +74,7 @@ prerelease       = "allow"
 preview          = true
 
 
+
 conflicts = [
     [
         { extra = "cpu" },
@@ -96,13 +97,11 @@ explicit = true
 
 torchvision = [
     { index = "pytorch-cpu", extra="mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cpu", extra="cpu", marker = "sys_platform == 'linux'" },
     { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
 ]
 
 torch = [
     { index = "pytorch-cpu", extra = "mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cpu", extra="cpu", marker = "sys_platform == 'linux'" },
     { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
 
 ]
