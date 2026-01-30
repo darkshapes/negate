@@ -1,14 +1,9 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-import argparse
-import pickle
 from pathlib import Path
 from sys import argv
-
 import numpy as np
-import xgboost as xgb
-from datasets import Dataset
 
 from negate import (
     TrainResult,
@@ -29,7 +24,9 @@ def predict(image_path: Path) -> np.ndarray:
     :param image_path: Path to image file.
     :return: Prediction array.
     """
-    import numpy as np
+    import pickle
+    import xgboost as xgb
+    from datasets import Dataset
 
     print("Detection selected.")
 
@@ -53,6 +50,7 @@ def predict(image_path: Path) -> np.ndarray:
 def training_run(file_or_folder_path: Path | None = None) -> None:
     """Train model using dataset at path.\n
     :param path: Dataset root."""
+    from datasets import Dataset
 
     print("Training selected.")
     dataset: Dataset = build_datasets(file_or_folder_path)
@@ -68,16 +66,17 @@ def main() -> None:
     """CLI entry point.\n
     :raises ValueError: Missing image path.
     :raises NotImplementedError: Unsupported command."""
+    import argparse
 
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
-    train_parser = subparsers.add_parser("train", help="Train model. the model will be trained on the dataset and the resulting model will be saved to disk.")
+    train_parser = subparsers.add_parser("train", help="Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.")
     train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
 
     check_parser = subparsers.add_parser(
         "check",
-        help="Check whether an image is synthetic or original. - The command will read the image file at the provided path and output a prediction of whether the image is synthetic or not.",
+        help="Check whether an image at the provided path is synthetic or original.",
     )
     check_parser.add_argument("path", help="Image path")
 

@@ -45,10 +45,20 @@ source .venv/bin/activate
 Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 ```
 
-## Train Model:
+## CLI:
 
-Add human-origin assets to assets/real
+Add human-origin assets to `assets/` folder
 
 ```sh
-negate
+usage: negate [-h] {train,check} ...
+
+Negate CLI
+
+positional arguments:
+  {train,check}
+    train        Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.
+    check        Check whether an image at the provided path is synthetic or original.
+
+options:
+  -h, --help     show this help message and exit
 ```

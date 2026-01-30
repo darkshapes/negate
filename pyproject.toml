@@ -51,6 +51,10 @@ cuda = [
     "torch",
     "torchvision",
 ]
+rocm = [
+    "torch",
+    "torchvision",
+]
 
 cpu = [
     "torch",
@@ -79,6 +83,7 @@ conflicts = [
     [
         { extra = "cpu" },
         { extra = "mps" },
+        { extra = "rocm" },
         { extra = "cuda" },
     ],
 ]
@@ -86,6 +91,11 @@ conflicts = [
 [[tool.uv.index]]
 name     = "pytorch-cpu"
 url      = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[[tool.uv.index]]
+name     = "pytorch-rocm"
+url      = "https://download.pytorch.org/whl/rocm"
 explicit = true
 
 [[tool.uv.index]]
@@ -97,13 +107,10 @@ explicit = true
 
 torchvision = [
     { index = "pytorch-cpu", extra="mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
 ]
 
 torch = [
     { index = "pytorch-cpu", extra = "mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
-
 ]
 
 [tool.setuptools_scm]

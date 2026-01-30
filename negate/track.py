@@ -2,14 +2,13 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import os
-from datetime import datetime
 from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, roc_auc_score
 
-from negate import TrainResult
+from negate import TrainResult, get_time
 
 
 def in_console(train_result: TrainResult) -> None:
@@ -35,8 +34,10 @@ def in_console(train_result: TrainResult) -> None:
     roc_auc = roc_auc_score(y_test, y_pred_proba)
     f1_macro = f1_score(y_test, y_pred, average="macro")
     f1_weighted = f1_score(y_test, y_pred, average="weighted")
+    timestamp = get_time()
 
     results = {
+        "timestamp": timestamp,
         "original_dim": X_train.shape[1],
         "pca_dim": X_train_pca.shape[1],
         "n_components": pca.n_components_,
@@ -62,7 +63,7 @@ def in_console(train_result: TrainResult) -> None:
     }
 
     pprint(results)
-    results_file = os.path.join("results", f"results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
+    results_file = os.path.join("results", f"results_{timestamp}.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
@@ -77,6 +78,8 @@ def in_console(train_result: TrainResult) -> None:
 def to_graph(train_result: TrainResult) -> None:
     """Save and show PCA variance plots for a trained model.\n
     :param train_result: Result object from training."""
+    timestamp = get_time()
+
     X_train = train_result.X_train
     X_train_pca = train_result.X_train_pca
     labels = train_result.labels
@@ -99,7 +102,7 @@ def to_graph(train_result: TrainResult) -> None:
     plt.ylabel("Explained Variance Ratio")
     plt.title("First 20 Components")
     plt.tight_layout()
-    plt.savefig(os.path.join("results", f"variance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
+    plt.savefig(os.path.join("results", f"variance_{timestamp}.png"))
     plt.show()
 
     cm = confusion_matrix(train_result.y_test, y_pred)
@@ -120,7 +123,7 @@ def to_graph(train_result: TrainResult) -> None:
     ax.set_ylabel("Actual")
     ax.set_title("Confusion Matrix")
     fig.colorbar(cax)
-    plt.savefig(os.path.join("results", f"confusion_matrix_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
+    plt.savefig(os.path.join("results", f"confusion_matrix_{timestamp}.png"))
     plt.show()
 
     plt.figure(figsize=(10, 5))
@@ -138,5 +141,5 @@ def to_graph(train_result: TrainResult) -> None:
     plt.title("PCA Transformed Data")
     plt.colorbar(label="Prediction")
     plt.tight_layout()
-    plt.savefig(os.path.join("results", f"pca_transform_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
+    plt.savefig(os.path.join("results", f"pca_transform_{timestamp}.png"))
     plt.show()

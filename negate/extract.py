@@ -4,13 +4,10 @@
 from enum import Enum
 
 import numpy as np
-import torch
-import torchvision.transforms as T
-from datasets import Dataset
-from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
-from huggingface_hub import snapshot_download
+
 from PIL.Image import Image, fromarray
 from skimage.filters import laplace
+from datasets import Dataset
 
 
 class DeviceName(str, Enum):
@@ -29,7 +26,7 @@ class Residual:
         self.dtype = dtype
 
     def __call__(self, image: Image) -> Image:
-        """Create a 3‑channel residual from a grayscale image.\n
+        """Create a 3-channel residual from a grayscale image.\n
         :param image: PIL image to process.
         :return: Residual image in RGB mode."""
 
@@ -41,6 +38,9 @@ class Residual:
 
 
 class FeatureExtractor:
+    import torch
+    import torchvision.transforms as T
+
     transform: T.Compose = T.Compose(
         [
             T.CenterCrop((512, 512)),
@@ -54,6 +54,7 @@ class FeatureExtractor:
         :param model: Repository ID of the VAE.
         :param device: Target device.
         :param dtype: Data type for tensors."""
+        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
 
         self.device = device
         self.dtype = dtype
@@ -66,6 +67,8 @@ class FeatureExtractor:
     def create_vae(self):
         """Download and load the VAE from the model repo."""
         import os
+        from huggingface_hub import snapshot_download
+        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
 
         vae_path = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
@@ -76,7 +79,7 @@ class FeatureExtractor:
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
-
+        import torch
         import gc
 
         device = self.device
@@ -90,6 +93,7 @@ class FeatureExtractor:
         """Extract VAE features from a batch of images.
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
+        import torch
 
         assert self.vae is not None
         features_list = []
@@ -102,7 +106,7 @@ class FeatureExtractor:
             color_tensor = self.transform(color_image)
             residual_tensor = self.transform(residual_image)
 
-            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)  # type_ignore residual tensor
+            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)  # type: ignore residual tensor
 
             with torch.no_grad():
                 latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore latent_dist
@@ -125,6 +129,7 @@ def features(dataset: Dataset) -> Dataset:
     """Generate a feature dataset from images.\n
     :param dataset: Dataset containing images.
     :return: Dataset with feature vectors."""
+    import torch
 
     device_type = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
     match device_type:

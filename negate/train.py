@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, field
+from datetime import datetime
 from typing import Any
 
 import numpy as np
@@ -10,6 +11,22 @@ from datasets import Dataset
 from numpy.random import default_rng
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
+
+get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+@dataclass
+class TrainingParameters:
+    """Container holding main model parameters"""
+
+    objective: str = "binary:logistic"
+    eval_metric: list = field(default_factory=lambda: ["logloss", "aucpr"])
+    max_depth: int = 4
+    learning_rate: float = 0.1
+    subsample: float = 0.8
+    colsample_bytree: float = 0.8
+    scale_pos_weight: float | None = None
+    seed: int | None = None
 
 
 @dataclass
@@ -49,16 +66,11 @@ def grade(features_dataset: Dataset) -> TrainResult:
     d_matrix_train = xgb.DMatrix(X_train_pca, label=y_train)
     d_matrix_test = xgb.DMatrix(X_test_pca, label=y_test)
 
-    training_parameters = {
-        "objective": "binary:logistic",
-        "eval_metric": ["logloss", "aucpr"],
-        "max_depth": 4,
-        "learning_rate": 0.1,  # keep as float
-        "subsample": 0.8,  # keep as float
-        "colsample_bytree": 0.8,  # keep as float
-        "scale_pos_weight": scale_pos_weight,
-        "seed": seed,
-    }
+    params = TrainingParameters(
+        scale_pos_weight=scale_pos_weight,
+        seed=seed,
+    )
+    training_parameters = asdict(params)
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
 
