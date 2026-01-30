@@ -50,10 +50,6 @@ dev = [
 cuda = [
     "torch",
     "torchvision",
-    "triton ; sys_platform != 'win32' and sys_platform != 'darwin'",
-    "triton-windows ; sys_platform == 'win32'",
-    "bitsandbytes>=0.45 ; sys_platform != 'darwin'",
-    "bitsandbytes>=0.46.0 ; sys_platform == 'linux'",
 ]
 
 cpu = [
@@ -73,6 +69,7 @@ Homepage      = "https://github.com/darkshapes/negate"
 negate     = "negate.__main__:main"
 
 [tool.uv]
+torch-backend = "auto"
 prerelease       = "allow"
 preview          = true
 
@@ -99,12 +96,14 @@ explicit = true
 
 torchvision = [
     { index = "pytorch-cpu", extra="mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cpu", extra="cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
 ]
 
 torch = [
     { index = "pytorch-cpu", extra = "mps", marker = "sys_platform == 'darwin'" },
-    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform != 'darwin'" },
+    { index = "pytorch-cpu", extra="cpu", marker = "sys_platform == 'linux'" },
+    { index = "pytorch-cu128", extra = "cuda", marker = "sys_platform == 'win32'" },
 
 ]
 
