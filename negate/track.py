@@ -4,6 +4,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
+from datetime import datetime
 from negate import TrainResult
 
 
@@ -47,7 +48,7 @@ def in_console(train_result: TrainResult) -> None:
         Real (0): {np.sum(labels == 0)} samples ({np.sum(labels == 0) / len(labels) * 100:.1f}%)\n
         Synthetic (1): {np.sum(labels == 1)} samples ({np.sum(labels == 1) / len(labels) * 100:.1f}%)\n
         Class imbalance ratio: {np.sum(labels == 0) / np.sum(labels == 1):.2f}:1\n
-        Random state seed: {seed}"
+        Random state seed: {seed}
     """)
 
     separator = lambda: print("=" * 60)
@@ -79,4 +80,5 @@ F1 Score (Weighted): {f1_weighted:.4f}""")
     plt.ylabel("Explained Variance Ratio")
     plt.title("First 20 Components")
     plt.tight_layout()
+    plt.savefig(os.path.join("results", f"variance_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"))
     plt.show()

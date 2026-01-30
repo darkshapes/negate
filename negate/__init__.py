@@ -5,3 +5,4 @@ from negate.datasets import build_datasets
 from negate.extract import FeatureExtractor, DeviceName, features
 from negate.train import TrainResult, grade
 from negate.track import in_console
+from negate.save import save_model
