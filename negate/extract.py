@@ -14,7 +14,7 @@ from skimage.filters import laplace
 
 
 class DeviceName(str, Enum):
-    """Graphics processors usable by the VAE pipeline."""
+    """Graphics processors usable by the VAE pipeline.\n"""
 
     CPU = "cpu"
     CUDA = "cuda"
@@ -23,14 +23,15 @@ class DeviceName(str, Enum):
 
 class Residual:
     def __init__(self, dtype: np.typing.DTypeLike = np.float32):
-        """Initialize the residual class"""
-
+        """Initialize Residual.\n
+        :param dtype: dtype for internal numpy conversion.
+        return: None."""
         self.dtype = dtype
-        self.dtype_name = repr(dtype).split(".")[-1]
 
     def __call__(self, image: Image) -> Image:
-        """Convert the input image to grayscale, apply a Laplace filter,
-        and replicate the result across three channels."""
+        """Create a 3‑channel residual from a grayscale image.\n
+        :param image: PIL image to process.
+        :return: Residual image in RGB mode."""
 
         greyscale = image.convert("L")
         numeric_image = np.array(greyscale, dtype=self.dtype)
@@ -49,6 +50,12 @@ class FeatureExtractor:
     )
 
     def __init__(self, model: str, device: DeviceName, dtype: torch.dtype) -> None:
+        """Set up the extractor with a VAE model.\n
+        :param model: Repository ID of the VAE.
+        :param device: Target device.
+        :param dtype: Data type for tensors.
+        :return: None."""
+
         self.device = device
         self.dtype = dtype
         self.model = model
@@ -58,6 +65,7 @@ class FeatureExtractor:
             self.create_vae()
 
     def create_vae(self):
+        """Download and load the VAE from the model repo."""
         import os
 
         vae_path = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
@@ -68,8 +76,7 @@ class FeatureExtractor:
         self.vae = vae_model
 
     def cleanup(self) -> None:  # type:ignore
-        """Cleans up the model and frees GPU memory
-        :param model: The model instance used for feature extraction"""
+        """Free the VAE and GPU memory."""
 
         import gc
 
@@ -80,27 +87,26 @@ class FeatureExtractor:
         del self.vae
         gc.collect()
 
+    def batch_extract(self, dataset: Dataset):
+        """Extract VAE features from a batch of images.
+        :param dataset: HuggingFace Dataset with 'image' column.
+        :return: Dictionary with 'features' list."""
 
-class BatchFeatures:
-    def __call__(self, feature_extractor: FeatureExtractor, dataset: Dataset):
-        """Extract VAE features from a batch of images."""
-
-        assert hasattr(feature_extractor, "vae")
+        assert self.vae is not None
         features_list = []
 
         for image in dataset["image"]:
             color_image = image.convert("RGB")
             gray_image = image.convert("L")
-            residual_image = feature_extractor.residual_transform(gray_image)
+            residual_image = self.residual_transform(gray_image)
 
-            # Convert to tensors
-            color_tensor = feature_extractor.transform(color_image)
-            residual_tensor = feature_extractor.transform(residual_image)
+            color_tensor = self.transform(color_image)
+            residual_tensor = self.transform(residual_image)
 
-            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(feature_extractor.device, dtype=feature_extractor.dtype)
+            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)
 
             with torch.no_grad():
-                latents_2_dim_h_w = feature_extractor.vae.encode(batch_tensor).latent_dist.sample()
+                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()
                 mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
                 feature_vec = mean_latent.flatten()
 
@@ -108,36 +114,41 @@ class BatchFeatures:
 
         return {"features": features_list}
 
+    def __enter__(self) -> "FeatureExtractor":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if hasattr(self, "vae"):
+            self.cleanup()
+
 
 def features(dataset: Dataset) -> Dataset:
-    if torch.cuda.is_available():
-        device = DeviceName.CUDA
-        dtype = torch.bfloat16
-    elif torch.mps.is_available():
-        device = DeviceName.MPS
-        dtype = torch.bfloat16
-    else:
-        device = DeviceName.CPU
-        dtype = torch.float32
+    """Generate a feature dataset from images.\n
+    :param dataset: Dataset containing images.
+    :return: Dataset with feature vectors."""
+
+    device_type = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
+    match device_type:
+        case "cuda":
+            device = DeviceName.CUDA
+            dtype = torch.bfloat16
+        case "mps":
+            device = DeviceName.MPS
+            dtype = torch.bfloat16
+        case _:
+            device = DeviceName.CPU
+            dtype = torch.float32
 
     model = "black-forest-labs/FLUX.1-dev"
-    extractor = FeatureExtractor(model, device=device, dtype=dtype)
-    extractor.create_vae()
 
-    batch_extract = lambda batch: BatchFeatures()(extractor, batch)  # Use lambda to capture extractor
-
-    features_dataset = dataset.map(
-        batch_extract,
-        batched=True,
-        batch_size=4,
-        remove_columns=["image"],
-        desc="Extracting features...",
-    )
+    with FeatureExtractor(model, device, dtype) as extractor:
+        features_dataset = dataset.map(
+            extractor.batch_extract,
+            batched=True,
+            batch_size=4,
+            remove_columns=["image"],
+            desc="Extracting features...",
+        )
     features_dataset.set_format(type="numpy", columns=["features", "label"])
-    extractor.cleanup()
 
     return features_dataset
-
-
-if __name__ == "__main__":
-    features()

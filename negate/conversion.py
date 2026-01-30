@@ -1,4 +1,4 @@
-# adapted from ML-Model-CI
+# adapted from cap-ntu/ML-Model-CI
 
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
@@ -22,6 +22,7 @@ from typing import List, Union
 
 import numpy as np
 import onnxconverter_common
+import onnxmltools
 from mongoengine.fields import IntField, ListField, StringField, EmbeddedDocument
 from onnx import TensorProto
 
@@ -131,7 +132,7 @@ def model_data_type_to_onnx(model_dtype):
         DataType.TYPE_BOOL: onnxconverter_common.BooleanTensorType,
         DataType.TYPE_INT32: onnxconverter_common.Int32TensorType,
         DataType.TYPE_INT64: onnxconverter_common.Int64TensorType,
-        DataType.TYPE_FP32: onnxconverter_common.FloatTensorType,
+        DataType.TYPE_FP32: onnxmltools.convert.common.data_types.FloatTensorType,
         DataType.TYPE_FP64: onnxconverter_common.DoubleTensorType,
         DataType.TYPE_STRING: onnxconverter_common.StringType,
     }

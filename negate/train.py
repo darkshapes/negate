@@ -14,7 +14,7 @@ from sklearn.model_selection import train_test_split
 
 @dataclass
 class TrainResult:
-    """Container for all objects produced by `analyze`."""
+    """Container holding all artifacts produced by :func:`grade`."""
 
     X_train: Any
     pca: Any
@@ -26,9 +26,13 @@ class TrainResult:
     labels: Any
     feature_matrix: Any
     seed: int
+    num_features: int
 
 
 def grade(features_dataset: Dataset) -> TrainResult:
+    """Train an XGBoost model from a feature dataset.\n
+    :param features_dataset: Dataset of samples containing ``features`` and ``label``.
+    :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
     feature_matrix = np.array([sample["features"] for sample in features_dataset])
     labels = np.array([sample["label"] for sample in features_dataset])
 
@@ -37,7 +41,7 @@ def grade(features_dataset: Dataset) -> TrainResult:
     seed = random_state()
     X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=seed)
 
-    pca = PCA(n_components=0.95, random_state=seed)
+    pca = PCA(n_components=0.95, random_state=seed)  # dimensionality .95
     X_train_pca = pca.fit_transform(X_train)
     X_test_pca = pca.transform(X_test)
 
@@ -73,4 +77,5 @@ def grade(features_dataset: Dataset) -> TrainResult:
         labels=labels,
         feature_matrix=feature_matrix,
         seed=seed,
+        num_features=model.num_features(),
     )

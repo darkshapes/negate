@@ -1,3 +1,5 @@
+# adapted from cap-ntu/ML-Model-CI
+
 #!/usr/bin/python3
 # -*- coding: utf-8 -*-
 #  Copyright (c) NTU_CAP 2021. All Rights Reserved.
@@ -22,7 +24,7 @@ import onnx
 import onnxmltools as onnxmltools
 import torch
 import torch.onnx
-from onnxmltools import optimizer
+from onnxoptimizer import optimize
 
 from negate.conversion import IOShape, model_data_type_to_torch, model_data_type_to_onnx
 
@@ -210,10 +212,7 @@ class ONNXConverter(object):
             "fuse_bn_into_conv",
             "fuse_matmul_add_bias_into_gemm",
         ]
-        model = optimizer.optimize(model, passes)
+        model = optimize(model, passes=passes)
 
-        if verbose:
-            for m in onnx.helper.printable_graph(model.graph).split("\n"):
-                print(m)
         print(f"Finished optimizing ONNX model. Total nodes: {len(model.graph.node)}")
         return model
