@@ -3,4 +3,17 @@
 
 
 def test_main_import():
-    from negate import build_datasets, FeatureExtractor, DeviceName, features, in_console, TrainResult, grade
+    from negate import (
+        build_datasets,
+        generate_dataset,
+        dataset_to_nparray,
+        FeatureExtractor,
+        DeviceName,
+        features,
+        TrainResult,
+        grade,
+        in_console,
+        to_graph,
+        save_model,
+        save_to_onnx,
+    )
