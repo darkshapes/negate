@@ -2,8 +2,31 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from enum import Enum
-
+from dataclasses import dataclass
 from datasets import Dataset
+
+
+class VAEModel(str, Enum):
+    """Choose the name and size of the VAE model to use for extraction."""
+
+    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
+    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-9B"
+    FLUX1_FP32 = "Tongyi-MAI/Z-Image"
+    FLUX1_FP16 = "Freepik/F-Lite-Texture"
+
+
+@dataclass
+class VAEInfo:
+    enum: VAEModel
+    module: str  # e.g. "autoencoders.AutoencoderKLFlux2"
+
+
+MODEL_MAP = {
+    VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+}
 
 
 class DeviceName(str, Enum):
@@ -26,7 +49,7 @@ class FeatureExtractor:
         ]
     )
 
-    def __init__(self, model: str, device: DeviceName, dtype: torch.dtype) -> None:
+    def __init__(self, vae_type: VAEModel, device: DeviceName, dtype: torch.dtype) -> None:
         """Set up the extractor with a VAE model.\n
         :param model: Repository ID of the VAE.
         :param device: Target device.
@@ -36,7 +59,7 @@ class FeatureExtractor:
 
         self.device = device
         self.dtype = dtype
-        self.model = model
+        self.model: VAEInfo = MODEL_MAP[vae_type]
         self.vae: AutoencoderMixin | None = None
         self.residual_transform = Residual()
         if self.vae is None:
@@ -49,17 +72,10 @@ class FeatureExtractor:
         from diffusers.models import autoencoders
         from huggingface_hub import snapshot_download
 
-        autoencoder_map = {  # dev will be fp32, klein will be fp16. results are better for flux 2 models by ~5%
-            "black-forest-labs/FLUX.1-dev": autoencoders.AutoencoderKL,  # type: ignore not exported from
-            "Tongyi-MAI/Z-Image": autoencoders.AutoencoderKL,  # type: ignore not exported from
-            "black-forest-labs/FLUX.2-dev": autoencoders.AutoencoderKLFlux2,  # type: ignore not exported from
-            "black-forest-labs/FLUX.2-klein-9B": autoencoders.AutoencoderKLFlux2,  # type: ignore not exported from
-            "black-forest-labs/FLUX.2-klein-4B": autoencoders.AutoencoderKLFlux2,  # type: ignore not exported from
-        }
-
-        vae_path = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
+        vae_path = snapshot_download(self.model.enum, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
-        vae_model = autoencoder_map[self.model].from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
+        autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
+        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
         vae_model.eval()
         self.vae = vae_model
 
@@ -107,7 +123,7 @@ class FeatureExtractor:
             self.cleanup()
 
 
-def features(dataset: Dataset) -> Dataset:
+def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
     """Generate a feature dataset from images.\n
     :param dataset: Dataset containing images.
     :return: Dataset with feature vectors."""
@@ -125,9 +141,7 @@ def features(dataset: Dataset) -> Dataset:
             device = DeviceName.CPU
             dtype = torch.float32
 
-    model = "Tongyi-MAI/Z-Image"
-
-    with FeatureExtractor(model, device, dtype) as extractor:
+    with FeatureExtractor(vae_type, device, dtype) as extractor:
         features_dataset = dataset.map(
             extractor.batch_extract,
             batched=True,
