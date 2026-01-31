@@ -13,6 +13,8 @@ assets/
 *.lock
 .datasets/
 .continue/
-models/
+models/*
+
 results/features_residual/
 results/residual_analysis/
+results/features_updated/

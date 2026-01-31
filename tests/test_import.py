@@ -13,7 +13,7 @@ def test_main_import():
         TrainResult,
         grade,
         in_console,
-        to_graph,
+        on_graph,
         save_model,
         save_to_onnx,
     )

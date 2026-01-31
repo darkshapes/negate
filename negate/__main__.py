@@ -5,18 +5,7 @@ from pathlib import Path
 from sys import argv
 import numpy as np
 
-from negate import (
-    TrainResult,
-    build_datasets,
-    dataset_to_nparray,
-    features,
-    generate_dataset,
-    grade,
-    in_console,
-    save_model,
-    save_to_onnx,
-    to_graph,
-)
+from negate import TrainResult, build_datasets, dataset_to_nparray, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel
 
 
 def predict(image_path: Path) -> np.ndarray:
@@ -24,42 +13,38 @@ def predict(image_path: Path) -> np.ndarray:
     :param image_path: Path to image file.
     :return: Prediction array.
     """
-    import pickle
-    import xgboost as xgb
     from datasets import Dataset
+    import onnxruntime as ort
 
     print("Detection selected.")
 
     dataset: Dataset = generate_dataset(image_path)
     dataset_np: np.ndarray = dataset_to_nparray(dataset)
     features_dataset: Dataset = features(dataset_np)
-    model = xgb.Booster()
-    model.load_model("model.xgb")
 
-    with open("pca.pkl", "rb") as f:
-        pca = pickle.load(f)
+    session_pca = ort.InferenceSession("negate_pca.onnx")
+    input_name_pca = session_pca.get_inputs()[0].name
+    features_pca = session_pca.run(None, {input_name_pca: np.array(features_dataset).astype(np.float32)})[0]
 
-    meta = np.load("meta.npz")
-    scale_pos_weight = meta["scale_pos_weight"]
+    input_name = ort.get_available_providers()[0]
+    inputs = {input_name: features_pca.astype(np.float32)}
 
-    features_pca = pca.transform(features_dataset)
-    dmat = xgb.DMatrix(features_pca)
-    return model.predict(dmat)
+    session = ort.InferenceSession("negate.onnx")
+    return session.run(None, inputs)[0]
 
 
-def training_run(file_or_folder_path: Path | None = None) -> None:
+def training_run(vae_type: VAEModel, file_or_folder_path: Path | None = None) -> None:
     """Train model using dataset at path.\n
     :param path: Dataset root."""
     from datasets import Dataset
 
     print("Training selected.")
     dataset: Dataset = build_datasets(file_or_folder_path)
-    features_dataset: Dataset = features(dataset)
+    features_dataset: Dataset = features(dataset, vae_type)
     train_result: TrainResult = grade(features_dataset)
-    save_model(train_result)
     save_to_onnx(train_result)
     in_console(train_result)
-    to_graph(train_result)
+    on_graph(train_result)
 
 
 def main() -> None:
@@ -73,7 +58,12 @@ def main() -> None:
 
     train_parser = subparsers.add_parser("train", help="Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.")
     train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
-
+    train_parser.add_argument(
+        "--model",
+        choices=[m.value for m in VAEModel],
+        default=VAEModel.FLUX2_FP32.value,
+        help="Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right",
+    )
     check_parser = subparsers.add_parser(
         "check",
         help="Check whether an image at the provided path is synthetic or original.",
@@ -88,8 +78,8 @@ def main() -> None:
                 dataset_location: Path | None = Path(args.path)
             else:
                 dataset_location: Path | None = None
-
-            training_run(dataset_location)
+            vae_type = VAEModel(args.model)
+            training_run(file_or_folder_path=dataset_location, vae_type=vae_type)
         case "check":
             if args.path is None:
                 raise ValueError("Check requires an image path.")
