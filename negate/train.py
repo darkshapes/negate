@@ -17,7 +17,10 @@ from xgboost import Booster
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 folder = Path("models", get_time())
-folder.mkdir()
+try:
+    folder.mkdir()
+except FileNotFoundError:
+    pass
 model_path = lambda file_name: str(folder / file_name)
 
 
