@@ -72,7 +72,7 @@ class FeatureExtractor:
         from diffusers.models import autoencoders
         from huggingface_hub import snapshot_download
 
-        vae_path = snapshot_download(self.model.enum, allow_patterns=["vae/*"])  # type: ignore
+        vae_path: str = snapshot_download(self.model.enum, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
         autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
         vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
@@ -97,17 +97,25 @@ class FeatureExtractor:
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
         import torch
+        import numpy as np
 
         assert self.vae is not None
         features_list = []
+        patch_stack = []
 
         for image in dataset["image"]:
             color_image = image.convert("RGB")
             color_tensor = self.transform(color_image)
-            batch_tensor = torch.stack([color_tensor]).to(self.device, dtype=self.dtype)  # type: ignore residual tensor
+            patches = self.residual_transform.crop_select(image, size=768, top_k=1)
+            for patch in patches:
+                patch_image = patch.convert("RGB")
+                patch_tensor = self.transform(patch_image)
+                patch_stack.append(patch_tensor)
+
+            batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
 
             with torch.no_grad():
-                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore latent_dist
+                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()
                 mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
                 feature_vec = mean_latent.flatten()
 
@@ -129,17 +137,8 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
     :return: Dataset with feature vectors."""
     import torch
 
-    device_type = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "cpu"
-    match device_type:
-        case "cuda":
-            device = DeviceName.CUDA
-            dtype = torch.float32
-        case "mps":
-            device = DeviceName.MPS
-            dtype = torch.float32
-        case _:
-            device = DeviceName.CPU
-            dtype = torch.float32
+    device = DeviceName.CUDA if torch.cuda.is_available() else DeviceName.MPS if torch.mps.is_available() else DeviceName.CPU
+    dtype = torch.bfloat16
 
     with FeatureExtractor(vae_type, device, dtype) as extractor:
         features_dataset = dataset.map(

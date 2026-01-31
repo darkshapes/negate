@@ -57,7 +57,7 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
         format=ModelInputFormat.FORMAT_NONE,
     )
 
-    negate_onnx_file_name = os.path.join("models", f"{file_name}.onnx")
+    negate_onnx_file_name = model_path(f"{file_name}.onnx")
     onnx_model = ONNXConverter.from_xgboost(model, inputs=[input_shape], opset=12)
 
     onnx.save(onnx_model, negate_onnx_file_name)

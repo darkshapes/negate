@@ -146,21 +146,21 @@ def on_graph(train_result: TrainResult) -> None:
     plt.savefig(model_path("pca_transform_map.png"))
     plt.show()
 
-    corr = np.corrcoef(X_train, rowvar=False)
-    upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
-    figure, ax = plt.subplots(figsize=(12, 10))
-    cmap = sns.diverging_palette(20, 230, as_cmap=True)
-    sns.heatmap(
-        corr,
-        mask=upper_triangle_mask,
-        cmap=cmap,
-        vmin=-1,
-        vmax=1,
-        center=0,
-        square=True,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.5},
-    )
-    figure.savefig(model_path("correlation_heatmap.png"))
+    # corr = np.corrcoef(X_train, rowvar=False)
+    # upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
+    # figure, ax = plt.subplots(figsize=(12, 10))
+    # cmap = sns.diverging_palette(20, 230, as_cmap=True)
+    # sns.heatmap(
+    #     corr,
+    #     mask=upper_triangle_mask,
+    #     cmap=cmap,
+    #     vmin=-1,
+    #     vmax=1,
+    #     center=0,
+    #     square=True,
+    #     linewidths=0.5,
+    #     cbar_kws={"shrink": 0.5},
+    # )
+    # figure.savefig(model_path("correlation_heatmap.png"))
 
-    # plt.tight_layout()
+    # # plt.tight_layout()

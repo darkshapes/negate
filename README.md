@@ -13,7 +13,11 @@ A command-line tool and Python library for processing and analyzing images, prov
 
 ## Overview
 
-We use a modern VAE to extract features from images generated from Diffusers, ComfyUI, Darkshapes tools (Zodiac/singularity) and Google Nano-Banana.
+We use a modern VAE to extract features from images generated using Diffusers, ComfyUI, Darkshapes tools (Zodiac/Divisor/singularity) and Google Nano-Banana. Using a modular pipeline that integrates a combination of feature extraction techniques such as spectral residual analysis and feature vectors extracted from the images, we train a Gradient Boosting Decision Tree model and its associated PCA transformer to distinguish between images of synthetic and human origin. Preliminary results demonstrate high accuracy in detecting synthetic images.
+
+This repo provides a simple command‑line interface to invoke the tool and examples of integrating the library of predictions and metrics into other works. We make all attempts to follow continuous integration best practices for deploying and maintaining software, ensuring the code is readied for production environments.
+
+Future work includes the development of an automated testing framework and evaluation suite, expanding the scope of research to include wider diversity of synthetic and original human-generated datasets, benchmarking against comparable methods, and exploring additional model architectures.
 
 ![Bar and grid graph comparing variance of the synthetic and real images](results/score_explained_variance.png)
 ![Graph comparing before and after pca transform operation of dataset](results/pca_transform_map.png)
@@ -21,9 +25,9 @@ We use a modern VAE to extract features from images generated from Diffusers, Co
 
 ## Requirements
 
-- A dataset of images made by human artists with width and height dimensions larger than 512 pixels.
+- A dataset of images made by human artists with width and height dimensions larger than 512 pixels. This will serve as ground truth and should be placed in the `/assets` folder.
 - A [huggingface](https://hf.co) account that will be used to download models and synthetic datasets. Create an API Key at their website, then sign in with `hf auth login`.
-- It is recommended to run on a GPU to ensure efficient processing and reduce training time.
+- It is recommended to run `negate` on a GPU to ensure efficient processing and reduced training time.
 
 > [!NOTE]
 >
@@ -55,7 +59,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 
 ## CLI:
 
-Add human-origin assets to `assets/` folder
+Basic Syntax:
 
 ```sh
 usage: negate [-h] {train,check} ...
@@ -69,4 +73,31 @@ positional arguments:
 
 options:
   -h, --help     show this help message and exit
+```
+
+Training syntax:
+
+```sh
+usage: negate train [-h] [--model {black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-9B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture}] [path]
+
+positional arguments:
+  path                  Dataset path
+
+options:
+  --model {black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-9B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture}
+                        Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right
+```
+
+Check the origin of an image:
+``
+usage: negate check [-h] path
+
+positional arguments:
+path Image path
+
+options:
+-h, --help show this help message and exit
+
+```
+
 ```
