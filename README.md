@@ -9,17 +9,25 @@ entrypoint synthetic image classifier
 
 ## About
 
-A command-line tool and Python library for processing and analyzing images, extracting Laplacian residuals to measure fractal and texture complexity, and other comparative analysis methods to discriminate synthetic images from real ones.
+A command-line tool and Python library for processing and analyzing images, providing methods for feature extraction, laplacian and spectral residual processing, and other comparative analysis methods to discriminate between synthetic images and real ones.
+
+## Overview
+
+We use a modern VAE to extract features from images generated from Diffusers, ComfyUI, Darkshapes tools (Zodiac/singularity) and Google Nano-Banana.
+
+![Bar and grid graph comparing variance of the synthetic and real images](results/score_explained_variance.png)
+![Graph comparing before and after pca transform operation of dataset](results/pca_transform_map.png)
+![Graph comparing confusion matrix of the synthetic and real images](results/score_confusion_matrix.png)
+
+## Requirements
+
+- A dataset of images made by human artists with width and height dimensions larger than 512 pixels.
+- A [huggingface](https://hf.co) account that will be used to download models and synthetic datasets. Create an API Key at their website, then sign in with `hf auth login`.
+- It is recommended to run on a GPU to ensure efficient processing and reduce training time.
 
 > [!NOTE]
 >
-> Demonstration of the provided test results and visualizations on our synthetic [darkshapes/a_slice dataset](https://huggingface.co/darkshapes/a_slice) and private works of human origin provided by consent from the generous artists at https://purelyhuman.xyz.
-
-## Results Overview
-
-![Bar and grid graph comparing variance of the synthetic and real images](results/variance_20260130_154140.png)
-![Graph comparing before and after pca transform operation of dataset](results/pca_transform_20260130_154144.png)
-![Graph comparing confusion matrix of the synthetic and real images](results/confusion_matrix_20260130_154142.png)
+> Our training results and visualizations were created with data provided consensually by generous artists at https://purelyhuman.xyz. We don't have permission to share that dataset here.
 
 ## Install
 

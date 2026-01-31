@@ -2,6 +2,7 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from PIL.Image import Image, fromarray
+from numpy.typing import NDArray
 from skimage.filters import laplace
 import numpy as np
 
@@ -68,16 +69,15 @@ class Residual:
         residual_image: Image = fromarray(np.uint8(magnitude_spectrum), mode="L").convert("RGB")
         return residual_image
 
-    @staticmethod
-    def masked_spectral(image: Image, mask_radius: int = 50, mask_type: str = "high") -> Image:
+    def masked_spectral(self, image: NDArray, mask_radius: int = 50, mask_type: str = "high") -> Image:
         """Apply Masked Spectral Learning logic to an image.\n
         :param image: PIL image to process.
         :param mask_radius: Radius r for the circular mask.
         :param mask_type: 'high' to zero out center (low-freq), 'low' to zero out edges (high-freq).
         :return: Masked spectral image in RGB mode."""
 
-        gray = image.convert("L")
-        numeric_image = np.array(gray, dtype=np.float32)
+        # gray = image.convert("L")
+        # numeric_image = np.array(gray, dtype=np.float32)
 
         # 1. Compute Discrete Fourier Transform: chi = F(x)
         fourier_transform = np.fft.fft2(numeric_image)
@@ -107,3 +107,67 @@ class Residual:
         reconstructed_uint8 = ((reconstructed_real - reconstructed_real.min()) / (reconstructed_real.max() - reconstructed_real.min()) * 255).astype(np.uint8)
 
         return fromarray(reconstructed_uint8, mode="L").convert("RGB")
+
+    def crop_select(
+        self,
+        image: Image,
+        size: int = 512,
+        top_k: int = 5,
+        mask_radius: int = 50,
+    ) -> list[Image]:
+        """Crop image into patches, compute freq-divergence, return most extreme patches.\n
+        :param image: PIL image to process.\n
+        :param size: Patch dimension.\n
+        :param top_k: Number of extreme patches to return.\n
+        :param mask_radius: Radius used in masked_spectral logic.\n
+        :return: List of selected patch images."""
+        gray = image.convert("L")
+        arr = np.array(gray, dtype=self.dtype)
+
+        h, w = arr.shape
+        nx = (w + size - 1) // size
+        ny = (h + size - 1) // size
+
+        metrics: list[tuple[float, Image]] = []
+
+        for iy in range(ny):
+            for ix in range(nx):
+                x0 = ix * size
+                y0 = iy * size
+                patch_arr = arr[y0 : y0 + size, x0 : x0 + size]
+                if patch_arr.shape != (size, size):
+                    pad = np.zeros((size, size), dtype=self.dtype)
+                    pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
+                    patch_arr = pad
+
+                # FFT
+                f = np.fft.fft2(patch_arr)
+                f_shift = np.fft.fftshift(f)
+
+                # Mask logic from masked_spectral
+                rows, cols = size, size
+                y, x = np.ogrid[:rows, :cols]
+                c = (rows // 2, cols // 2)
+                dist = np.sqrt((x - c[1]) ** 2 + (y - c[0]) ** 2)
+                mask = dist < mask_radius
+
+                low_mask = ~mask
+                high_mask = mask
+
+                # Magnitudes
+                low_mag = np.abs(f_shift[low_mask])
+                high_mag = np.abs(f_shift[high_mask])
+
+                # Divergence metric
+                div = abs(np.mean(high_mag) - np.mean(low_mag))
+
+                patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
+                metrics.append((div, patch_img))
+
+        metrics.sort(key=lambda x: x[0], reverse=True)
+
+        chosen: list[Image] = []
+        chosen.extend([p for _, p in metrics[:top_k]])  # high diverges
+        chosen.extend([p for _, p in metrics[-top_k:]])  # low diverges
+
+        return chosen

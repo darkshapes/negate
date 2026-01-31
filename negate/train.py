@@ -56,7 +56,7 @@ def grade(features_dataset: Dataset) -> TrainResult:
     """Train an XGBoost model from a feature dataset.\n
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
-    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(dtype=np.float32)  # type: ignore no overloads
+    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(np.float32)  # type: ignore no overloads
     labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)

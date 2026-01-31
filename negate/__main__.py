@@ -5,17 +5,7 @@ from pathlib import Path
 from sys import argv
 import numpy as np
 
-from negate import (
-    TrainResult,
-    build_datasets,
-    dataset_to_nparray,
-    features,
-    generate_dataset,
-    grade,
-    in_console,
-    save_to_onnx,
-    on_graph,
-)
+from negate import TrainResult, build_datasets, dataset_to_nparray, features, generate_dataset, grade, in_console, save_to_onnx, on_graph  # , VAEModel
 
 
 def predict(image_path: Path) -> np.ndarray:
@@ -43,7 +33,7 @@ def predict(image_path: Path) -> np.ndarray:
     return session.run(None, inputs)[0]
 
 
-def training_run(file_or_folder_path: Path | None = None) -> None:
+def training_run(file_or_folder_path: Path | None = None):  # , vae_type: VAEModel = VAEModel.FLUX2_FP32) -> None:
     """Train model using dataset at path.\n
     :param path: Dataset root."""
     from datasets import Dataset
@@ -68,7 +58,12 @@ def main() -> None:
 
     train_parser = subparsers.add_parser("train", help="Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.")
     train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
-
+    # train_parser.add_argument(
+    #     "--model",
+    #     choices=[m.value for m in VAEModel],
+    #     default=VAEModel.FLUX2_FP32.value,
+    #     help="Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right",
+    # )
     check_parser = subparsers.add_parser(
         "check",
         help="Check whether an image at the provided path is synthetic or original.",
@@ -83,7 +78,7 @@ def main() -> None:
                 dataset_location: Path | None = Path(args.path)
             else:
                 dataset_location: Path | None = None
-
+            # vae_type = VAEModel(args.model)
             training_run(dataset_location)
         case "check":
             if args.path is None:
