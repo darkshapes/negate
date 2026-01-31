@@ -13,7 +13,7 @@ A command-line tool and Python library for processing and analyzing images, extr
 
 > [!NOTE]
 >
-> Demonstration of the provided test results and visualizations on our synthetic [darkshapes/a_slice dataset (https://huggingface.co/darkshapes/a_slice) and private works of human origin provided by consent from the generous artists at https://purelyhuman.xyz.
+> Demonstration of the provided test results and visualizations on our synthetic [darkshapes/a_slice dataset](https://huggingface.co/darkshapes/a_slice) and private works of human origin provided by consent from the generous artists at https://purelyhuman.xyz.
 
 ## Results Overview
 

@@ -2,12 +2,31 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from enum import Enum
-
-import numpy as np
-
-from PIL.Image import Image, fromarray
-from skimage.filters import laplace
+from dataclasses import dataclass
 from datasets import Dataset
+
+
+class VAEModel(str, Enum):
+    """Choose"""
+
+    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
+    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-9B"
+    FLUX1_FP32 = "Tongyi-MAI/Z-Image"
+    FLUX1_FP16 = "Freepik/F-Lite-Texture"
+
+
+@dataclass
+class VAEInfo:
+    enum: VAEModel
+    module: str  # e.g. "autoencoders.AutoencoderKLFlux2"
+
+
+MODEL_MAP = {
+    VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+}
 
 
 class DeviceName(str, Enum):
@@ -16,25 +35,6 @@ class DeviceName(str, Enum):
     CPU = "cpu"
     CUDA = "cuda"
     MPS = "mps"
-
-
-class Residual:
-    def __init__(self, dtype: np.typing.DTypeLike = np.float32):
-        """Initialize Residual.\n
-        :param dtype: dtype for internal numpy conversion.
-        return: None."""
-        self.dtype = dtype
-
-    def __call__(self, image: Image) -> Image:
-        """Create a 3-channel residual from a grayscale image.\n
-        :param image: PIL image to process.
-        :return: Residual image in RGB mode."""
-
-        greyscale = image.convert("L")
-        numeric_image = np.array(greyscale, dtype=self.dtype)
-        residual = laplace(numeric_image, ksize=3).astype(self.dtype)
-        residual_image: Image = fromarray(np.uint8(residual), mode="L").convert("RGB")
-        return residual_image
 
 
 class FeatureExtractor:
@@ -49,17 +49,18 @@ class FeatureExtractor:
         ]
     )
 
-    def __init__(self, model: str, device: DeviceName, dtype: torch.dtype) -> None:
+    def __init__(self, model: VAEModel | VAEInfo, device: DeviceName, dtype: torch.dtype) -> None:
         """Set up the extractor with a VAE model.\n
         :param model: Repository ID of the VAE.
         :param device: Target device.
         :param dtype: Data type for tensors."""
-        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+        from diffusers.models.autoencoders.vae import AutoencoderMixin
+        from negate import Residual  # `B̴̨̒e̷w̷͇̃ȁ̵͈r̸͔͛ę̵͂ ̷̫̚t̵̻̐h̶̜͒ȩ̸̋ ̵̪̄ő̷̦ù̵̥r̷͇̂o̷̫͑b̷̲͒ò̷̫r̴̢͒ô̵͍s̵̩̈́` #type: ignore
 
         self.device = device
         self.dtype = dtype
         self.model = model
-        self.vae: AutoencoderKL | None = None
+        self.vae: AutoencoderMixin | None = None
         self.residual_transform = Residual()
         if self.vae is None:
             self.create_vae()
@@ -67,20 +68,22 @@ class FeatureExtractor:
     def create_vae(self):
         """Download and load the VAE from the model repo."""
         import os
+
+        from diffusers.models import autoencoders
         from huggingface_hub import snapshot_download
-        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
 
-        vae_path = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
+        vae_path = snapshot_download(self.model.enum, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
-        vae_model = AutoencoderKL.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)  # type: ignore DeviceLike
+        autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
+        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
         vae_model.eval()
-
         self.vae = vae_model
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
-        import torch
         import gc
+
+        import torch
 
         device = self.device
         if device != "cpu":
@@ -100,13 +103,8 @@ class FeatureExtractor:
 
         for image in dataset["image"]:
             color_image = image.convert("RGB")
-            gray_image = image.convert("L")
-            residual_image = self.residual_transform(gray_image)
-
             color_tensor = self.transform(color_image)
-            residual_tensor = self.transform(residual_image)
-
-            batch_tensor = torch.stack([color_tensor, residual_tensor]).to(self.device, dtype=self.dtype)  # type: ignore residual tensor
+            batch_tensor = torch.stack([color_tensor]).to(self.device, dtype=self.dtype)  # type: ignore residual tensor
 
             with torch.no_grad():
                 latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore latent_dist
@@ -135,17 +133,17 @@ def features(dataset: Dataset) -> Dataset:
     match device_type:
         case "cuda":
             device = DeviceName.CUDA
-            dtype = torch.bfloat16
+            dtype = torch.float32
         case "mps":
             device = DeviceName.MPS
-            dtype = torch.bfloat16
+            dtype = torch.float32
         case _:
             device = DeviceName.CPU
             dtype = torch.float32
 
-    model = "black-forest-labs/FLUX.1-dev"
-
-    with FeatureExtractor(model, device, dtype) as extractor:
+    vae_type = VAEModel.FLUX2_FP32
+    vae_info = MODEL_MAP[vae_type]
+    with FeatureExtractor(vae_info, device, dtype) as extractor:
         features_dataset = dataset.map(
             extractor.batch_extract,
             batched=True,

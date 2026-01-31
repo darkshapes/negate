@@ -13,9 +13,8 @@ from negate import (
     generate_dataset,
     grade,
     in_console,
-    save_model,
     save_to_onnx,
-    to_graph,
+    on_graph,
 )
 
 
@@ -24,27 +23,24 @@ def predict(image_path: Path) -> np.ndarray:
     :param image_path: Path to image file.
     :return: Prediction array.
     """
-    import pickle
-    import xgboost as xgb
     from datasets import Dataset
+    import onnxruntime as ort
 
     print("Detection selected.")
 
     dataset: Dataset = generate_dataset(image_path)
     dataset_np: np.ndarray = dataset_to_nparray(dataset)
     features_dataset: Dataset = features(dataset_np)
-    model = xgb.Booster()
-    model.load_model("model.xgb")
 
-    with open("pca.pkl", "rb") as f:
-        pca = pickle.load(f)
+    session_pca = ort.InferenceSession("negate_pca.onnx")
+    input_name_pca = session_pca.get_inputs()[0].name
+    features_pca = session_pca.run(None, {input_name_pca: np.array(features_dataset).astype(np.float32)})[0]
 
-    meta = np.load("meta.npz")
-    scale_pos_weight = meta["scale_pos_weight"]
+    input_name = ort.get_available_providers()[0]
+    inputs = {input_name: features_pca.astype(np.float32)}
 
-    features_pca = pca.transform(features_dataset)
-    dmat = xgb.DMatrix(features_pca)
-    return model.predict(dmat)
+    session = ort.InferenceSession("negate.onnx")
+    return session.run(None, inputs)[0]
 
 
 def training_run(file_or_folder_path: Path | None = None) -> None:
@@ -56,10 +52,9 @@ def training_run(file_or_folder_path: Path | None = None) -> None:
     dataset: Dataset = build_datasets(file_or_folder_path)
     features_dataset: Dataset = features(dataset)
     train_result: TrainResult = grade(features_dataset)
-    save_model(train_result)
     save_to_onnx(train_result)
     in_console(train_result)
-    to_graph(train_result)
+    on_graph(train_result)
 
 
 def main() -> None:

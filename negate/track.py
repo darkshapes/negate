@@ -2,13 +2,15 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import os
+from pathlib import Path
 from pprint import pprint
 
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, roc_auc_score
 
-from negate import TrainResult, get_time
+from negate import TrainResult, get_time, model_path
 
 
 def in_console(train_result: TrainResult) -> None:
@@ -40,7 +42,7 @@ def in_console(train_result: TrainResult) -> None:
         "timestamp": timestamp,
         "original_dim": X_train.shape[1],
         "pca_dim": X_train_pca.shape[1],
-        "n_components": pca.n_components_,
+        "n_components": pca.n_components,
         "explained_var": pca.explained_variance_ratio_.sum(),
         "cumulative:": np.cumsum(pca.explained_variance_ratio_),
         "scale_pos_weight": scale_pos_weight,
@@ -63,7 +65,7 @@ def in_console(train_result: TrainResult) -> None:
     }
 
     pprint(results)
-    results_file = os.path.join("results", f"results_{timestamp}.json")
+    results_file = model_path("results.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
@@ -75,12 +77,12 @@ def in_console(train_result: TrainResult) -> None:
     print(classification_report(y_test, y_pred, target_names=["Real", "Synthetic"]))
 
 
-def to_graph(train_result: TrainResult) -> None:
+def on_graph(train_result: TrainResult) -> None:
     """Save and show PCA variance plots for a trained model.\n
     :param train_result: Result object from training."""
-    timestamp = get_time()
+    import seaborn as sns
 
-    X_train = train_result.X_train
+    X_train: NDArray = train_result.X_train
     X_train_pca = train_result.X_train_pca
     labels = train_result.labels
     y_plot = labels[: X_train.shape[0]]
@@ -102,7 +104,7 @@ def to_graph(train_result: TrainResult) -> None:
     plt.ylabel("Explained Variance Ratio")
     plt.title("First 20 Components")
     plt.tight_layout()
-    plt.savefig(os.path.join("results", f"variance_{timestamp}.png"))
+    plt.savefig(model_path("score_explained_variance.png"))
     plt.show()
 
     cm = confusion_matrix(train_result.y_test, y_pred)
@@ -123,7 +125,7 @@ def to_graph(train_result: TrainResult) -> None:
     ax.set_ylabel("Actual")
     ax.set_title("Confusion Matrix")
     fig.colorbar(cax)
-    plt.savefig(os.path.join("results", f"confusion_matrix_{timestamp}.png"))
+    plt.savefig(model_path("score_confusion_matrix.png"))
     plt.show()
 
     plt.figure(figsize=(10, 5))
@@ -141,5 +143,24 @@ def to_graph(train_result: TrainResult) -> None:
     plt.title("PCA Transformed Data")
     plt.colorbar(label="Prediction")
     plt.tight_layout()
-    plt.savefig(os.path.join("results", f"pca_transform_{timestamp}.png"))
+    plt.savefig(model_path("pca_transform_map.png"))
     plt.show()
+
+    corr = np.corrcoef(X_train, rowvar=False)
+    upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
+    figure, ax = plt.subplots(figsize=(12, 10))
+    cmap = sns.diverging_palette(20, 230, as_cmap=True)
+    sns.heatmap(
+        corr,
+        mask=upper_triangle_mask,
+        cmap=cmap,
+        vmin=-1,
+        vmax=1,
+        center=0,
+        square=True,
+        linewidths=0.5,
+        cbar_kws={"shrink": 0.5},
+    )
+    figure.savefig(model_path("correlation_heatmap.png"))
+
+    # plt.tight_layout()

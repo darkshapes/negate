@@ -3,54 +3,60 @@
 
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 import xgboost as xgb
 from datasets import Dataset
 from numpy.random import default_rng
+from numpy.typing import NDArray
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
+from xgboost import Booster
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
+folder = Path("models", get_time())
+folder.mkdir()
+model_path = lambda file_name: str(folder / file_name)
 
 
 @dataclass
 class TrainingParameters:
     """Container holding main model parameters"""
 
-    objective: str = "binary:logistic"
-    eval_metric: list = field(default_factory=lambda: ["logloss", "aucpr"])
-    max_depth: int = 4
-    learning_rate: float = 0.1
-    subsample: float = 0.8
     colsample_bytree: float = 0.8
+    eval_metric: list = field(default_factory=lambda: ["logloss", "aucpr"])
+    learning_rate: float = 0.1
+    max_depth: int = 4
+    objective: str = "binary:logistic"
     scale_pos_weight: float | None = None
     seed: int | None = None
+    subsample: float = 0.8
 
 
 @dataclass
 class TrainResult:
     """Container holding all artifacts produced by :func:`grade`."""
 
-    X_train: Any
-    pca: Any
-    d_matrix_test: Any
-    model: Any
-    scale_pos_weight: float
-    X_train_pca: Any
-    y_test: Any
+    d_matrix_test: NDArray
+    feature_matrix: NDArray
     labels: Any
-    feature_matrix: Any
-    seed: int
+    model: Booster
     num_features: int
+    pca: PCA
+    scale_pos_weight: float
+    seed: int
+    X_train_pca: NDArray
+    X_train: NDArray
+    y_test: NDArray
 
 
 def grade(features_dataset: Dataset) -> TrainResult:
     """Train an XGBoost model from a feature dataset.\n
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
-    feature_matrix = np.array([sample["features"] for sample in features_dataset])  # type: ignore no overloads
+    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(dtype=np.float32)  # type: ignore no overloads
     labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)
@@ -79,13 +85,13 @@ def grade(features_dataset: Dataset) -> TrainResult:
     )
 
     return TrainResult(
-        X_train=X_train,
+        X_train=X_train,  # type: ignore
         pca=pca,
-        d_matrix_test=d_matrix_test,
+        d_matrix_test=d_matrix_test,  # type: ignore
         model=model,
         scale_pos_weight=scale_pos_weight,
         X_train_pca=X_train_pca,
-        y_test=y_test,
+        y_test=y_test,  # type: ignore
         labels=labels,
         feature_matrix=feature_matrix,
         seed=seed,
