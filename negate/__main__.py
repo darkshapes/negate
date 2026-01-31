@@ -33,7 +33,7 @@ def predict(image_path: Path) -> np.ndarray:
     return session.run(None, inputs)[0]
 
 
-def training_run(file_or_folder_path: Path | None = None, vae_type: VAEModel = VAEModel.FLUX2_FP32) -> None:
+def training_run(vae_type: VAEModel, file_or_folder_path: Path | None = None) -> None:
     """Train model using dataset at path.\n
     :param path: Dataset root."""
     from datasets import Dataset
@@ -79,7 +79,7 @@ def main() -> None:
             else:
                 dataset_location: Path | None = None
             vae_type = VAEModel(args.model)
-            training_run(dataset_location, vae_type)
+            training_run(file_or_folder_path=dataset_location, vae_type=vae_type)
         case "check":
             if args.path is None:
                 raise ValueError("Check requires an image path.")

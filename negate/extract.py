@@ -11,6 +11,7 @@ class VAEModel(str, Enum):
 
     FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
     FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-9B"
+    GLM_BF16 = "zai-org/GLM-Image"
     FLUX1_FP32 = "Tongyi-MAI/Z-Image"
     FLUX1_FP16 = "Freepik/F-Lite-Texture"
 
@@ -24,8 +25,9 @@ class VAEInfo:
 MODEL_MAP = {
     VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.GLM_BF16: VAEInfo(VAEModel.GLM_BF16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
-    VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
 }
 
 
@@ -72,7 +74,7 @@ class FeatureExtractor:
         from diffusers.models import autoencoders
         from huggingface_hub import snapshot_download
 
-        vae_path: str = snapshot_download(self.model.enum, allow_patterns=["vae/*"])  # type: ignore
+        vae_path: str = snapshot_download(self.model.enum.value, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
         autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
         vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
@@ -97,7 +99,6 @@ class FeatureExtractor:
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
         import torch
-        import numpy as np
 
         assert self.vae is not None
         features_list = []
