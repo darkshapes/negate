@@ -61,6 +61,7 @@ class FeatureExtractor:
         :param model: Repository ID of the VAE.
         :param device: Target device.
         :param dtype: Data type for tensors."""
+
         from diffusers.models.autoencoders.vae import AutoencoderMixin
         from negate import Residual  # `B̴̨̒e̷w̷͇̃ȁ̵͈r̸͔͛ę̵͂ ̷̫̚t̵̻̐h̶̜͒ȩ̸̋ ̵̪̄ő̷̦ù̵̥r̷͇̂o̷̫͑b̷̲͒ò̷̫r̴̢͒ô̵͍s̵̩̈́` #type: ignore
 
@@ -74,6 +75,7 @@ class FeatureExtractor:
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
+
         import os
 
         from diffusers.models import autoencoders
@@ -94,6 +96,7 @@ class FeatureExtractor:
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
+
         import gc
 
         import torch
@@ -109,6 +112,7 @@ class FeatureExtractor:
         """Extract VAE features from a batch of images.
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
+
         import torch
 
         assert self.vae is not None
@@ -157,6 +161,7 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
     """Generate a feature dataset from images.\n
     :param dataset: Dataset containing images.
     :return: Dataset with feature vectors."""
+
     import torch
 
     device = DeviceName.CUDA if torch.cuda.is_available() else DeviceName.MPS if torch.mps.is_available() else DeviceName.CPU
