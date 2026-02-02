@@ -135,12 +135,12 @@ def type_to_data_type(tensor_type):
 def model_data_type_to_onnx(model_dtype):
     mapper = {
         DataType.TYPE_INVALID: onnxconverter_common,
-        DataType.TYPE_BOOL: onnxconverter_common.BooleanTensorType,
-        DataType.TYPE_INT32: onnxconverter_common.Int32TensorType,
-        DataType.TYPE_INT64: onnxconverter_common.Int64TensorType,
+        DataType.TYPE_BOOL: onnxmltools.convert.common.data_types.BooleanTensorType,
+        DataType.TYPE_INT32: onnxmltools.convert.common.data_types.Int32TensorType,
+        DataType.TYPE_INT64: onnxmltools.convert.common.data_types.Int64TensorType,
         DataType.TYPE_FP32: onnxmltools.convert.common.data_types.FloatTensorType,
-        DataType.TYPE_FP64: onnxconverter_common.DoubleTensorType,
-        DataType.TYPE_STRING: onnxconverter_common.StringType,
+        DataType.TYPE_FP64: onnxmltools.convert.common.data_types.DoubleTensorType,
+        DataType.TYPE_STRING: onnxmltools.convert.common.data_types.StringType,
     }
     if isinstance(model_dtype, int):
         model_dtype = DataType(model_dtype)

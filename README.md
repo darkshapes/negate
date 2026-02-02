@@ -1,15 +1,22 @@
+---
+language:
+  - en
+library_name: nnll
+license_name: MPL-2.0 + Commons Clause 1.0
+---
+
+<div align="center">
+
+![Two stylized futuristic lines styled to appear to show an invisible wall and a gate at the same time](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
+
+# negate <br><sub> entrypoint synthetic image classifier</sub>
+
+A CLI tool and Python library for image processing and analysis of feature extraction to determine origin, whether synthetic/reconstructed or genuine.
+
+[![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg?branch=main)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)<br>
+[<img src="https://img.shields.io/discord/1266757128249675867?color=5865F2">](https://discord.gg/VVn9Ku74Dk)<br>
+[<img src="https://img.shields.io/badge/me-__?logo=kofi&logoColor=white&logoSize=auto&label=feed&labelColor=maroon&color=grey&link=https%3A%2F%2Fko-fi.com%2Fdarkshapes">](https://ko-fi.com/darkshapes)<br>
 <br>
-<br>
-
-# negate <br>
-
-entrypoint synthetic image classifier
-
-[![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg?branch=main)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)
-
-## About
-
-A command-line tool and Python library for processing and analyzing images, providing methods for feature extraction, laplacian and spectral residual processing, and other comparative analysis methods to discriminate between synthetic images and real ones.
 
 ## Overview
 
@@ -31,13 +38,13 @@ Future work includes the development of an automated testing framework and evalu
 
 > [!NOTE]
 >
-> Our training results and visualizations were created with data provided consensually by generous artists at https://purelyhuman.xyz. We don't have permission to share that dataset here.
+> Our training results and visualizations were created with data provided consensually by generous artists at https://purelyhuman.xyz. We don't have and won't seek permission to share that dataset here.
 
 ## Install
 
-> [!IMPORTANT]
->
-> Requires [uv](https://github.com/astral-sh/uv)
+[![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv)
+[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
+[![pytest](https://img.shields.io/badge/logo-pytest-blue?logo=pytest&labelColor=5c5c5c&label=%20)](https://github.com/pytest-dev/pytest)<br>
 
 ```bash
 git clone https://github.com/darkshapes/negate.git
@@ -89,7 +96,8 @@ options:
 ```
 
 Check the origin of an image:
-``
+
+```sh
 usage: negate check [-h] path
 
 positional arguments:
@@ -100,4 +108,11 @@ options:
 
 ```
 
+```bib
+@article{darkshapes2026,
+    author={darkshapes},
+    title={negate},
+    year={2026},
+    howpublished={\url{https://github.com/darkshapes/negate}},
+}
 ```

@@ -1,10 +1,11 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from PIL.Image import Image, fromarray
-from numpy.typing import NDArray
-from skimage.filters import laplace
+from typing import Literal
+
 import numpy as np
+from numpy.typing import NDArray
+from PIL.Image import Image
 
 
 class Residual:
@@ -19,6 +20,9 @@ class Residual:
         :param image: PIL image to process.
         :return: Residual image in RGB mode."""
 
+        from PIL.Image import fromarray
+        from skimage.filters import laplace
+
         greyscale = image.convert("L")
         numeric_image = np.array(greyscale, dtype=self.dtype)
         residual = laplace(numeric_image, ksize=3).astype(self.dtype)
@@ -29,7 +33,9 @@ class Residual:
         """Create a 3-channel residual using Sobel edge detection.\n
         :param image: PIL image to process.
         :return: Residual image in RGB mode."""
+
         import cv2
+        from PIL.Image import fromarray
 
         gray = image.convert("L")
         numeric_image = np.array(gray, dtype=self.dtype)
@@ -43,6 +49,9 @@ class Residual:
         """Create a 3-channel high-frequency residual using FFT magnitude spectrum.\n
         :param image: PIL image to process.
         :return: Residual image in RGB mode."""
+
+        from PIL.Image import fromarray
+
         gray = image.convert("L")
         numeric_image = np.array(gray, dtype=self.dtype)
 
@@ -58,6 +67,9 @@ class Residual:
         """Create a 3-channel spectral residual using magnitude of frequency domain.\n
         :param image: PIL image to process.
         :return: Residual image in RGB mode."""
+
+        from PIL.Image import fromarray
+
         gray = image.convert("L")
         numeric_image = np.array(gray, dtype=self.dtype)
 
@@ -69,7 +81,7 @@ class Residual:
         residual_image: Image = fromarray(np.uint8(magnitude_spectrum), mode="L").convert("RGB")
         return residual_image
 
-    def masked_spectral(self, image: NDArray, mask_radius: int = 50, mask_type: str = "high") -> Image:
+    def masked_spectral(self, numeric_image: NDArray, mask_radius: int = 50) -> tuple[bool, NDArray]:
         """Apply Masked Spectral Learning logic to an image.\n
         :param image: PIL image to process.
         :param mask_radius: Radius r for the circular mask.
@@ -87,17 +99,29 @@ class Residual:
         center = (rows // 2, cols // 2)
 
         y, x = np.ogrid[:rows, :cols]
-        euclid_dist_from_center = np.sqrt((x - center[1]) ** 2 + (y - center[0]) ** 2)
+        euclid_dist_from_center: int = np.sqrt((x - center[1]) ** 2 + (y - center[0]) ** 2)
 
         mask = euclid_dist_from_center < mask_radius
 
+        return mask, fourier_shift
+
+    def image_from_fourier(self, masked_spectrum: NDArray, fourier_shift: NDArray, mask_type: Literal["high", "low"] = "high") -> Image:
+        """Return image from Fourier domain.\n
+        :return: PIL Image.\n
+        :param masked_spectrum: masked spectrum array.
+        :param fourier_shf: original shift array.
+        :param mask_type: "high" or "low" band fouriers.
+        :raises ValueError: mask_type must be 'high' or 'low'."""
+
         match mask_type:
             case "high":
-                masked_spectrum = fourier_shift * mask
+                masked_spectrum = fourier_shift * masked_spectrum
             case "low":
-                masked_spectrum = fourier_shift * (1 - mask)
+                masked_spectrum = fourier_shift * (1 - masked_spectrum)
             case _:
                 raise ValueError("mask_type must be 'high' or 'low'")
+
+        from PIL.Image import fromarray
 
         fourier_inverse_shift = np.fft.ifftshift(masked_spectrum)
         reconstructed = np.fft.ifft2(fourier_inverse_shift)
@@ -108,12 +132,46 @@ class Residual:
 
         return fromarray(reconstructed_uint8, mode="L").convert("RGB")
 
+    def mask_patches(self, numeric_image: NDArray, size: int):
+        """Crop patches and compute freq divergence.\n
+        :return: List of (divergence, patch Image).\n
+        :param numeric_image: Image converted into an array.\n
+        :param size: Patch dimensions in pixels."""
+
+        from PIL.Image import fromarray
+
+        metrics: list[tuple[float, Image]] = []
+
+        h, w = numeric_image.shape
+        nx = (w + size - 1) // size
+        ny = (h + size - 1) // size
+        for iy in range(ny):
+            for ix in range(nx):
+                x0 = ix * size
+                y0 = iy * size
+                patch_arr = numeric_image[y0 : y0 + size, x0 : x0 + size]
+                if patch_arr.shape != (size, size):
+                    pad = np.zeros((size, size), dtype=self.dtype)
+                    pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
+                    patch_arr = pad
+
+                high_mask, fourier_shift = self.masked_spectral(patch_arr)
+                low_mask = not high_mask
+                high_mask = high_mask
+
+                low_magnitude = np.abs(fourier_shift[low_mask])
+                high_magnitude = np.abs(fourier_shift[high_mask])
+
+                div = abs(np.mean(high_magnitude) - np.mean(low_magnitude))
+
+                patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
+                metrics.append((div, patch_img))
+        return metrics
+
     def crop_select(
         self,
         image: Image,
-        size: int = 512,
         top_k: int = 5,
-        mask_radius: int = 50,
     ) -> list[Image]:
         """Crop image into patches, compute freq-divergence, return most extreme patches.\n
         :param image: PIL image to process.\n
@@ -121,48 +179,11 @@ class Residual:
         :param top_k: Number of extreme patches to return.\n
         :param mask_radius: Radius used in masked_spectral logic.\n
         :return: List of selected patch images."""
+
         gray = image.convert("L")
-        arr = np.array(gray, dtype=self.dtype)
+        numeric_image = np.array(gray, dtype=self.dtype)
 
-        h, w = arr.shape
-        nx = (w + size - 1) // size
-        ny = (h + size - 1) // size
-
-        metrics: list[tuple[float, Image]] = []
-
-        for iy in range(ny):
-            for ix in range(nx):
-                x0 = ix * size
-                y0 = iy * size
-                patch_arr = arr[y0 : y0 + size, x0 : x0 + size]
-                if patch_arr.shape != (size, size):
-                    pad = np.zeros((size, size), dtype=self.dtype)
-                    pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
-                    patch_arr = pad
-
-                # FFT
-                f = np.fft.fft2(patch_arr)
-                f_shift = np.fft.fftshift(f)
-
-                # Mask logic from masked_spectral
-                rows, cols = size, size
-                y, x = np.ogrid[:rows, :cols]
-                c = (rows // 2, cols // 2)
-                dist = np.sqrt((x - c[1]) ** 2 + (y - c[0]) ** 2)
-                mask = dist < mask_radius
-
-                low_mask = ~mask
-                high_mask = mask
-
-                # Magnitudes
-                low_mag = np.abs(f_shift[low_mask])
-                high_mag = np.abs(f_shift[high_mask])
-
-                # Divergence metric
-                div = abs(np.mean(high_mag) - np.mean(low_mag))
-
-                patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
-                metrics.append((div, patch_img))
+        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image, size=512)
 
         metrics.sort(key=lambda x: x[0], reverse=True)
 

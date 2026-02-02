@@ -2,19 +2,33 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 [build-system]
-requires      = ["setuptools", "setuptools_scm"]
+requires = ["setuptools", "setuptools_scm"]
 build-backend = "setuptools.build_meta"
 
 [project]
 authors = [
     { name = "darkshapes", email = "91800957+exdysa@users.noreply.github.com" },
 ]
-
 name = "negate"
-dynamic = ["version"]
-description = "AIGC image detector"
+description = "Synthetic image detector"
 readme = "README.md"
+dynamic = ["version"]
+license = { file = "LICENSE" }
 requires-python = ">=3.13"
+keywords = ["AI", "ML", "GenAI", "training", "torch"]
+classifiers = [
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Other Audience",
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Topic :: Multimedia",
+    "Topic :: Multimedia :: Graphics",
+]
+
 dependencies = [
     "accelerate>=1.12.0",
     "datasets>=4.5.0",
@@ -50,36 +64,21 @@ dev = [
 # -- frameworks --
 
 # -- accelerators --
-cuda = [
-    "torch",
-    "torchvision",
-]
-rocm = [
-    "torch",
-    "torchvision",
-]
-
-cpu = [
-    "torch",
-    "torchvision",
-]
-
-mps = [
-    "torch",
-    "torchvision",
-]
+cuda = ["torch", "torchvision"]
+rocm = ["torch", "torchvision"]
+cpu = ["torch", "torchvision"]
+mps = ["torch", "torchvision"]
 
 [project.urls]
-Homepage      = "https://github.com/darkshapes/negate"
+Homepage = "https://github.com/darkshapes/negate"
 
 [project.scripts]
-negate     = "negate.__main__:main"
+negate = "negate.__main__:main"
 
 [tool.uv]
 torch-backend = "auto"
-prerelease       = "allow"
-preview          = true
-
+prerelease = "allow"
+preview = true
 
 
 conflicts = [
@@ -92,24 +91,24 @@ conflicts = [
 ]
 
 [[tool.uv.index]]
-name     = "pytorch-cpu"
-url      = "https://download.pytorch.org/whl/cpu"
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
 explicit = true
 
 [[tool.uv.index]]
-name     = "pytorch-rocm"
-url      = "https://download.pytorch.org/whl/rocm"
+name = "pytorch-rocm"
+url = "https://download.pytorch.org/whl/rocm"
 explicit = true
 
 [[tool.uv.index]]
-name     = "pytorch-cu128"
-url      = "https://download.pytorch.org/whl/cu128"
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
 
 torchvision = [
-    { index = "pytorch-cpu", extra="mps", marker = "sys_platform == 'darwin'" },
+    { index = "pytorch-cpu", extra = "mps", marker = "sys_platform == 'darwin'" },
 ]
 
 torch = [
@@ -120,36 +119,35 @@ torch = [
 write_to = "_version.py"
 
 [tool.setuptools.packages.find]
-where   = ["."]
+where = ["."]
 include = ["negate*"]
 exclude = ["tests*"]
 
 [tool.ruff]
-line-length    = 140
-include        = ["*.py"]
+line-length = 140
+include = ["*.py"]
 extend-exclude = ["^tests/.*$", "test.*$"]
 
 [tool.ruff.lint]
 ignore = ["E731"]
 
 [tool.ruff.lint.pycodestyle]
-max-line-length               = 140
+max-line-length = 140
 ignore-overlong-task-comments = true
 
 [tool.pylint]
 max-line-length = 140
-ignore-paths    = ["^tests/.*$", "test_.*$"]
-disable         = ["C0415"]
+ignore-paths = ["^tests/.*$", "test_.*$"]
+disable = ["C0415"]
 
 [tool.pyright]
 include = ["nnll"]
 exclude = [
     "^tests/.*$",
-  "**/__pycache__", # cache directories
-  "./typings",      # generated type stubs
+    "**/__pycache__", # cache directories
+    "./typings",      # generated type stubs
 ]
 
 [tool.typos]
 files.extend-exclude = ["^tests/.*$", "test.*$"]
 default.extend-words = { "ot" = "ot", "convers" = "convers" }
-

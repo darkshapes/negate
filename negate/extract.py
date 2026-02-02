@@ -9,11 +9,14 @@ from datasets import Dataset
 class VAEModel(str, Enum):
     """Choose the name and size of the VAE model to use for extraction."""
 
-    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
-    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-9B"
+    SANA_FP32 = "exdysa/dc-ae-f32c32-sana-1.1-diffusers"
+    SANA_FP16 = "exdysa/dc-ae-f32c32-sana-1.1-diffusers"
     GLM_BF16 = "zai-org/GLM-Image"
+    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
+    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-4B"
     FLUX1_FP32 = "Tongyi-MAI/Z-Image"
     FLUX1_FP16 = "Freepik/F-Lite-Texture"
+    MITSUA_FP16 = "exdysa/mitsua-vae-SAFETENSORS"
 
 
 @dataclass
@@ -23,11 +26,13 @@ class VAEInfo:
 
 
 MODEL_MAP = {
+    VAEModel.MITSUA_FP16: VAEInfo(VAEModel.MITSUA_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
+    VAEModel.GLM_BF16: VAEInfo(VAEModel.GLM_BF16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
-    VAEModel.GLM_BF16: VAEInfo(VAEModel.GLM_BF16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
     VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.SANA_FP32: VAEInfo(VAEModel.SANA_FP32, "autoencoders.autoencoder_dc.AutoencoderDC"),
 }
 
 
@@ -72,12 +77,18 @@ class FeatureExtractor:
         import os
 
         from diffusers.models import autoencoders
+        from huggingface_hub.errors import LocalEntryNotFoundError
         from huggingface_hub import snapshot_download
 
-        vae_path: str = snapshot_download(self.model.enum.value, allow_patterns=["vae/*"])  # type: ignore
-        vae_path = os.path.join(vae_path, "vae")
         autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
-        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype).to(self.device.value)
+        try:
+            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.dtype, local_files_only=True).to(self.device.value)
+        except (LocalEntryNotFoundError, OSError):
+            print("Downloading model...")
+            vae_path: str = snapshot_download(self.model.enum.value, allow_patterns=["vae/*"])  # type: ignore
+            vae_path = os.path.join(vae_path, "vae")
+            vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype, local_files_only=True).to(self.device.value)
+
         vae_model.eval()
         self.vae = vae_model
 
@@ -114,10 +125,20 @@ class FeatureExtractor:
                 patch_stack.append(patch_tensor)
 
             batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
-
             with torch.no_grad():
-                latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()
-                mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
+                if self.model.enum != VAEModel.SANA_FP32:  # type: ignore can't access encode
+                    latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore can't access encode
+                    mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
+                else:
+                    from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
+
+                    latent = self.vae.encode(batch_tensor)  # # type: ignore can't access encode
+                    mean_latent = torch.mean(latent.latent, dim=0).cpu().float()  # distribution with mean
+                    logvar_latent = torch.zeros_like(mean_latent).cpu().float()  # & logvar
+                    params = torch.cat([mean_latent, logvar_latent], dim=1)
+                    distribution = DiagonalGaussianDistribution(params)
+                    sample = distribution.sample()
+                    mean_latent = sample.mean(dim=0).cpu().float().numpy()
                 feature_vec = mean_latent.flatten()
 
             features_list.append(feature_vec)
