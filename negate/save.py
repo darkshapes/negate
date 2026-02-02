@@ -48,6 +48,7 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     """Export the trained XGBoost model to ONNX.\n
     :param train_result: Training output containing the XGBoost model.
     :param file_name: Base name for the ONNX file."""
+
     import shutil
     from pathlib import Path
 

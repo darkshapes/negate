@@ -10,9 +10,10 @@ from PIL.Image import Image
 
 class Residual:
     def __init__(self, dtype: np.typing.DTypeLike = np.float32):
-        """Initialize Residual.\n
+        """Initialize residual class for residual image processing.\n
         :param dtype: dtype for internal numpy conversion.
         return: None."""
+
         self.dtype = dtype
 
     def __call__(self, image: Image) -> Image:
@@ -81,18 +82,14 @@ class Residual:
         residual_image: Image = fromarray(np.uint8(magnitude_spectrum), mode="L").convert("RGB")
         return residual_image
 
-    def masked_spectral(self, numeric_image: NDArray, mask_radius: int = 50) -> tuple[bool, NDArray]:
+    def masked_spectral(self, numeric_image: NDArray, mask_radius: int = 50) -> tuple[NDArray, NDArray]:
         """Apply Masked Spectral Learning logic to an image.\n
         :param image: PIL image to process.
         :param mask_radius: Radius r for the circular mask.
         :param mask_type: 'high' to zero out center (low-freq), 'low' to zero out edges (high-freq).
         :return: Masked spectral image in RGB mode."""
 
-        # gray = image.convert("L")
-        # numeric_image = np.array(gray, dtype=np.float32)
-
-        # 1. Compute Discrete Fourier Transform: chi = F(x)
-        fourier_transform = np.fft.fft2(numeric_image)
+        fourier_transform = np.fft.fft2(numeric_image)  # Compute Discrete Fourier Transform: chi = F(x)
         fourier_shift = np.fft.fftshift(fourier_transform)
 
         rows, cols = fourier_shift.shape
@@ -103,11 +100,11 @@ class Residual:
 
         mask = euclid_dist_from_center < mask_radius
 
-        return mask, fourier_shift
+        return mask, fourier_shift  # type: ignore
 
     def image_from_fourier(self, masked_spectrum: NDArray, fourier_shift: NDArray, mask_type: Literal["high", "low"] = "high") -> Image:
         """Return image from Fourier domain.\n
-        :return: PIL Image.\n
+        :return: PIL Image.
         :param masked_spectrum: masked spectrum array.
         :param fourier_shf: original shift array.
         :param mask_type: "high" or "low" band fouriers.
@@ -127,15 +124,14 @@ class Residual:
         reconstructed = np.fft.ifft2(fourier_inverse_shift)
 
         reconstructed_real = np.real(reconstructed)
-
         reconstructed_uint8 = ((reconstructed_real - reconstructed_real.min()) / (reconstructed_real.max() - reconstructed_real.min()) * 255).astype(np.uint8)
 
         return fromarray(reconstructed_uint8, mode="L").convert("RGB")
 
     def mask_patches(self, numeric_image: NDArray, size: int):
         """Crop patches and compute freq divergence.\n
-        :return: List of (divergence, patch Image).\n
-        :param numeric_image: Image converted into an array.\n
+        :return: List of (divergence, patch Image).
+        :param numeric_image: Image converted into an array.
         :param size: Patch dimensions in pixels."""
 
         from PIL.Image import fromarray
@@ -156,7 +152,7 @@ class Residual:
                     patch_arr = pad
 
                 high_mask, fourier_shift = self.masked_spectral(patch_arr)
-                low_mask = not high_mask
+                low_mask = ~high_mask
                 high_mask = high_mask
 
                 low_magnitude = np.abs(fourier_shift[low_mask])
@@ -171,19 +167,20 @@ class Residual:
     def crop_select(
         self,
         image: Image,
+        size=512,
         top_k: int = 5,
     ) -> list[Image]:
         """Crop image into patches, compute freq-divergence, return most extreme patches.\n
-        :param image: PIL image to process.\n
-        :param size: Patch dimension.\n
-        :param top_k: Number of extreme patches to return.\n
-        :param mask_radius: Radius used in masked_spectral logic.\n
+        :param image: PIL image to process.
+        :param size: Patch dimension.
+        :param top_k: Number of extreme patches to return.
+        :param mask_radius: Radius used in masked_spectral logic.
         :return: List of selected patch images."""
 
         gray = image.convert("L")
         numeric_image = np.array(gray, dtype=self.dtype)
 
-        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image, size=512)
+        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image, size=size)
 
         metrics.sort(key=lambda x: x[0], reverse=True)
 
