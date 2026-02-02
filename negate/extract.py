@@ -31,7 +31,8 @@ MODEL_MAP = {
     VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
-    VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX2_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.SANA_FP16: VAEInfo(VAEModel.SANA_FP16, "autoencoders.autoencoder_dc.AutoencoderDC"),
     VAEModel.SANA_FP32: VAEInfo(VAEModel.SANA_FP32, "autoencoders.autoencoder_dc.AutoencoderDC"),
 }
 
@@ -130,7 +131,7 @@ class FeatureExtractor:
 
             batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
             with torch.no_grad():
-                if self.model.enum != VAEModel.SANA_FP32:  # type: ignore can't access encode
+                if self.model.enum != VAEModel.SANA_FP32 and self.model.enum != VAEModel.SANA_FP16:  # type: ignore can't access encode
                     latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore can't access encode
                     mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
                 else:

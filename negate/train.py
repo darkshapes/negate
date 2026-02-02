@@ -12,9 +12,9 @@ from sklearn.decomposition import PCA
 from xgboost import Booster
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
-folder = Path("models", get_time())
-folder.mkdir(parents=True, exist_ok=True)
-model_path = lambda file_name: str(folder / file_name)
+datestamped_folder = Path("models", get_time())
+generate_datestamp_path = lambda file_name: str(datestamped_folder / file_name)
+model_path = Path(__file__).parent.parent / "models"
 
 
 @dataclass

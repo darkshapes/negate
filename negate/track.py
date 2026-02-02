@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from negate import TrainResult, VAEModel, get_time, model_path
+from negate import TrainResult, VAEModel, get_time, generate_datestamp_path, model_path
 
 
 def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     """Print diagnostics and plots for a trained model.\n
     :param train_result: Result object from training."""
+    from pathlib import Path
+    import shutil
     import json
     from pprint import pprint
 
@@ -61,11 +63,11 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     }
 
     pprint(results)
-    results_file = model_path("results.json")
+    results_file = generate_datestamp_path("results.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
-
+    shutil.copy(results_file, model_path / Path(results_file).name)  # type: ignore no overloads
     separator = lambda: print("=" * 60)
     separator()
     print("CLASSIFICATION RESULTS")
@@ -104,7 +106,7 @@ def on_graph(train_result: TrainResult) -> None:
     plt.ylabel("Explained Variance Ratio")
     plt.title("First 20 Components")
     plt.tight_layout()
-    plt.savefig(model_path("score_explained_variance.png"))
+    plt.savefig(generate_datestamp_path("score_explained_variance.png"))
     plt.show()
 
     cm = confusion_matrix(train_result.y_test, y_pred)
@@ -125,7 +127,7 @@ def on_graph(train_result: TrainResult) -> None:
     ax.set_ylabel("Actual")
     ax.set_title("Confusion Matrix")
     fig.colorbar(cax)
-    plt.savefig(model_path("score_confusion_matrix.png"))
+    plt.savefig(generate_datestamp_path("score_confusion_matrix.png"))
     plt.show()
 
     plt.figure(figsize=(10, 5))
@@ -143,7 +145,7 @@ def on_graph(train_result: TrainResult) -> None:
     plt.title("PCA Transformed Data")
     plt.colorbar(label="Prediction")
     plt.tight_layout()
-    plt.savefig(model_path("pca_transform_map.png"))
+    plt.savefig(generate_datestamp_path("pca_transform_map.png"))
     plt.show()
 
     import seaborn as sns
@@ -171,5 +173,5 @@ def on_graph(train_result: TrainResult) -> None:
     )
     ax.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
     plt.tight_layout()
-    figure.savefig(model_path("correlation_heatmap.png"))
+    figure.savefig(generate_datestamp_path("correlation_heatmap.png"))
     plt.show()

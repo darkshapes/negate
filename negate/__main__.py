@@ -4,7 +4,7 @@
 from pathlib import Path
 import numpy as np
 
-from negate import TrainResult, build_datasets, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel
+from negate import TrainResult, build_datasets, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel, datestamped_folder, model_path
 
 
 def evaluate(prediction: np.ndarray, ground_truth: np.ndarray) -> None:
@@ -25,7 +25,7 @@ def evaluate(prediction: np.ndarray, ground_truth: np.ndarray) -> None:
     print(f"Genuine: {genu_cnt}  Synthetic: {synth_cnt}")
 
 
-def predict(image_path: Path, vae_type: VAEModel = VAEModel.MITSUA_FP16, true_label: int | None = None) -> np.ndarray:
+def predict(image_path: Path, vae_type: VAEModel, true_label: int | None = None) -> np.ndarray:
     """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
     :param image_path: Path to image file or folder.
     :param vae_type: VAE model to use for feature extraction.
@@ -34,24 +34,41 @@ def predict(image_path: Path, vae_type: VAEModel = VAEModel.MITSUA_FP16, true_la
     from datasets import Dataset
     import onnxruntime as ort
     from onnxruntime import SparseTensor
+    from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument, Fail as ONNXRuntimeError
 
-    print(f"{'Evaluation' if true_label is not None else 'Detection'} selected.")
-
-    models_location = Path(__file__).parent.parent / "models"
-    model_file = models_location / "negate.onnx"
-
-    if not model_file.exists():
-        raise FileNotFoundError(f"Model file not found: {model_file}. Please run 'train' first to create the model.")
+    model_file_path_named = model_path / "negate.onnx"
+    if not model_file_path_named.exists():
+        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
+    else:
+        model_file_path_named = str(model_file_path_named)
+    print(f"""{"Evaluation" if true_label is not None else "Detection"} selected.
+Checking path '{image_path}' with {vae_type.value}""")
 
     dataset: Dataset = generate_dataset(image_path)
     features_dataset: Dataset = features(dataset, vae_type)
-
     features_array = np.array(features_dataset["features"]).astype(np.float32)  # type: ignore[arg-type]
 
-    session = ort.InferenceSession(str(model_file))
+    session = ort.InferenceSession(model_file_path_named)
+    print(f"Model '{model_file_path_named}' loaded.")
     input_name = session.get_inputs()[0].name
-    result: SparseTensor = session.run(None, {input_name: features_array})[0]  # type: ignore
-    print(result)
+    try:
+        result: SparseTensor = session.run(None, {input_name: features_array.astype(np.float32)})[0]  # type: ignore
+        print(result)
+    except (InvalidArgument, ONNXRuntimeError) as error_log:
+        match error_log:
+            case _ if "Expected: 16384" in str(error_log):
+                print(
+                    """Training feature extractor does not match current feature extractor "
+                {vae_type.value}" : {err_log}""",
+                )
+                predict(image_path, VAEModel.MITSUA_FP16, true_label)
+            case _ if "Expected: 65536" in str(error_log):
+                print(f"Training feature extractor does not match current feature extractor {vae_type.value} : {error_log}")
+                predict(image_path, VAEModel.FLUX2_FP32, true_label)
+            case _ if "Expected: 131072" in str(error_log):
+                print(f"Training feature extractor does not match current feature extractor {vae_type.value} : {error_log}")
+                predict(image_path, VAEModel.GLM_BF16, true_label)
+
     match true_label:
         case None:
             for prediction in result:  # type: ignore
@@ -66,8 +83,10 @@ def predict(image_path: Path, vae_type: VAEModel = VAEModel.MITSUA_FP16, true_la
 
 
 def training_run(vae_type: VAEModel, file_or_folder_path: Path | None = None) -> None:
-    """Train model using dataset at path.\n
-    :param path: Dataset root."""
+    """Train \n
+    # XGB00st\n
+    model using dataset at path.\n
+    :param path: Dataset root folder."""
     from datasets import Dataset
 
     print("Training selected.")
@@ -90,12 +109,12 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
     train_parser = subparsers.add_parser("train", help="Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.")
-    train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
+    train_parser.add_argument("path", help="Genunie/Human-original dataset path", nargs="?", default=None)
     train_parser.add_argument(
         "-m",
         "--model",
         choices=[m.value for m in VAEModel],
-        default=VAEModel.MITSUA_FP16,
+        default=VAEModel.GLM_BF16.value,
         help="Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right",
     )
     check_parser = subparsers.add_parser(
@@ -115,12 +134,23 @@ def main() -> None:
                 dataset_location: Path | None = Path(args.path)
             else:
                 dataset_location: Path | None = None
+            datestamped_folder.mkdir(parents=True, exist_ok=True)
+
             vae_type = VAEModel(args.model)
-            training_run(file_or_folder_path=dataset_location, vae_type=vae_type)
+            training_run(
+                vae_type=vae_type,
+                file_or_folder_path=dataset_location,
+            )
         case "check":
             if args.path is None:
                 raise ValueError("Check requires an image path.")
-            predict(Path(args.path), true_label=args.label)
+            import json
+
+            results_file_path = model_path / "results.json"
+            with open(results_file_path) as result_metadata:
+                train_metadata = json.load(result_metadata)
+            vae_type = VAEModel(train_metadata["vae_type"])
+            predict(Path(args.path), vae_type=vae_type, true_label=args.label)
         case _:
             raise NotImplementedError
 
