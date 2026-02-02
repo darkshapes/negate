@@ -22,14 +22,14 @@ def detect_nans(dataset: Dataset) -> Dataset:
     return dataset
 
 
-def load_remote_dataset(repo: str, folder_path: Path) -> Dataset:
+def load_remote_dataset(repo: str, folder_path: Path, label: int) -> Dataset:
     """Load a remote dataset and attach a default label.\n
     :param repo: Repository ID of the dataset.
     :param folder_path: Local path to cache the dataset.
     :return: Dataset with a ``label`` column added and NaNs removed."""
 
     remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split="train").cast_column("image", Image(decode=True))
-    remote_dataset = remote_dataset.add_column("label", [1] * len(remote_dataset))
+    remote_dataset = remote_dataset.add_column("label", [label] * len(remote_dataset))
     remote_dataset = detect_nans(remote_dataset)
     return remote_dataset
 
@@ -71,13 +71,28 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
     :return: Dataset containing synthetic and original images."""
 
     synthetic_input_folder = Path(".datasets")
+    synthetic_input_folder.mkdir(parents=True, exist_ok=True)
+
     if not (original_input_folder := input_folder):
         original_input_folder = Path(__file__).parent.parent / "assets"
+        original_input_folder.mkdir(parents=True, exist_ok=True)
 
-    slice_dataset = load_remote_dataset("exdysa/nano-banana-pro-generated-1k-clone", synthetic_input_folder)
-    rnd_synthetic_dataset = load_remote_dataset("exdysa/rnd_synthetic_img", synthetic_input_folder)
+    slice_dataset = load_remote_dataset("exdysa/nano-banana-pro-generated-1k-clone", synthetic_input_folder, 1)
+    rnd_synthetic_dataset = load_remote_dataset("exdysa/rnd_synthetic_img", synthetic_input_folder, 1)
 
-    original_dataset = generate_dataset(original_input_folder)
+    # Check if assets folder has images, otherwise use placeholder dataset
+    valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
+    has_images = (
+        original_input_folder.exists()
+        and any(f.is_file() and f.suffix.lower() in valid_extensions for f in original_input_folder.iterdir())
+    )
+
+    if has_images:
+        print(f"Using local images from {original_input_folder}")
+        original_dataset = generate_dataset(original_input_folder)
+    else:
+        print(f"No images found in {original_input_folder}, using placeholder dataset 'darkshapes/a_slice'")
+        original_dataset = load_remote_dataset("darkshapes/a_slice", original_input_folder, 0)
 
     dataset = concatenate_datasets([slice_dataset, rnd_synthetic_dataset, original_dataset])
     return dataset

@@ -4,7 +4,7 @@
 from negate import TrainResult, model_path
 
 
-def save_metadata(train_result: TrainResult, file_name: str = "negate") -> None:
+def save_metadata(train_result: TrainResult, file_name: str = "negate") -> str:
     """Save training metadata.\n
     :param train_result: Training output containing scale_pos_weight and seed.
     :param file_name: Base file name for the metadata file.
@@ -73,14 +73,15 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     onnx.save(onnx_model, negate_onnx_file_name)
 
     initial_pca_types = [("input", FloatTensorType([None, num_features]))]
-    negate_pca_onnx = convert_sklearn(pca, initial_types=initial_pca_types)
-    negate_pca_onnx = ONNXConverter.optim_onnx(negate_pca_onnx)
+    negate_pca_onnx_raw = convert_sklearn(pca, initial_types=initial_pca_types)
+    negate_pca_onnx = ONNXConverter.optim_onnx(negate_pca_onnx_raw)  # type: ignore[arg-type]
     pca_file_name = model_path(f"{file_name}_pca.onnx")
     onnx.save(negate_pca_onnx, pca_file_name)
 
     metadata_file_name = save_metadata(train_result)
 
     models_dir = Path(__file__).parent.parent / "models"
+    models_dir.mkdir(parents=True, exist_ok=True)
 
     for src in (negate_onnx_file_name, pca_file_name, metadata_file_name):
         shutil.copy(src, models_dir / Path(src).name)  # type: ignore no overloads

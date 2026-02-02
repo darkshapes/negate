@@ -96,9 +96,9 @@ class Residual:
         center = (rows // 2, cols // 2)
 
         y, x = np.ogrid[:rows, :cols]
-        euclid_dist_from_center: int = np.sqrt((x - center[1]) ** 2 + (y - center[0]) ** 2)
+        euclid_dist_from_center: NDArray = np.sqrt((x - center[1]) ** 2 + (y - center[0]) ** 2)
 
-        mask = euclid_dist_from_center < mask_radius
+        mask: NDArray = euclid_dist_from_center < mask_radius
 
         return mask, fourier_shift  # type: ignore
 
@@ -153,12 +153,11 @@ class Residual:
 
                 high_mask, fourier_shift = self.masked_spectral(patch_arr)
                 low_mask = ~high_mask
-                high_mask = high_mask
 
                 low_magnitude = np.abs(fourier_shift[low_mask])
                 high_magnitude = np.abs(fourier_shift[high_mask])
 
-                div = abs(np.mean(high_magnitude) - np.mean(low_magnitude))
+                div = float(abs(np.mean(high_magnitude) - np.mean(low_magnitude)))
 
                 patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
                 metrics.append((div, patch_img))
@@ -167,7 +166,7 @@ class Residual:
     def crop_select(
         self,
         image: Image,
-        size=512,
+        size: int,
         top_k: int = 5,
     ) -> list[Image]:
         """Crop image into patches, compute freq-divergence, return most extreme patches.\n
