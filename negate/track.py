@@ -147,6 +147,7 @@ def on_graph(train_result: TrainResult) -> None:
     plt.show()
 
     import seaborn as sns
+
     corr = np.corrcoef(X_train_pca, rowvar=False)
     upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
 
@@ -169,6 +170,6 @@ def on_graph(train_result: TrainResult) -> None:
         cbar_kws={"shrink": 0.5},
     )
     ax.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
+    plt.tight_layout()
     figure.savefig(model_path("correlation_heatmap.png"))
-
-    # plt.tight_layout()
+    plt.show()

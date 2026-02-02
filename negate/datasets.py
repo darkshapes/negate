@@ -82,10 +82,7 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
 
     # Check if assets folder has images, otherwise use placeholder dataset
     valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
-    has_images = (
-        original_input_folder.exists()
-        and any(f.is_file() and f.suffix.lower() in valid_extensions for f in original_input_folder.iterdir())
-    )
+    has_images = original_input_folder.exists() and any(f.is_file() and f.suffix.lower() in valid_extensions for f in original_input_folder.iterdir())
 
     if has_images:
         print(f"Using local images from {original_input_folder}")

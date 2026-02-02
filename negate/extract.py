@@ -162,28 +162,13 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
     :param dataset: Dataset containing images.
     :param vae_type: VAE model type for feature extraction.
     :return: Dataset with feature vectors."""
-    import hashlib
+
     import torch
-    from pathlib import Path
 
     device = DeviceName.CUDA if torch.cuda.is_available() else DeviceName.MPS if torch.mps.is_available() else DeviceName.CPU
     dtype = torch.bfloat16
 
-    # Create cache directory if it doesn't exist
-    cache_dir = Path(".cache/features")
-    cache_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate cache filename based on dataset fingerprint and VAE model
-    # Dataset fingerprint automatically changes when data changes
-    dataset_hash = dataset._fingerprint if hasattr(dataset, "_fingerprint") else hashlib.md5(str(dataset).encode()).hexdigest()[:8]
-    vae_name = vae_type.value.split("/")[-1].replace("-", "_")
-    cache_file = cache_dir / f"features_{vae_name}_{dataset_hash}.arrow"
-
-    # Check if cache exists
-    if cache_file.exists():
-        print(f"Using cached features from {cache_file}")
-    else:
-        print(f"Extracting features (will cache to {cache_file})")
+    # <chud> was here
 
     with FeatureExtractor(vae_type, device, dtype) as extractor:
         features_dataset = dataset.map(
@@ -192,7 +177,6 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
             batch_size=4,
             remove_columns=["image"],
             desc="Extracting features...",
-            cache_file_name=str(cache_file),
         )
     features_dataset.set_format(type="numpy", columns=["features", "label"])
 
