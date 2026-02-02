@@ -7,44 +7,62 @@ import numpy as np
 from negate import TrainResult, build_datasets, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel
 
 
-def predict(image_path: Path, vae_type: VAEModel = VAEModel.MITSUA_FP16) -> np.ndarray:
-    """Predict synthetic or original for given image.\n
-    :param image_path: Path to image file.
+def evaluate(prediction: np.ndarray, ground_truth: np.ndarray) -> None:
+    """Print accuracy and class distribution.\n
+    :param prediction: Model outputs (0 = genuine, 1 = synthetic).\n
+    :param ground_truth: Ground-truth labels.\n
+    :return: None."""
+
+    prediction = prediction.astype(int)
+    ground_truth = ground_truth.astype(int)
+
+    acc = float(np.mean(prediction == ground_truth))
+
+    genu_cnt = int(np.sum(ground_truth == 0))
+    synth_cnt = int(np.sum(ground_truth == 1))
+
+    print(f"Accuracy: {acc:.2%}")
+    print(f"Genuine: {genu_cnt}  Synthetic: {synth_cnt}")
+
+
+def predict(image_path: Path, vae_type: VAEModel = VAEModel.MITSUA_FP16, true_label: int | None = None) -> np.ndarray:
+    """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
+    :param image_path: Path to image file or folder.
     :param vae_type: VAE model to use for feature extraction.
     :return: Prediction array.
     """
     from datasets import Dataset
     import onnxruntime as ort
+    from onnxruntime import SparseTensor
 
-    print("Detection selected.")
+    print(f"{'Evaluation' if true_label is not None else 'Detection'} selected.")
 
-    # Check if model files exist
-    model_path = Path("models") / "negate.onnx"
-    pca_model_path = Path("negate_pca.onnx")
+    models_location = Path(__file__).parent.parent / "models"
+    model_file = models_location / "negate.onnx"
 
-    if not model_path.exists():
-        raise FileNotFoundError(f"Model file not found: {model_path}. Please run 'train' first to create the model.")
-    if not pca_model_path.exists():
-        raise FileNotFoundError(f"PCA model file not found: {pca_model_path}. Please run 'train' first to create the model.")
+    if not model_file.exists():
+        raise FileNotFoundError(f"Model file not found: {model_file}. Please run 'train' first to create the model.")
 
-    # Generate dataset and extract features
     dataset: Dataset = generate_dataset(image_path)
     features_dataset: Dataset = features(dataset, vae_type)
 
-    # Convert to numpy array
     features_array = np.array(features_dataset["features"]).astype(np.float32)  # type: ignore[arg-type]
 
-    # Run PCA transformation
-    session_pca = ort.InferenceSession(str(pca_model_path))
-    input_name_pca = session_pca.get_inputs()[0].name
-    features_pca = session_pca.run(None, {input_name_pca: features_array})[0]
+    session = ort.InferenceSession(str(model_file))
+    input_name = session.get_inputs()[0].name
+    result: SparseTensor = session.run(None, {input_name: features_array})[0]  # type: ignore
+    print(result)
+    match true_label:
+        case None:
+            for prediction in result:  # type: ignore
+                if prediction == 0:
+                    print("Image is GENUINE")
+                else:
+                    print("image is SYNTHETIC")
+        case _:
+            evaluate(result, np.array([true_label]))  # type: ignore
 
-    # Run classifier
-    input_name = session_pca.get_inputs()[0].name
-    inputs = {input_name: features_pca.astype(np.float32)}  # type: ignore[union-attr]
-
-    session = ort.InferenceSession(str(model_path))
-    return session.run(None, inputs)[0]  # type: ignore[return-value]
+    return result  # type: ignore[return-value]
 
 
 def training_run(vae_type: VAEModel, file_or_folder_path: Path | None = None) -> None:
@@ -84,7 +102,10 @@ def main() -> None:
         "check",
         help="Check whether an image at the provided path is synthetic or original.",
     )
-    check_parser.add_argument("path", help="Image path")
+    check_parser.add_argument("path", help="Image or folder path")
+    label_grp = check_parser.add_mutually_exclusive_group()
+    label_grp.add_argument("-s", "--synthetic", action="store_const", const=1, dest="label", help="Mark image as synthetic (label = 1) for evaluation.")
+    label_grp.add_argument("-g", "--genuine", action="store_const", const=0, dest="label", help="Mark image as genuine (label = 0) for evaluation.")
 
     args = parser.parse_args(argv[1:])
 
@@ -99,7 +120,7 @@ def main() -> None:
         case "check":
             if args.path is None:
                 raise ValueError("Check requires an image path.")
-            predict(Path(args.path))
+            predict(Path(args.path), true_label=args.label)
         case _:
             raise NotImplementedError
 

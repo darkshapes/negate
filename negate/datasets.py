@@ -43,15 +43,18 @@ def generate_dataset(input_path: Path) -> Dataset:
 
     validated_paths = []
     valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
-    for img_path in input_path.iterdir():
-        if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
-            continue
-        try:
-            with PillowImage.open(img_path) as _verification:
-                pass
-        except Exception as _unreadable_file:
-            continue
-        validated_paths.append({"image": str(img_path)})
+    if input_path.is_dir():
+        for img_path in input_path.iterdir():
+            if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
+                continue
+            try:
+                with PillowImage.open(img_path) as _verification:
+                    pass
+            except Exception as _unreadable_file:
+                continue
+            validated_paths.append({"image": str(img_path)})
+    elif input_path.is_file() and input_path.suffix.lower() in valid_extensions:
+        validated_paths.append({"image": str(input_path)})
 
     dataset = Dataset.from_list(validated_paths)  # NaN Prevention: decode separately
 
@@ -82,10 +85,7 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
 
     # Check if assets folder has images, otherwise use placeholder dataset
     valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
-    has_images = (
-        original_input_folder.exists()
-        and any(f.is_file() and f.suffix.lower() in valid_extensions for f in original_input_folder.iterdir())
-    )
+    has_images = original_input_folder.exists() and any(f.is_file() and f.suffix.lower() in valid_extensions for f in original_input_folder.iterdir())
 
     if has_images:
         print(f"Using local images from {original_input_folder}")
