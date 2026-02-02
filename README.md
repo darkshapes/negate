@@ -85,27 +85,31 @@ options:
 Training syntax:
 
 ```sh
-usage: negate train [-h] [--model {black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-9B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture}] [path]
+usage: negate train [-h]
+                    [-m {exdysa/dc-ae-f32c32-sana-1.1-diffusers,zai-org/GLM-Image,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}]
+                    [path]
 
 positional arguments:
   path                  Dataset path
 
 options:
-  --model {black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-9B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture}
+  -h, --help            show this help message and exit
+  -m, --model {exdysa/dc-ae-f32c32-sana-1.1-diffusers,zai-org/GLM-Image,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}
                         Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right
 ```
 
 Check the origin of an image:
 
 ```sh
-usage: negate check [-h] path
+usage: negate check [-h] [-s | -g] path
 
 positional arguments:
-path Image path
+  path             Image or folder path
 
 options:
--h, --help show this help message and exit
-
+  -h, --help       show this help message and exit
+  -s, --synthetic  Mark image as synthetic (label = 1) for evaluation.
+  -g, --genuine    Mark image as genuine (label = 0) for evaluation.
 ```
 
 ```bib
