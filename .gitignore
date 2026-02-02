@@ -12,6 +12,7 @@ assets/
 .DS_Store
 *.lock
 .datasets/
+.cache/
 .continue/
 models/*
 
