@@ -71,7 +71,8 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
     :return: Dataset containing synthetic and original images."""
 
     synthetic_input_folder = Path(".datasets")
-    original_input_folder = Path(__file__).parent.parent / "assets" / "ph"
+    if not (original_input_folder := input_folder):
+        original_input_folder = Path(__file__).parent.parent / "assets"
 
     slice_dataset = load_remote_dataset("exdysa/nano-banana-pro-generated-1k-clone", synthetic_input_folder)
     rnd_synthetic_dataset = load_remote_dataset("exdysa/rnd_synthetic_img", synthetic_input_folder)

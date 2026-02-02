@@ -2,7 +2,6 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from pathlib import Path
-from sys import argv
 import numpy as np
 
 from negate import TrainResult, build_datasets, dataset_to_nparray, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel
@@ -29,7 +28,7 @@ def predict(image_path: Path) -> np.ndarray:
     input_name = ort.get_available_providers()[0]
     inputs = {input_name: features_pca.astype(np.float32)}
 
-    session = ort.InferenceSession("negate.onnx")
+    session = ort.InferenceSession(str(Path("models") / "negate.onnx"))
     return session.run(None, inputs)[0]
 
 
@@ -43,15 +42,16 @@ def training_run(vae_type: VAEModel, file_or_folder_path: Path | None = None) ->
     features_dataset: Dataset = features(dataset, vae_type)
     train_result: TrainResult = grade(features_dataset)
     save_to_onnx(train_result)
-    in_console(train_result)
+    in_console(train_result, vae_type)
     on_graph(train_result)
 
 
 def main() -> None:
     """CLI entry point.\n
     :raises ValueError: Missing image path.
-    :raises NotImplementedError: Unsupported command."""
+    :raises NotImplementedError: Unsupported command passed."""
     import argparse
+    from sys import argv
 
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
@@ -59,9 +59,10 @@ def main() -> None:
     train_parser = subparsers.add_parser("train", help="Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.")
     train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
     train_parser.add_argument(
+        "-m",
         "--model",
         choices=[m.value for m in VAEModel],
-        default=VAEModel.FLUX2_FP32.value,
+        default=VAEModel.MITSUA_FP16,
         help="Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right",
     )
     check_parser = subparsers.add_parser(

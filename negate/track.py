@@ -1,22 +1,17 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-import os
-from pathlib import Path
-from pprint import pprint
-
-import matplotlib.pyplot as plt
-import numpy as np
-from numpy.typing import NDArray
-from sklearn.metrics import accuracy_score, classification_report, confusion_matrix, f1_score, roc_auc_score
-
-from negate import TrainResult, get_time, model_path
+from negate import TrainResult, VAEModel, get_time, model_path
 
 
-def in_console(train_result: TrainResult) -> None:
+def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     """Print diagnostics and plots for a trained model.\n
     :param train_result: Result object from training."""
     import json
+    from pprint import pprint
+
+    import numpy as np
+    from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
     X_train = train_result.X_train
     pca = train_result.pca
@@ -39,21 +34,14 @@ def in_console(train_result: TrainResult) -> None:
     timestamp = get_time()
 
     results = {
-        "timestamp": timestamp,
-        "original_dim": X_train.shape[1],
-        "pca_dim": X_train_pca.shape[1],
-        "n_components": pca.n_components,
-        "explained_var": pca.explained_variance_ratio_.sum(),
-        "cumulative:": np.cumsum(pca.explained_variance_ratio_),
-        "scale_pos_weight": scale_pos_weight,
+        "accuracy": accuracy,
         "best_iter": model.best_iteration,
         "best_score": model.best_score,
-        "accuracy": accuracy,
-        "roc_auc": roc_auc,
+        "cumulative:": np.cumsum(pca.explained_variance_ratio_),
+        "explained_var": pca.explained_variance_ratio_.sum(),
         "f1_macro": f1_macro,
         "f1_weighted": f1_weighted,
         "feature_shape": feature_matrix.shape,
-        "labels_shape": labels.shape,
         "label_dist": {
             "real": int(np.sum(labels == 0)),
             "synthetic": int(np.sum(labels == 1)),
@@ -61,7 +49,15 @@ def in_console(train_result: TrainResult) -> None:
             "synthetic_pct": np.sum(labels == 1) / len(labels) * 100,
         },
         "imbalance_ratio": np.sum(labels == 0) / np.sum(labels == 1),
+        "labels_shape": labels.shape,
+        "n_components": pca.n_components,
+        "original_dim": X_train.shape[1],
+        "pca_dim": X_train_pca.shape[1],
+        "roc_auc": roc_auc,
+        "scale_pos_weight": scale_pos_weight,
         "seed": seed,
+        "timestamp": timestamp,
+        "vae_type": vae_type.value,
     }
 
     pprint(results)
@@ -80,7 +76,11 @@ def in_console(train_result: TrainResult) -> None:
 def on_graph(train_result: TrainResult) -> None:
     """Save and show PCA variance plots for a trained model.\n
     :param train_result: Result object from training."""
-    import seaborn as sns
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from numpy.typing import NDArray
+    from sklearn.metrics import confusion_matrix
 
     X_train: NDArray = train_result.X_train
     X_train_pca = train_result.X_train_pca
@@ -146,6 +146,7 @@ def on_graph(train_result: TrainResult) -> None:
     plt.savefig(model_path("pca_transform_map.png"))
     plt.show()
 
+    # import seaborn as sns
     # corr = np.corrcoef(X_train, rowvar=False)
     # upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
     # figure, ax = plt.subplots(figsize=(12, 10))
