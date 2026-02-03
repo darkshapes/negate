@@ -2,9 +2,11 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from pathlib import Path
+from typing import Any
+
 import numpy as np
 
-from negate import TrainResult, build_datasets, features, generate_dataset, grade, in_console, save_to_onnx, on_graph, VAEModel, datestamped_folder, model_path
+from negate import TrainResult, VAEModel, build_datasets, datestamped_folder, features, generate_dataset, grade, in_console, model_path, on_graph, save_to_onnx
 
 
 def evaluate(prediction: np.ndarray, ground_truth: np.ndarray) -> None:
@@ -18,24 +20,22 @@ def evaluate(prediction: np.ndarray, ground_truth: np.ndarray) -> None:
 
     acc = float(np.mean(prediction == ground_truth))
 
-    genu_cnt = int(np.sum(ground_truth == 0))
-    synth_cnt = int(np.sum(ground_truth == 1))
-
     print(f"Accuracy: {acc:.2%}")
-    print(f"Genuine: {genu_cnt}  Synthetic: {synth_cnt}")
 
 
-def predict(image_path: Path, vae_type: VAEModel, true_label: int | None = None) -> np.ndarray:
+def predict(image_path: Path, vae_type: VAEModel, metadata: dict[str, Any], true_label: int | None = None) -> np.ndarray:
     """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
     :param image_path: Path to image file or folder.
     :param vae_type: VAE model to use for feature extraction.
-    :return: Prediction array.
-    """
-    from datasets import Dataset
-    import onnxruntime as ort
-    from onnxruntime import SparseTensor
-    from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument, Fail as ONNXRuntimeError
+    :return: Prediction array."""
 
+    import onnxruntime as ort
+    from datasets import Dataset
+    from onnxruntime import SparseTensor
+    from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
+    from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
+
+    pca_file_path_named = model_path / "negate_pca.onnx"
     model_file_path_named = model_path / "negate.onnx"
     if not model_file_path_named.exists():
         raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
@@ -48,19 +48,26 @@ Checking path '{image_path}' with {vae_type.value}""")
     features_dataset: Dataset = features(dataset, vae_type)
     features_array = np.array(features_dataset["features"]).astype(np.float32)  # type: ignore[arg-type]
 
+    session_pca = ort.InferenceSession(pca_file_path_named)
+    input_name_pca = session_pca.get_inputs()[0].name
+    features_pca = session_pca.run(None, {input_name_pca: features_array})[0]
+
+    scale_pos_weight = metadata["scale_pos_weight"]
+    print(metadata["scale_pos_weight"])
+    scale_pos_weight = float(scale_pos_weight)
+    input_name = ort.get_available_providers()[0]
+    features_model = features_pca.astype(np.float32)
+
     session = ort.InferenceSession(model_file_path_named)
     print(f"Model '{model_file_path_named}' loaded.")
     input_name = session.get_inputs()[0].name
     try:
-        result: SparseTensor = session.run(None, {input_name: features_array.astype(np.float32)})[0]  # type: ignore
+        result: SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
         print(result)
     except (InvalidArgument, ONNXRuntimeError) as error_log:
         match error_log:
             case _ if "Expected: 16384" in str(error_log):
-                print(
-                    """Training feature extractor does not match current feature extractor "
-                {vae_type.value}" : {err_log}""",
-                )
+                print(f"Training feature extractor does not match current feature extractor{vae_type.value} : {error_log}")
                 predict(image_path, VAEModel.MITSUA_FP16, true_label)
             case _ if "Expected: 65536" in str(error_log):
                 print(f"Training feature extractor does not match current feature extractor {vae_type.value} : {error_log}")
@@ -150,7 +157,7 @@ def main() -> None:
             with open(results_file_path) as result_metadata:
                 train_metadata = json.load(result_metadata)
             vae_type = VAEModel(train_metadata["vae_type"])
-            predict(Path(args.path), vae_type=vae_type, true_label=args.label)
+            predict(Path(args.path), vae_type=vae_type, metadata=train_metadata, true_label=args.label)
         case _:
             raise NotImplementedError
 

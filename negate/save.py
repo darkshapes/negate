@@ -80,6 +80,7 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
 
     metadata_file_name = save_metadata(train_result)
 
-    shutil.copy(negate_onnx_file_name, model_path / Path(negate_onnx_file_name).name)  # type: ignore no overloads
+    for src in (negate_onnx_file_name, pca_file_name):
+        shutil.copy(src, model_path / Path(src).name)  # type: ignore no overloads
 
     print(f"Models saved to disk. {pca_file_name} {negate_onnx_file_name} {metadata_file_name}")
