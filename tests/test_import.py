@@ -9,7 +9,7 @@ def test_main_import():
         TrainResult,
         VAEModel,
         build_datasets,
-        config_settings,
+        negate_opt,
         datestamped_folder,
         features,
         generate_dataset,
