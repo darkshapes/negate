@@ -3,7 +3,6 @@
 
 from pathlib import Path
 
-import numpy as np
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
 
 
@@ -91,19 +90,3 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
 
     dataset = concatenate_datasets([slice_dataset, rnd_synthetic_dataset, original_dataset])
     return dataset
-
-
-def dataset_to_nparray(dataset: Dataset, column_names: list[str] | None = None) -> np.ndarray:
-    """Convert Dataset to ndarray.\n
-    :param dataset: HuggingFace Dataset of images.
-    :param columns: Columns to keep. If None all columns are used.
-    :return: Array of shape (n_samples, n_features) or (n_samples,) if a single column."""
-
-    if column_names is None:
-        column_names = dataset.column_names
-
-    data = {name: dataset[name] for name in column_names}
-
-    if len(column_names) == 1:
-        return np.array(data[column_names[0]])
-    return np.vstack([np.array(data[name]) for name in column_names]).T

@@ -4,16 +4,20 @@
 
 def test_main_import():
     from negate import (
-        build_datasets,
-        generate_dataset,
-        dataset_to_nparray,
         FeatureExtractor,
         DeviceName,
-        features,
         TrainResult,
+        VAEModel,
+        build_datasets,
+        config_settings,
+        datestamped_folder,
+        features,
+        generate_dataset,
+        generate_datestamp_path,
         grade,
         in_console,
+        model_path,
         on_graph,
-        save_model,
+        save_models,
         save_to_onnx,
     )

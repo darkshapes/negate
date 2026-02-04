@@ -1,6 +1,9 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+import shutil
+from pathlib import Path
+
 from negate import TrainResult, generate_datestamp_path, model_path
 
 
@@ -20,27 +23,34 @@ def save_metadata(train_result: TrainResult, file_name: str = "negate") -> str:
     return metadata_file_name
 
 
-def save_model(train_result: TrainResult, file_name: str = "negate") -> None:
+def save_models(train_result: TrainResult, compare: bool, file_name: str = "negate") -> None:
     """Persist a trained model and its PCA transformer.\n
     :param train_result: Training output containing model, PCA and metadata.
     :param file_name: Base name for the files written to the *models* folder.
     :return: None"""
+
     import pickle
 
     from sklearn.decomposition import PCA
     from xgboost import Booster
 
+    datestamp_path = generate_datestamp_path(file_name)
+
     model: Booster = train_result.model
     pca: PCA = train_result.pca
-
-    pca_file_name = generate_datestamp_path(f"{file_name}_pca.pkl")
+    pca_file_name = datestamp_path + "_pca.pkl"
     with open(pca_file_name, "wb") as f:
         pickle.dump(pca, f)
 
-    negate_xgb_file_name = generate_datestamp_path(f"{file_name}.json")
+    negate_xgb_file_name = datestamp_path + ".ubj"
     model.save_model(negate_xgb_file_name)
 
     metadata_file_name = save_metadata(train_result)
+
+    if not compare:
+        for src in (negate_xgb_file_name, pca_file_name):
+            shutil.copy(src, model_path / Path(src).name)  # type: ignore no overloads
+
     print(f"Models saved to disk. {pca_file_name} {negate_xgb_file_name} {metadata_file_name}")
 
 
@@ -49,14 +59,13 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     :param train_result: Training output containing the XGBoost model.
     :param file_name: Base name for the ONNX file."""
 
-    import shutil
-    from pathlib import Path
-
     import onnx
     from skl2onnx import convert_sklearn
     from skl2onnx.common.data_types import FloatTensorType
 
     from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
+
+    datestamp_path = generate_datestamp_path(file_name)
 
     model = train_result.model
     num_features = train_result.feature_matrix.shape[1]
@@ -68,14 +77,14 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
         name="input",
         format=ModelInputFormat.FORMAT_NONE,  # Used for TensorRT
     )
-    negate_onnx_file_name = generate_datestamp_path(f"{file_name}.onnx")
+    negate_onnx_file_name = datestamp_path + ".onnx"
     onnx_model = ONNXConverter.from_xgboost(model, inputs=[input_shape], opset=12)
     onnx.save(onnx_model, negate_onnx_file_name)
 
     initial_pca_types = [("input", FloatTensorType([None, num_features]))]
     negate_pca_onnx_raw = convert_sklearn(pca, initial_types=initial_pca_types)
     negate_pca_onnx = ONNXConverter.optim_onnx(negate_pca_onnx_raw)  # type: ignore[arg-type]
-    pca_file_name = generate_datestamp_path(f"{file_name}_pca.onnx")
+    pca_file_name = datestamp_path + "_pca.onnx"
     onnx.save(negate_pca_onnx, pca_file_name)
 
     metadata_file_name = save_metadata(train_result)
