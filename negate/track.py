@@ -1,12 +1,15 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from negate import TrainResult, VAEModel, get_time, model_path
+from negate import TrainResult, VAEModel, get_time, generate_datestamp_path, model_path
+import matplotlib.pyplot as plt
 
 
 def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     """Print diagnostics and plots for a trained model.\n
     :param train_result: Result object from training."""
+    from pathlib import Path
+    import shutil
     import json
     from pprint import pprint
 
@@ -61,11 +64,11 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     }
 
     pprint(results)
-    results_file = model_path("results.json")
+    results_file = generate_datestamp_path("results.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
-
+    shutil.copy(results_file, model_path / Path(results_file).name)  # type: ignore no overloads
     separator = lambda: print("=" * 60)
     separator()
     print("CLASSIFICATION RESULTS")
@@ -76,11 +79,10 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
 def on_graph(train_result: TrainResult) -> None:
     """Save and show PCA variance plots for a trained model.\n
     :param train_result: Result object from training."""
-
-    import matplotlib.pyplot as plt
     import numpy as np
     from numpy.typing import NDArray
     from sklearn.metrics import confusion_matrix
+    import seaborn as sns
 
     X_train: NDArray = train_result.X_train
     X_train_pca = train_result.X_train_pca
@@ -90,73 +92,69 @@ def on_graph(train_result: TrainResult) -> None:
     y_pred = (y_pred_proba > 0.5).astype(int)
 
     pca = train_result.pca
-    plt.figure(figsize=(10, 5))
-    plt.subplot(1, 2, 1)
-    plt.plot(np.cumsum(pca.explained_variance_ratio_), color="aqua")
-    plt.xlabel("Number of Components")
-    plt.ylabel("Cumulative Explained Variance")
-    plt.title("PCA Explained Variance")
-    plt.grid(True)
 
-    plt.subplot(1, 2, 2)
-    plt.bar(range(min(20, len(pca.explained_variance_ratio_))), pca.explained_variance_ratio_[:20], color="aqua")
-    plt.xlabel("Component")
-    plt.ylabel("Explained Variance Ratio")
-    plt.title("First 20 Components")
-    plt.tight_layout()
-    plt.savefig(model_path("score_explained_variance.png"))
-    plt.show()
+    # Create a single figure with 6 subplots (2 rows × 3 columns)
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    ax_cum = axes[0, 0]
+    ax_bar = axes[0, 1]
+    ax_conf = axes[0, 2]
+    ax_orig = axes[1, 0]
+    ax_pca = axes[1, 1]
+    ax_heat = axes[1, 2]
 
+    # 1. Cumulative explained variance
+    ax_cum.plot(np.cumsum(pca.explained_variance_ratio_), color="aqua")
+    ax_cum.set_xlabel("Number of Components")
+    ax_cum.set_ylabel("Cumulative Explained Variance")
+    ax_cum.set_title("PCA Explained Variance")
+    ax_cum.grid(True)
+
+    # 2. First 20 components
+    ax_bar.bar(
+        range(min(20, len(pca.explained_variance_ratio_))),
+        pca.explained_variance_ratio_[:20],
+        color="aqua",
+    )
+    ax_bar.set_xlabel("Component")
+    ax_bar.set_ylabel("Explained Variance Ratio")
+    ax_bar.set_title("First 20 Components")
+
+    # 3. Confusion matrix
     cm = confusion_matrix(train_result.y_test, y_pred)
-    fig, ax = plt.subplots()
-    cax = ax.imshow(cm, interpolation="nearest", cmap="Reds")
-
-    ax.set_xticks(np.arange(cm.shape[1]))
-    ax.set_yticks(np.arange(cm.shape[0]))
-    ax.set_xticklabels(["Real", "Synthetic"])
-    ax.set_yticklabels(["Real", "Synthetic"])
-    plt.setp(ax.get_xticklabels(), rotation=45, ha="right")
-
+    cax = ax_conf.imshow(cm, interpolation="nearest", cmap="Reds")
+    ax_conf.set_xticks(np.arange(cm.shape[1]))
+    ax_conf.set_yticks(np.arange(cm.shape[0]))
+    ax_conf.set_xticklabels(["Real", "Synthetic"])
+    ax_conf.set_yticklabels(["Real", "Synthetic"])
+    plt.setp(ax_conf.get_xticklabels(), rotation=45, ha="right")
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
-            ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+            ax_conf.text(j, i, cm[i, j], ha="center", va="center", color="black")
+    ax_conf.set_xlabel("Predicted")
+    ax_conf.set_ylabel("Actual")
+    ax_conf.set_title("Confusion Matrix")
+    fig.colorbar(cax, ax=ax_conf)
 
-    ax.set_xlabel("Predicted")
-    ax.set_ylabel("Actual")
-    ax.set_title("Confusion Matrix")
-    fig.colorbar(cax)
-    plt.savefig(model_path("score_confusion_matrix.png"))
-    plt.show()
+    # 4. Original data scatter
+    ax_orig.scatter(X_train[:, 0], X_train[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
+    ax_orig.set_xlabel("Feature 1")
+    ax_orig.set_ylabel("Feature 2")
+    ax_orig.set_title("Original Data (First Two Features)")
+    # ax_orig.colorbar(label="Prediction")
 
-    plt.figure(figsize=(10, 5))
-    plt.subplot(1, 2, 1)
-    plt.scatter(X_train[:, 0], X_train[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
-    plt.xlabel("Feature 1")
-    plt.ylabel("Feature 2")
-    plt.title("Original Data (First Two Features)")
-    plt.colorbar(label="Prediction")
+    # 5. PCA transformed scatter
+    ax_pca.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
+    ax_pca.set_xlabel("Principal Component 1")
+    ax_pca.set_ylabel("Principal Component 2")
+    ax_pca.set_title("PCA Transformed Data")
+    # ax_pca.colorbar(label="Prediction")
 
-    plt.subplot(1, 2, 2)
-    plt.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
-    plt.xlabel("Principal Component 1")
-    plt.ylabel("Principal Component 2")
-    plt.title("PCA Transformed Data")
-    plt.colorbar(label="Prediction")
-    plt.tight_layout()
-    plt.savefig(model_path("pca_transform_map.png"))
-    plt.show()
-
-    import seaborn as sns
-
+    # 6. Correlation heatmap
     corr = np.corrcoef(X_train_pca, rowvar=False)
     upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
-
-    # Get actual min/max from the lower triangle (excluding diagonal)
     lower_triangle = corr[np.tril_indices_from(corr, k=-1)]
     vmin = lower_triangle.min()
     vmax = lower_triangle.max()
-
-    figure, ax = plt.subplots(figsize=(12, 10))
     cmap = sns.diverging_palette(20, 230, as_cmap=True)
     sns.heatmap(
         corr,
@@ -168,8 +166,9 @@ def on_graph(train_result: TrainResult) -> None:
         square=True,
         linewidths=0.5,
         cbar_kws={"shrink": 0.5},
+        ax=ax_heat,
     )
-    ax.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
-    plt.tight_layout()
-    figure.savefig(model_path("correlation_heatmap.png"))
-    plt.show()
+    ax_heat.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
+
+    plt.tight_layout(pad=0.5)
+    plt.savefig(generate_datestamp_path("combined_plots.png"))

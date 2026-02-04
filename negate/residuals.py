@@ -9,12 +9,14 @@ from PIL.Image import Image
 
 
 class Residual:
-    def __init__(self, dtype: np.typing.DTypeLike = np.float32):
+    def __init__(self, top_k: int, patch_size: int = 512, dtype: np.typing.DTypeLike = np.float32) -> None:
         """Initialize residual class for residual image processing.\n
         :param dtype: dtype for internal numpy conversion.
         return: None."""
 
         self.dtype = dtype
+        self.top_k = top_k
+        self.patch_size = patch_size
 
     def __call__(self, image: Image) -> Image:
         """Create a 3-channel residual from a grayscale image.\n
@@ -128,7 +130,7 @@ class Residual:
 
         return fromarray(reconstructed_uint8, mode="L").convert("RGB")
 
-    def mask_patches(self, numeric_image: NDArray, size: int):
+    def mask_patches(self, numeric_image: NDArray):
         """Crop patches and compute freq divergence.\n
         :return: List of (divergence, patch Image).
         :param numeric_image: Image converted into an array.
@@ -137,17 +139,17 @@ class Residual:
         from PIL.Image import fromarray
 
         metrics: list[tuple[float, Image]] = []
-
+        patch_size = self.patch_size
         h, w = numeric_image.shape
-        nx = (w + size - 1) // size
-        ny = (h + size - 1) // size
+        nx = (w + patch_size - 1) // patch_size
+        ny = (h + patch_size - 1) // patch_size
         for iy in range(ny):
             for ix in range(nx):
-                x0 = ix * size
-                y0 = iy * size
-                patch_arr = numeric_image[y0 : y0 + size, x0 : x0 + size]
-                if patch_arr.shape != (size, size):
-                    pad = np.zeros((size, size), dtype=self.dtype)
+                x0 = ix * patch_size
+                y0 = iy * patch_size
+                patch_arr = numeric_image[y0 : y0 + patch_size, x0 : x0 + patch_size]
+                if patch_arr.shape != (patch_size, patch_size):
+                    pad = np.zeros((patch_size, patch_size), dtype=self.dtype)
                     pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
                     patch_arr = pad
 
@@ -163,12 +165,7 @@ class Residual:
                 metrics.append((div, patch_img))
         return metrics
 
-    def crop_select(
-        self,
-        image: Image,
-        size: int,
-        top_k: int = 5,
-    ) -> list[Image]:
+    def crop_select(self, image: Image) -> list[Image]:
         """Crop image into patches, compute freq-divergence, return most extreme patches.\n
         :param image: PIL image to process.
         :param size: Patch dimension.
@@ -179,11 +176,12 @@ class Residual:
         gray = image.convert("L")
         numeric_image = np.array(gray, dtype=self.dtype)
 
-        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image, size=size)
+        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image)
 
         metrics.sort(key=lambda x: x[0], reverse=True)
 
         chosen: list[Image] = []
+        top_k = self.top_k
         chosen.extend([p for _, p in metrics[:top_k]])  # high diverges
         chosen.extend([p for _, p in metrics[-top_k:]])  # low diverges
 

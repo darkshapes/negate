@@ -1,22 +1,26 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from enum import Enum
 from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+
 from datasets import Dataset
+from PIL.Image import Image
+
+from negate.config import negate_options as negate_opt
 
 
 class VAEModel(str, Enum):
     """Choose the name and size of the VAE model to use for extraction."""
 
     SANA_FP32 = "exdysa/dc-ae-f32c32-sana-1.1-diffusers"
-    SANA_FP16 = "exdysa/dc-ae-f32c32-sana-1.1-diffusers"
-    GLM_BF16 = "zai-org/GLM-Image"
-    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"
-    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-4B"
-    FLUX1_FP32 = "Tongyi-MAI/Z-Image"
-    FLUX1_FP16 = "Freepik/F-Lite-Texture"
-    MITSUA_FP16 = "exdysa/mitsua-vae-SAFETENSORS"
+    SANA_FP16 = "exdysa/dc-ae-f32c32-sana-1.1-diffusers"  # dc_ae 'accuracy': 0.8235294117647058,
+    FLUX2_FP32 = "black-forest-labs/FLUX.2-dev"  # f2 dev 'accuracy': 0.9313725490196079,
+    FLUX2_FP16 = "black-forest-labs/FLUX.2-klein-4B"  # f2 klein 'accuracy': 0.9215686274509803,
+    FLUX1_FP32 = "Tongyi-MAI/Z-Image"  # zimage 'accuracy': 0.9411764705882353,
+    FLUX1_FP16 = "Freepik/F-Lite-Texture"  # flite 'accuracy': 0.9509803921568627,
+    MITSUA_FP16 = "exdysa/mitsua-vae-SAFETENSORS"  # mitsua 'accuracy': 0.9509803921568627,
 
 
 @dataclass
@@ -27,11 +31,11 @@ class VAEInfo:
 
 MODEL_MAP = {
     VAEModel.MITSUA_FP16: VAEInfo(VAEModel.MITSUA_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
-    VAEModel.GLM_BF16: VAEInfo(VAEModel.GLM_BF16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP32: VAEInfo(VAEModel.FLUX1_FP32, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX1_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl.AutoencoderKL"),
     VAEModel.FLUX2_FP32: VAEInfo(VAEModel.FLUX2_FP32, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
-    VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX1_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX2_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
+    VAEModel.SANA_FP16: VAEInfo(VAEModel.SANA_FP16, "autoencoders.autoencoder_dc.AutoencoderDC"),
     VAEModel.SANA_FP32: VAEInfo(VAEModel.SANA_FP32, "autoencoders.autoencoder_dc.AutoencoderDC"),
 }
 
@@ -58,19 +62,17 @@ class FeatureExtractor:
 
     def __init__(self, vae_type: VAEModel, device: DeviceName, dtype: torch.dtype) -> None:
         """Set up the extractor with a VAE model.\n
-        :param model: Repository ID of the VAE.
+        :param vae_type: VAEModel ID of the VAE.
         :param device: Target device.
         :param dtype: Data type for tensors."""
 
-        from diffusers.models.autoencoders.vae import AutoencoderMixin
         from negate import Residual  # `B̴̨̒e̷w̷͇̃ȁ̵͈r̸͔͛ę̵͂ ̷̫̚t̵̻̐h̶̜͒ȩ̸̋ ̵̪̄ő̷̦ù̵̥r̷͇̂o̷̫͑b̷̲͒ò̷̫r̴̢͒ô̵͍s̵̩̈́` #type: ignore
 
-        self.device = device
+        self.residual_transform = Residual(patch_size=negate_opt.patch_size, top_k=negate_opt.top_k)
+        self.device = device.value
         self.dtype = dtype
         self.model: VAEInfo = MODEL_MAP[vae_type]
-        self.vae: AutoencoderMixin | None = None
-        self.residual_transform = Residual()
-        if self.vae is None:
+        if not hasattr(self, "vae"):
             self.create_vae()
 
     def create_vae(self):
@@ -79,34 +81,52 @@ class FeatureExtractor:
         import os
 
         from diffusers.models import autoencoders
-        from huggingface_hub.errors import LocalEntryNotFoundError
         from huggingface_hub import snapshot_download
+        from huggingface_hub.errors import LocalEntryNotFoundError
 
-        autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1])
+        if negate_opt.vae_tiling:
+            self.vae.enable_tiling()
+        if negate_opt.vae_slicing:
+            self.vae.enable_slicing()
+
+        autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1], None)
         try:
-            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.dtype, local_files_only=True).to(self.device.value)
-        except (LocalEntryNotFoundError, OSError):
+            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.dtype, local_files_only=True).to(self.device)  # type: ignore
+        except (LocalEntryNotFoundError, OSError, AttributeError):
             print("Downloading model...")
-            vae_path: str = snapshot_download(self.model.enum.value, allow_patterns=["vae/*"])  # type: ignore
-            vae_path = os.path.join(vae_path, "vae")
-            vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype, local_files_only=True).to(self.device.value)
+        vae_path: str = snapshot_download(self.model.enum.value, allow_patterns=["vae/*"])  # type: ignore
+        vae_path = os.path.join(vae_path, "vae")
+        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype, local_files_only=True).to(self.device)  # type: ignore
 
         vae_model.eval()
         self.vae = vae_model
 
-    def cleanup(self) -> None:
-        """Free the VAE and GPU memory."""
+    def _extract_generic(self, batch: "torch.Tensor"):
+        """Encode with standard Diffusers VAE and return mean latent.\n
+        :param batch: Tensor of image + patches.
+        :return: NumPy mean latent."""
 
-        import gc
+        latent = self.vae.encode(batch).latent_dist.sample()  # type: ignore
+        return latent.mean(dim=0).cpu().float().numpy()
+
+    def _extract_special(self, batch: "torch.Tensor", image: Image):
+        """Handle SANA and AuraEqui models.\n
+        :param batch: Tensor of image + patches.
+        :param img: Original PIL image.
+        :return: NumPy mean latent."""
 
         import torch
+        from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
+        from torch import Tensor
 
-        device = self.device
-        if device != "cpu":
-            gpu = getattr(torch, device)
-            gpu.empty_cache()
-        del self.vae
-        gc.collect()
+        latent: Tensor = self.vae.encode(batch)  # type: ignore
+        mean = torch.mean(latent.latent, dim=0).cpu().float()  # type: ignore
+
+        logvar = torch.zeros_like(mean).cpu().float()
+        params = torch.cat([mean, logvar], dim=1)
+        dist = DiagonalGaussianDistribution(params)
+        sample = dist.sample()
+        return sample.mean(dim=0).cpu().float().numpy()
 
     def batch_extract(self, dataset: Dataset):
         """Extract VAE features from a batch of images.
@@ -120,34 +140,37 @@ class FeatureExtractor:
         patch_stack = []
 
         for image in dataset["image"]:
-            color_image = image.convert("RGB")
-            color_tensor = self.transform(color_image)
-            patches = self.residual_transform.crop_select(image, size=768, top_k=1)
-            for patch in patches:
-                patch_image = patch.convert("RGB")
-                patch_tensor = self.transform(patch_image)
-                patch_stack.append(patch_tensor)
+            rgb = image.convert("RGB")
+            col = self.transform(rgb)
+            for patches in self.residual_transform.crop_select(image):
+                patch_stack.append(self.transform(patches.convert("RGB")))
 
-            batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
+            batch = torch.stack([col, *patch_stack]).to(self.device, self.dtype)
             with torch.no_grad():
-                if self.model.enum != VAEModel.SANA_FP32:  # type: ignore can't access encode
-                    latents_2_dim_h_w = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore can't access encode
-                    mean_latent = latents_2_dim_h_w.mean(dim=0).cpu().float().numpy()
-                else:
-                    from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
+                match self.model.enum:
+                    case VAEModel.SANA_FP32 | VAEModel.SANA_FP16:
+                        mean_latent = self._extract_special(batch, image)
+                    case _:
+                        mean_latent = self._extract_generic(batch)
 
-                    latent = self.vae.encode(batch_tensor)  # # type: ignore can't access encode
-                    mean_latent = torch.mean(latent.latent, dim=0).cpu().float()  # distribution with mean
-                    logvar_latent = torch.zeros_like(mean_latent).cpu().float()  # & logvar
-                    params = torch.cat([mean_latent, logvar_latent], dim=1)
-                    distribution = DiagonalGaussianDistribution(params)
-                    sample = distribution.sample()
-                    mean_latent = sample.mean(dim=0).cpu().float().numpy()
-                feature_vec = mean_latent.flatten()
-
-            features_list.append(feature_vec)
+            features_list.append(mean_latent.flatten())
 
         return {"features": features_list}
+
+    def cleanup(self) -> None:
+        """Free the VAE and GPU memory."""
+
+        import gc
+
+        import torch
+
+        if self.device != "cpu":
+            gpu = getattr(torch, self.device)
+            gpu.empty_cache()
+            del gpu
+        del self.vae
+        del self.device
+        gc.collect()
 
     def __enter__(self) -> "FeatureExtractor":
         return self
@@ -155,6 +178,30 @@ class FeatureExtractor:
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "vae"):
             self.cleanup()
+
+
+def feature_cache(dataset: Dataset, vae_type: VAEModel) -> Path:
+    """Generate cache filename based on dataset fingerprint and VAE model.\n
+    Dataset fingerprint automatically changes when data changes.
+
+    :param dataset: The incoming dataset to be processed.
+    :param vae_type: The VAE model typeselectedfor feature extraction.
+    :returns: Location to cache results of feature extraction"""
+
+    import hashlib
+
+    cache_dir = Path(".cache/features")  # <chud> was here
+    cache_dir.mkdir(parents=True, exist_ok=True)
+
+    dataset_hash = dataset._fingerprint if hasattr(dataset, "_fingerprint") else hashlib.md5(str(dataset).encode()).hexdigest()[:8]
+    vae_name = vae_type.value.split("/")[-1].replace("-", "_")
+    cache_file = cache_dir / f"features_{vae_name}_{dataset_hash}.arrow"
+
+    if cache_file.exists():
+        print(f"Using cached features from {cache_file}")
+    else:
+        print(f"Extracting features (will cache to {cache_file})")
+    return cache_file
 
 
 def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
@@ -166,17 +213,23 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
     import torch
 
     device = DeviceName.CUDA if torch.cuda.is_available() else DeviceName.MPS if torch.mps.is_available() else DeviceName.CPU
-    dtype = torch.bfloat16
 
-    # <chud> was here
+    dtype = getattr(torch, negate_opt.dtype)
+    kwargs = {}
+    match negate_opt:
+        case opt if opt.batch_size > 0:
+            kwargs.setdefault("batch_size", opt.batch_size)
+        case opt if opt.cache_features:
+            cache_file_name = str(feature_cache(dataset, vae_type))
+            kwargs.setdefault("cache_file_name", cache_file_name)
 
     with FeatureExtractor(vae_type, device, dtype) as extractor:
         features_dataset = dataset.map(
             extractor.batch_extract,
-            batched=True,
-            batch_size=4,
+            batched=negate_opt.batch_size > 0,
             remove_columns=["image"],
             desc="Extracting features...",
+            **kwargs,
         )
     features_dataset.set_format(type="numpy", columns=["features", "label"])
 

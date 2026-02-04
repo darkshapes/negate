@@ -11,24 +11,31 @@ from numpy.typing import NDArray
 from sklearn.decomposition import PCA
 from xgboost import Booster
 
+from negate.config import negate_options as negate_opt
+
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
-folder = Path("models", get_time())
-folder.mkdir(parents=True, exist_ok=True)
-model_path = lambda file_name: str(folder / file_name)
+datestamped_folder = Path("models", get_time())
+model_path = Path(__file__).parent.parent / "models"
+
+
+def generate_datestamp_path(file_name) -> str:
+    datestamped_folder.mkdir(parents=True, exist_ok=True)
+    generated_path = str(datestamped_folder / file_name)
+    return generated_path
 
 
 @dataclass
 class TrainingParameters:
     """Container holding main model parameters"""
 
-    colsample_bytree: float = 0.8
-    eval_metric: list = field(default_factory=lambda: ["logloss", "aucpr"])
-    learning_rate: float = 0.1
-    max_depth: int = 4
-    objective: str = "binary:logistic"
-    scale_pos_weight: float | None = None
-    seed: int | None = None
-    subsample: float = 0.8
+    seed: int = negate_opt.seed
+    colsample_bytree: float = negate_opt.colsample_bytree
+    eval_metric: list = field(default_factory=lambda: negate_opt.eval_metric)
+    learning_rate: float = negate_opt.learning_rate
+    max_depth: int = negate_opt.max_depth
+    objective: str = negate_opt.objective
+    scale_pos_weight: float | None = negate_opt.scale_pos_weight
+    subsample: float = negate_opt.subsample
 
 
 @dataclass
@@ -41,7 +48,7 @@ class TrainResult:
     model: Booster
     num_features: int
     pca: PCA
-    scale_pos_weight: float
+    scale_pos_weight: float | None
     seed: int
     X_train_pca: NDArray
     X_train: NDArray
@@ -58,26 +65,25 @@ def grade(features_dataset: Dataset) -> TrainResult:
     from numpy.random import default_rng
     from sklearn.model_selection import train_test_split
 
-    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(np.float32)  # type: ignore no overloads
+    feature_matrix = np.asarray([sample["features"] for sample in features_dataset], dtype=np.float32)  # type: ignore
     labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)
     random_state = lambda: int(np.round(rng.random() * 0xFFFFFFFF))
     seed = random_state()
-    X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=seed)
+    params = TrainingParameters(
+        seed=seed,
+    )
+    X_train, X_test, y_train, y_test = train_test_split(feature_matrix, labels, test_size=0.2, stratify=labels, random_state=params.seed)
 
-    pca: PCA = PCA(n_components=0.95, random_state=seed)  # dimensionality .95
+    pca: PCA = PCA(n_components=0.95, random_state=params.seed)  # dimensionality .95
     X_train_pca = pca.fit_transform(X_train)
     X_test_pca = pca.transform(X_test)
 
-    scale_pos_weight = np.sum(y_train == 0) / np.sum(y_train == 1)
+    params.scale_pos_weight = np.sum(y_train == 0) / np.sum(y_train == 1)
     d_matrix_train = xgb.DMatrix(X_train_pca, label=y_train)
     d_matrix_test = xgb.DMatrix(X_test_pca, label=y_test)
 
-    params = TrainingParameters(
-        scale_pos_weight=scale_pos_weight,
-        seed=seed,
-    )
     training_parameters = asdict(params)
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
@@ -91,11 +97,11 @@ def grade(features_dataset: Dataset) -> TrainResult:
         pca=pca,
         d_matrix_test=d_matrix_test,  # type: ignore
         model=model,
-        scale_pos_weight=scale_pos_weight,
+        scale_pos_weight=params.scale_pos_weight,
         X_train_pca=X_train_pca,
         y_test=y_test,  # type: ignore
         labels=labels,
         feature_matrix=feature_matrix,
-        seed=seed,
+        seed=params.seed,
         num_features=model.num_features(),
     )

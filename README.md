@@ -26,9 +26,7 @@ This repo provides a simple command‑line interface to invoke the tool and exam
 
 Future work includes the development of an automated testing framework and evaluation suite, expanding the scope of research to include wider diversity of synthetic and original human-generated datasets, benchmarking against comparable methods, and exploring additional model architectures.
 
-![Bar and grid graph comparing variance of the synthetic and real images](results/score_explained_variance.png)
-![Graph comparing before and after pca transform operation of dataset](results/pca_transform_map.png)
-![Graph comparing confusion matrix of the synthetic and real images](results/score_confusion_matrix.png)
+![Bar and grid graph comparing variance of the synthetic and real images](results/combined_plots.png)
 
 ## Requirements
 
@@ -69,32 +67,33 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 Basic Syntax:
 
 ```sh
-usage: negate [-h] {train,check} ...
+usage: negate [-h] {train,check,compare} ...
 
 Negate CLI
 
 positional arguments:
-  {train,check}
-    train        Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.
-    check        Check whether an image at the provided path is synthetic or original.
+  {train,check,compare}
+    train               Train model on the dataset in the provided path or `assets/`. The resulting model will be saved to disk.
+    check               Check whether an image at the provided path is synthetic or original.
+    compare             Run extraction and training using all possible VAE.
 
 options:
-  -h, --help     show this help message and exit
+  -h, --help            show this help message and exit
 ```
 
 Training syntax:
 
 ```sh
 usage: negate train [-h]
-                    [-m {exdysa/dc-ae-f32c32-sana-1.1-diffusers,zai-org/GLM-Image,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}]
+                    [-m {exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}]
                     [path]
 
 positional arguments:
-  path                  Dataset path
+  path                  Genunie/Human-original dataset path
 
 options:
   -h, --help            show this help message and exit
-  -m, --model {exdysa/dc-ae-f32c32-sana-1.1-diffusers,zai-org/GLM-Image,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}
+  -m, --model {exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,black-forest-labs/FLUX.2-klein-4B,Tongyi-MAI/Z-Image,Freepik/F-Lite-Texture,exdysa/mitsua-vae-SAFETENSORS}
                         Change the VAE model to use for training to a supported HuggingFace repo. Accuracy and memory use decrease from left to right
 ```
 

@@ -2,7 +2,6 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 from negate.extract import VAEModel, MODEL_MAP
-import pytest
 
 
 def test_vae_model_map_entries() -> None:

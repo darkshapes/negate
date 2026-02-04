@@ -19,3 +19,4 @@ models/*
 results/features_residual/
 results/residual_analysis/
 results/features_updated/
+.demo.ipynb
