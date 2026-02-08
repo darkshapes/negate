@@ -28,7 +28,6 @@ jobs:
          curl -LsSf https://astral.sh/uv/install.sh | sh
           uv python install 3.13
           uv python pin 3.13
-          uv sync --group dev
-          uv venv --clear .venv
+          uv sync --dev
           source .venv/bin/activate
           pytest -v
