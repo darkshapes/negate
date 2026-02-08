@@ -8,13 +8,14 @@ import argparse
 from pathlib import Path
 from sys import argv
 
-import numpy as np
 from datasets import Dataset
 
 from negate import (
+    # grade,
     WaveletAnalyzer,
     build_datasets,
-    compare_decompositions,
+    show_statistics,
+    negate_opt,
 )
 
 
@@ -26,47 +27,9 @@ def calibration(file_or_folder_path: Path | None = None, compare: bool = False) 
     dataset: Dataset = build_datasets(file_or_folder_path)
     analyzer = WaveletAnalyzer()
     result_dataset = analyzer.decompose(dataset)
+    # grade(result_dataset)
     result_dataset.set_format(type="pandas", columns=["label", "sim_min", "sim_max", "idx_min", "idx_max"])
-
-    genuine_dataset = result_dataset.filter(lambda x: x["label"] == 0, batched=False)
-    synthetic_dataset = result_dataset.filter(lambda x: x["label"] == 1, batched=False)
-
-    avg_genuine_sim = float(np.mean(genuine_dataset["sim_min"]))
-    avg_synthetic_sim = float(np.mean(synthetic_dataset["sim_min"]))
-
-    print(f"Average similarity min (genuine): {avg_genuine_sim:.4f}")
-    print(f"Average similarity min (synthetic): {avg_synthetic_sim:.4f}")
-
-    avg_genuine_sim = float(np.mean(genuine_dataset["sim_max"]))
-    avg_synthetic_sim = float(np.mean(synthetic_dataset["sim_max"]))
-
-    print(f"Average similarity max (genuine): {avg_genuine_sim:.4f}")
-    print(f"Average similarity max (synthetic): {avg_synthetic_sim:.4f}")
-
-    avg_genuine_sim = float(np.mean(genuine_dataset["idx_min"]))
-    avg_synthetic_sim = float(np.mean(synthetic_dataset["idx_min"]))
-
-    print(f"Average perturbed min (genuine): {avg_genuine_sim:.4f}")
-    print(f"Average perturbed min (synthetic): {avg_synthetic_sim:.4f}")
-
-    avg_genuine_sim = float(np.mean(genuine_dataset["idx_max"]))
-    avg_synthetic_sim = float(np.mean(synthetic_dataset["idx_max"]))
-
-    print(f"Average perturbed max (genuine): {avg_genuine_sim:.4f}")
-    print(f"Average perturbed max (synthetic): {avg_synthetic_sim:.4f}")
-
-    idx_overall_avg = np.mean((genuine_dataset["idx_min"])) + np.mean(genuine_dataset["idx_max"]) / 2
-    print(f"Overall average genuine cosine similarity: {idx_overall_avg:.4f}")
-    sim_overall_average = np.mean((genuine_dataset["sim_min"])) + np.mean(genuine_dataset["sim_max"]) / 2
-    print(f"Overall average genuine cosine similarity: {sim_overall_average:.4f}")
-    g_avg = (idx_overall_avg + sim_overall_average) / 2
-    overall_avg = np.mean((synthetic_dataset["idx_min"])) + np.mean(synthetic_dataset["idx_max"]) / 2
-    print(f"Overall average synthetic cosine similarity: {overall_avg:.4f}")
-    sim_overall_average = np.mean((synthetic_dataset["sim_min"])) + np.mean(synthetic_dataset["sim_max"]) / 2
-    print(f"Overall average synthetic cosine similarity: {sim_overall_average:.4f}")
-    s_avg = (idx_overall_avg + sim_overall_average) / 2
-    print(f"Overall average cosine similarity: {(s_avg + g_avg / 2):.4f}")
-    compare_decompositions(result_dataset)
+    show_statistics(result_dataset)
 
 
 def main() -> None:
@@ -79,6 +42,12 @@ def main() -> None:
 
     calibrate_parser = subparsers.add_parser("calibrate", help="Check model on the dataset at the provided path from CLI or config, default `assets/`.")
     calibrate_parser.add_argument("path", help="Genunie/Human-original dataset path", nargs="?", default=None)
+    calibrate_parser.add_argument("--model", choices=[repo for repo in negate_opt.model], default=negate_opt.model[0], help="Model to use (overrides config).")
+    train_parser = subparsers.add_parser(
+        "train", help="Train XGBoost model on wavelet features using the dataset in the provided path or `assets/`. The resulting model will be saved to disk."
+    )
+    train_parser.add_argument("path", help="Dataset path", nargs="?", default=None)
+    args = parser.parse_args()
 
     check_parser = subparsers.add_parser(
         "check",
@@ -97,6 +66,8 @@ def main() -> None:
                 dataset_location: Path | None = Path(args.path)
             else:
                 dataset_location: Path | None = None
+
+            setattr(negate_opt, "model", args.model)
             calibration(file_or_folder_path=dataset_location)
         case "check":
             if args.path is None:

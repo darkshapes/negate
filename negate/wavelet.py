@@ -19,8 +19,7 @@ class WaveletAnalyzer:
     """Extract wavelet energy features from images.
 
     Attributes:
-        cell_dim: Size of square cells for analysis.
-        resize_percent: Percent to resize images before celling.
+        patch_dim: Size of square cells for analysis.
         batch_size: Batch size for dataset processing (0 = no batching).
         alpha: Perturbation weight for HF(x) subtraction (0 < α < 1).
 
@@ -28,27 +27,25 @@ class WaveletAnalyzer:
         >>> import datasets as Datasets
         >>> from negate.datasets import generate_dataset
         >>> dataset = generate_dataset("path/to/images",label=0)
-        >>> analyzer = WaveletAnalyzer(cell_dim=16, resize_percent=1.0, batch_size=20, alpha:0.7)
+        >>> analyzer = WaveletAnalyzer(patch_dim=16, resize_percent=1.0, batch_size=20, alpha:0.7)
         >>> features: list[dict[str,NDArray]] = analyzer.decompose(dataset)
         >>> list(features["sensitivity])
     """
 
     def __init__(
         self,
-        cell_dim: int = negate_opt.cell_dim,
-        resize_percent: float = negate_opt.resize_pct,
+        patch_dim: int = negate_opt.patch_dim,
         batch_size: int = negate_opt.batch_size,
         dim_rescale: int = negate_opt.dim_rescale,
         alpha: float = negate_opt.alpha,
     ) -> None:
         """Initialize analyzer with configuration.\n
-        :param cell_dim: Dimension of square cells (default 224).
+        :param patch_dim: Dimension of square cells (default 224).
         :param resize_percent: Resize factor before celling (default 1.0, no resize).
         :param batch_size: Batch size for processing (0 disables batching).
         :param alpha: Perturbation weight (0 < α < 1) for HF(x) subtraction.
         """
 
-        self.resize_percent = resize_percent
         self.batch_size = batch_size
         self.alpha = alpha
 
@@ -57,11 +54,13 @@ class WaveletAnalyzer:
         self.model_dtype = getattr(torch, negate_opt.model_dtype, "float32")
         self.magnitude_sampling = negate_opt.magnitude_sampling
         self.dim_rescale = dim_rescale
-        self.cell_dim = cell_dim
+        self.patch_dim = patch_dim
         self._set_models()
 
     @torch.inference_mode()
-    def _set_models(self):
+    def _set_models(self, library: str | None = None):
+        lib = library or negate_opt.library
+
         """Create the model definitions for the class"""
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
@@ -106,9 +105,9 @@ class WaveletAnalyzer:
 
         b, c, h, w = tensor_patch.shape
 
-        zero_tensor = tensor_patch.unfold(2, self.cell_dim, self.cell_dim).unfold(3, self.cell_dim, self.cell_dim)
-        reshaped = zero_tensor.reshape([b, c, -1, self.cell_dim, self.cell_dim]).transpose(1, 2)
-        patches = reshaped.reshape([-1, c, self.cell_dim, self.cell_dim])
+        zero_tensor = tensor_patch.unfold(2, self.patch_dim, self.patch_dim).unfold(3, self.patch_dim, self.patch_dim)
+        reshaped = zero_tensor.reshape([b, c, -1, self.patch_dim, self.patch_dim]).transpose(1, 2)
+        patches = reshaped.reshape([-1, c, self.patch_dim, self.patch_dim])
 
         if patches.shape[0] == 0:
             empty = torch.tensor([], dtype=torch.float32, device=self.device)
@@ -162,37 +161,33 @@ class WaveletAnalyzer:
 
     @torch.inference_mode()
     def compute_sensitivity(self, original_images: Image.Image | list[Image.Image]) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        """Compute WaRPAD(x) sensitivity score following Choi12025- arXiv:2511.14030v1 methodology.\n
-        ```
-        1. Load and rescale to d_rescale (1344)
-        2. Partition into K×K patches of size patch_size
-        3. Extract features from original patch (Eq. 1 numerator)
-        4. Perturbed patch: x - α·HF(x)
-        5. Extract features from perturbed patch
-        6. Cosine similarity for this patch (Eq. 1)
-        7. Average of cosine similarity across all patches (Eq. 3)
-        = HFwav(x) from Eq 1: similarity between original and HF-perturbed version
-        ```
+        """Compute WaRPAD(x) sensitivity score following Choi12025 methodology.\n
         :param original_images: Single PIL Image or list of PIL Images.
-        :returns: Tuple of (sim_min, sim_max, idx_min, idx_max) arrays per image.
+        :returns: Tuple of (sim_min, sim_max, idx_min, idx_max) per image.
         """
-
         rescale = negate_opt.dim_rescale
         normalize = T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
         transform: T.Compose = T.Compose([T.Resize((rescale, rescale), interpolation=Image.BICUBIC), T.ToTensor(), normalize])  # type: ignore
 
         if isinstance(original_images, list):
-            tensor_patches: Tensor = torch.stack([transform(image) for image in original_images]).to(self.device)
+            batch_size = len(original_images)
+            tensor_patches: Tensor = torch.stack([transform(image) for image in original_images]).to(self.device)  # type: ignore
         else:
-            tensor_patches = transform(original_images).unsqueeze(0).to(self.device)
+            batch_size = 1
+            tensor_patches = transform(original_images).unsqueeze(0).to(self.device)  # type: ignore
 
         patch_smin, patch_smax, patch_imin, patch_imax = self.metric(tensor_patches)
-        return (
-            patch_smin.cpu().numpy(),
-            patch_smax.cpu().numpy(),
-            patch_imin.cpu().numpy(),
-            patch_imax.cpu().numpy(),
-        )
+
+        # Ensure all outputs are batched (length == batch_size)
+        # metric() returns per-patch stats; for batch input, we need per-image stats
+        # Current metric() returns scalar for whole batch, but we want per-image stats
+        # So reshape/expand as needed
+        sim_min = np.full(batch_size, float(patch_smin.item()) if patch_smin.numel() == 1 else patch_smin.cpu().numpy().flatten()[0])
+        sim_max = np.full(batch_size, float(patch_smax.item()) if patch_smax.numel() == 1 else patch_smax.cpu().numpy().flatten()[0])
+        idx_min = np.full(batch_size, int(patch_imin.item()) if patch_imin.numel() == 1 else patch_imin.cpu().numpy().flatten()[0])
+        idx_max = np.full(batch_size, int(patch_imax.item()) if patch_imax.numel() == 1 else patch_imax.cpu().numpy().flatten()[0])
+
+        return sim_min, sim_max, idx_min, idx_max
 
     def decompose(self, dataset: Dataset | IterableDataset) -> Dataset:
         """Generate feature dataset from wavelet sensitivity scores.\n
@@ -204,22 +199,13 @@ class WaveletAnalyzer:
             kwargs["batched"] = True
             kwargs["batch_size"] = self.batch_size
 
-        def squeeze_or_item(val):
-            """Convert (1,) to scalar, leave arrays as-is."""
-            if hasattr(val, "__len__") and len(val) == 1:
-                return val[0]
-            return val
-
         def process_batch(batch):
             images = batch["image"]
             sense = self.compute_sensitivity(images)
-            # Each element is shape (1,) - squeeze to scalar per image
-            sim_min = np.array([squeeze_or_item(x) for x in sense[0].tololist()])
-            sim_max = np.array([squeeze_or_item(x) for x in sense[1].tololist()])
 
             result = {
-                "sim_min": sim_min,
-                "sim_max": sim_max,
+                "sim_min": np.array(sense[0]),
+                "sim_max": np.array(sense[1]),
                 "idx_min": np.array(sense[2], dtype=int),
                 "idx_max": np.array(sense[3], dtype=int),
             }

@@ -7,7 +7,7 @@ import numpy as np
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 
-from negate import negate_opt
+from negate import negate_d
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
@@ -83,25 +83,25 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
     synthetic_input_folder = Path(".datasets")
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
-    if negate_opt.synthetic_data is not None:
-        print(f"Using remote images from {negate_opt.synthetic_data}")
-        for data_repo in negate_opt.synthetic_data:
+    if negate_d.synthetic_data is not None:
+        print(f"Using remote images from {negate_d.synthetic_data}")
+        for data_repo in negate_d.synthetic_data:
             synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
-    if negate_opt.synthetic_local is not None:
-        print(f"Using local images from {negate_opt.synthetic_local}")
-        for data_folder in negate_opt.synthetic_local:
+    if negate_d.synthetic_local is not None:
+        print(f"Using local images from {negate_d.synthetic_local}")
+        for data_folder in negate_d.synthetic_local:
             synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
     genuine_input_folder = Path("assets")
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
-    if negate_opt.genuine_data is not None:
-        print(f"Using remote images from {negate_opt.genuine_data}")
-        for data_repo in negate_opt.genuine_data:
+    if negate_d.genuine_data is not None:
+        print(f"Using remote images from {negate_d.genuine_data}")
+        for data_repo in negate_d.genuine_data:
             genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
-    if negate_opt.genuine_local is not None:
-        print(f"Using local images from {negate_opt.genuine_local}")
-        for data_folder in negate_opt.genuine_local:
+    if negate_d.genuine_local is not None:
+        print(f"Using local images from {negate_d.genuine_local}")
+        for data_folder in negate_d.genuine_local:
             genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 
     dataset = concatenate_datasets([*genuine_repos, *synthetic_repos])
