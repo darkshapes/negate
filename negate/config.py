@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
-# <!-- // /*  d a r k s h a p e s */ -->
+# <!-- // /*  d a r k s h a pes */ -->
 
 import tomllib
 from pathlib import Path
 from typing import NamedTuple
+from typing import Iterator
 
 
 class NegateHyperParam(NamedTuple):
@@ -43,11 +44,9 @@ class NegateConfig(NamedTuple):
     :param batch_size: Batch size for processing.
     :param dim_rescale: Dimension for rescaling.
     :param feat_ext_path: Folder location of the feature extractor
-    :param library: Library to use for feature extraction.
     :param load_onnx: Use ONNX for inference.
     :param magnitude_sampling: Enable magnitude sampling.
     :param model_dtype: Data type for model computation.
-    :param model: Model name for feature extraction.
     :param numpy_dtype: Data type for NumPy operations.
     :param patch_dim: Patch dimension for residuals."""
 
@@ -55,11 +54,9 @@ class NegateConfig(NamedTuple):
     batch_size: int
     dim_rescale: int
     feat_ext_path: str
-    library: str
     load_onnx: bool
     magnitude_sampling: bool
     model_dtype: str
-    model: str
     numpy_dtype: str
     patch_dim: int
 
@@ -79,17 +76,76 @@ class NegateDataPaths(NamedTuple):
     synthetic_local: list[str] | None
 
 
-def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths]:
+class NegateModelConfig:
+    """Model configuration with library auto-selection.\n
+    :param _data: Raw config data.
+    :param _default_lib: Default library name."""
+
+    def __init__(self, data: dict, default: str = "timm"):
+        self._model_library_map = data
+        self._default = default
+
+    @property
+    def libraries(self) -> list[str]:
+        """All available library names."""
+        return list(self._model_library_map.keys())
+
+    @property
+    def list_models(self) -> Iterator[str]:
+        """All available model names."""
+        return (y for _x, y in self._model_library_map["library"].items())
+
+    def models_for_library(self, lib: str | None = None) -> list[str]:
+        """Get models for a specific library, or auto-select if None."""
+        lib_name = lib or self.auto_library
+        return self._model_library_map.get(lib_name, [])
+
+    def library_for_model(self, model_name: str) -> str | None:
+        """Find the library that contains the given model.\n
+        :param model_name: The model identifier to look up.
+        :return: Library name or None if not found."""
+        for lib, models in self._model_library_map["library"].items():
+            if isinstance(models, list):
+                if model_name in models:
+                    return lib
+            elif models == model_name:
+                return lib
+        return None
+
+    @property
+    def auto_library(self) -> str:
+        """Auto-selected library from first configured entry."""
+        for lib in ("timm", "openclip", "transformers"):
+            if lib in self._model_library_map and self._model_library_map[lib]:
+                return lib
+        return self._default
+
+    @property
+    def auto_model(self) -> str | None:
+        """First model from auto-selected library."""
+        models = self.list_models
+        return next(iter(models), None)
+
+
+def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig]:
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
     config_path = Path(__file__).parent.parent / "config" / "config.toml"
     with open(config_path, "rb") as config_file:
         data = tomllib.load(config_file)
+
+    models = data.pop("model")
     train_cfg = data.pop("train", {})
     dataset_cfg = data.pop("datasets", {})
+    library_cfg = data.pop("library", {})
 
-    return (NegateConfig(**data), NegateHyperParam(**train_cfg), NegateDataPaths(**dataset_cfg))
+    return (
+        NegateConfig(**data),
+        NegateHyperParam(**train_cfg),
+        NegateDataPaths(**dataset_cfg),
+        NegateModelConfig(data=models | library_cfg),
+    )
 
 
-negate_options, negate_hyperparam, negate_data = load_config_options()
+negate_options, hyperparam_config, data_paths, model_config = load_config_options()

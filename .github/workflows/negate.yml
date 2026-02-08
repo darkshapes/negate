@@ -29,6 +29,6 @@ jobs:
           uv python install 3.13
           uv python pin 3.13
           uv sync --group dev
-          uv venv .venv
+          uv venv --clear .venv
           source .venv/bin/activate
           pytest -v

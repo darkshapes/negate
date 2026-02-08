@@ -126,7 +126,7 @@ def show_statistics(features_dataset: Dataset) -> None:
     """)
 
 
-def compare_decompositions(features_dataset: Dataset) -> None:
+def compare_decompositions(model_name, features_dataset: Dataset) -> None:
     """Plot wavelet sensitivity distributions.\n
     :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
         [label, sim_min, sim_max, idx_min, idx_max]."""
@@ -147,9 +147,8 @@ def compare_decompositions(features_dataset: Dataset) -> None:
         )
         .transform_density("sensitivity", as_=["sensitivity", "density"], groupby=["label"])
         .transform_filter((alt.datum.sensitivity <= 1.0) & (alt.datum.sensitivity >= -1.0))
-        .properties(title="Sensitivity Distribution by Label", width=600, height=300)
+        .properties(title=f"Sensitivity Distribution by Label\nModel: {model_name}", width=600, height=300)
     )
-
     chart_file = str(result_path / f"sensitivity_plot_{timestamp}.html")
     chart.save(chart_file)
     # chart.display()

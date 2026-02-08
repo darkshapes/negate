@@ -12,7 +12,7 @@ from PIL import Image
 from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 
-from negate import negate_opt
+from negate import negate_opt, model_config
 
 
 class WaveletAnalyzer:
@@ -34,6 +34,7 @@ class WaveletAnalyzer:
 
     def __init__(
         self,
+        model_name: str,
         patch_dim: int = negate_opt.patch_dim,
         batch_size: int = negate_opt.batch_size,
         dim_rescale: int = negate_opt.dim_rescale,
@@ -49,6 +50,7 @@ class WaveletAnalyzer:
         self.batch_size = batch_size
         self.alpha = alpha
 
+        self.model_name = model_name
         self.device = torch.device("cpu")
         self.np_dtype = getattr(np, negate_opt.numpy_dtype, "float32")
         self.model_dtype = getattr(torch, negate_opt.model_dtype, "float32")
@@ -58,39 +60,40 @@ class WaveletAnalyzer:
         self._set_models()
 
     @torch.inference_mode()
-    def _set_models(self, library: str | None = None):
-        lib = library or negate_opt.library
-
-        """Create the model definitions for the class"""
+    def _set_models(self):
+        self.library = model_config.library_for_model(self.model_name)
         if torch.cuda.is_available():
             self.device = torch.device("cuda")
         elif torch.mps.is_available():
             self.device = torch.device("mps")
 
-        match negate_opt.library:
+        match self.library:
             case "openclip":
                 import open_clip
 
-                self.model, _, self.preprocess = open_clip.create_model_and_transforms(f"hf-hub:{negate_opt.model}", device=self.device)
+                self.model, _, self.preprocess = open_clip.create_model_and_transforms(f"hf-hub:{self.model_name}", device=self.device)
                 self.model = self.model.eval()
             case "timm":
                 import timm
 
                 model = timm.create_model(
-                    negate_opt.model,
+                    self.model_name,
                     pretrained=True,
                     features_only=True,
                 ).to(self.device)
-                model = model.eval()
+                self.model = model.eval()
             case "transformers":
                 from transformers import AutoModel, AutoProcessor
 
-                self.processor = AutoProcessor.from_pretrained(negate_opt.model)
+                self.processor = AutoProcessor.from_pretrained(self.model_name)
                 self.model = AutoModel.from_pretrained(
-                    negate_opt.model,
+                    self.model_name,
                     device_map="auto",
                     dtype=self.model_dtype,
                 ).to(self.device)
+            case _:
+                error = f"{self.library} : Unsupported library"
+                raise NotImplementedError(error)
 
     @torch.inference_mode()
     def metric(self, tensor_patch: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -121,6 +124,11 @@ class WaveletAnalyzer:
         outputs = self.extract_features(patches.to(self.device))
         perturbed_outputs = self.extract_features(perturbed_patches.to(self.device))
 
+        if isinstance(outputs, list):
+            outputs = torch.cat(outputs) if all(isinstance(x, Tensor) for x in outputs) else outputs[0]
+        if isinstance(perturbed_outputs, list):
+            perturbed_outputs = torch.cat(perturbed_outputs) if all(isinstance(x, Tensor) for x in perturbed_outputs) else perturbed_outputs[0]
+
         similarity: Tensor = torch.nn.functional.cosine_similarity(outputs, perturbed_outputs, dim=-1)  # type: ignore
         # similarity = similarity.unsqueeze(1)
 
@@ -138,13 +146,13 @@ class WaveletAnalyzer:
         :returns: Numpy array of extracted feature vector(s).
         """
 
-        match negate_opt.library:
+        match self.library:
             case "timm":
                 import timm
 
                 data_config = timm.data.resolve_model_data_config(self.model)  # type: ignore
                 transforms = timm.data.create_transform(**data_config, is_training=False)  # type: ignore
-                image_features = self.model(transforms(image).unsqueeze(0))
+                image_features = self.model(transforms(image))
 
             case "openclip":
                 image_features = self.model.encode_image(image)  # type: ignore
@@ -155,7 +163,7 @@ class WaveletAnalyzer:
                 image_features.pooler_output
 
             case _:
-                raise NotImplementedError(f"{negate_opt.library} : Unsupported library")
+                raise NotImplementedError("Unsupported model configuration")
 
         return image_features
 

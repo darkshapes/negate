@@ -7,9 +7,7 @@ patch_dim = 224                        # Patch width for residuals (smaller is f
 alpha = 0.5                            # strength of perturbation
 model_dtype = "float32"                # decimal precision ("float64", "float32","bfloat16","float16", lower = less mem and accuracy)
 numpy_dtype = "float32"                # decimal precision ("float64", "float32","float16", lower = slightly less mem and accuracy)
-library = "openclip"                   # inference library: timm, openclip, transformers
 load_onnx = false                      # Use trained ONNX for inference : True → ONNX, False → native XGBoost
-model = ["timm/vit_base_patch16_dinov3.lvd1689m","timm/MobileCLIP2-S4-OpenCLIP","facebook/dinov3-vitl16-pretrain-sat493m"] # model to use for feature extraction
 magnitude_sampling = false             # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
 
 [datasets]
@@ -35,4 +33,11 @@ top_k = 3                          # Highest percent threshold of patch differen
 eval_metric = [
     "logloss", "aucpr",
     ] # Evaluation metrics
-#cache_features = true                                 # enable <chud> mode
+
+[model.library]
+timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]
+openclip = ["timm/MobileCLIP2-S4-OpenCLIP"]
+transformers = ["facebook/dinov3-vitl16-pretrain-sat493m"]
+
+[library]
+default = "timm"

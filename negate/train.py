@@ -15,7 +15,7 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from xgboost import Booster
 
-from negate import negate_hp
+from negate.config import hyperparam_config as hyper_param
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
@@ -32,14 +32,14 @@ def generate_datestamp_path(file_name) -> str:
 class TrainingParameters:
     """Container holding main model parameters"""
 
-    seed: int = negate_hp.seed
-    colsample_bytree: float = negate_hp.colsample_bytree
-    eval_metric: list = field(default_factory=lambda: negate_hp.eval_metric)
-    learning_rate: float = negate_hp.learning_rate
-    max_depth: int = negate_hp.max_depth
-    objective: str = negate_hp.objective
-    scale_pos_weight: float | None = negate_hp.scale_pos_weight
-    subsample: float = negate_hp.subsample
+    seed: int = hyper_param.seed
+    colsample_bytree: float = hyper_param.colsample_bytree
+    eval_metric: list = field(default_factory=lambda: hyper_param.eval_metric)
+    learning_rate: float = hyper_param.learning_rate
+    max_depth: int = hyper_param.max_depth
+    objective: str = hyper_param.objective
+    scale_pos_weight: float | None = hyper_param.scale_pos_weight
+    subsample: float = hyper_param.subsample
 
 
 @dataclass
