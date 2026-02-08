@@ -30,8 +30,7 @@ def load_remote_dataset(repo: str, folder_path: Path, label: int, split="train")
     :param label: The default label to assign to all images in the dataset
     :return: Dataset with a ``label`` column added and NaNs removed."""
 
-    print(f"Using remote images from {repo}")
-    remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split=split).cast_column("image", Image(decode=True))
+    remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split=split).cast_column("image", Image(mode="RGB", decode=True))
     remote_dataset = remote_dataset.add_column("label", [label] * len(remote_dataset))
     remote_dataset = detect_nans(remote_dataset)
     return remote_dataset
@@ -43,12 +42,10 @@ def generate_dataset(input_path: Path | list[dict[str, PillowImage.Image]], labe
     :return: Dataset containing images and labels with NaNs removed."""
 
     if isinstance(input_path, Path):
-        print(f"Using local images from {input_path}")
-
         validated_paths = []
-
         valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
         assert isinstance(input_path, Path)
+
         if input_path.is_dir():
             for img_path in input_path.iterdir():
                 if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
@@ -68,7 +65,7 @@ def generate_dataset(input_path: Path | list[dict[str, PillowImage.Image]], labe
     dataset = Dataset.from_list(validated_paths)  # NaN Prevention: decode separately
 
     try:  # Fallback: keep the raw bytes if decoding fails.
-        dataset = dataset.cast_column("image", Image(decode=True))
+        dataset = dataset.cast_column("image", Image(mode="RGB", decode=True))
     except Exception:
         dataset = dataset.cast_column("image", Image())
 
@@ -87,9 +84,11 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
     if negate_opt.synthetic_data is not None:
+        print(f"Using remote images from {negate_opt.synthetic_data}")
         for data_repo in negate_opt.synthetic_data:
             synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
     if negate_opt.synthetic_local is not None:
+        print(f"Using local images from {negate_opt.synthetic_local}")
         for data_folder in negate_opt.synthetic_local:
             synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
@@ -97,9 +96,11 @@ def build_datasets(input_folder: Path | None = None) -> Dataset:
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
     if negate_opt.genuine_data is not None:
+        print(f"Using remote images from {negate_opt.genuine_data}")
         for data_repo in negate_opt.genuine_data:
             genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
     if negate_opt.genuine_local is not None:
+        print(f"Using local images from {negate_opt.genuine_local}")
         for data_folder in negate_opt.genuine_local:
             genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 

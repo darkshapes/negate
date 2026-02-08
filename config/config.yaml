@@ -5,13 +5,13 @@ resize_pct: 0.9             # Image size after resize perturbation (above or bel
 dim_rescale: 1344           #fixed dimension (overrides resize_pct)
 cell_dim: 224               # Patch width for residuals (smaller is faster)
 alpha: 0.5                  # strength of perturbation
-model_dtype: "bfloat16"      # decimal precision ("float64", "float32","bfloat16","float16", lower = less mem and accuracy)
+model_dtype: "float32"      # decimal precision ("float64", "float32","bfloat16","float16", lower = less mem and accuracy)
 numpy_dtype: "float32"         # decimal precision ("float64", "float32","float16", lower = slightly less mem and accuracy)
 model_path: null            # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
 library: "openclip"         # inference library: timm, openclip, transformers
 model: "timm/MobileCLIP2-S4-OpenCLIP" #"timm/vit_base_patch16_dinov3.lvd1689m" "facebook/dinov3-vitl16-pretrain-sat493m" # model to use for feature extraction
 evaluation_data: ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data: ["KarimSayed/cat-breed-fiass-index"]
+genuine_data: ["KarimSayed/cat-breed-fiass-index",]
 genuine_local: ["assets","/Users/e6d64/Downloads/real_train"]
-synthetic_data: ["exdysa/nano-banana-pro-generated-1k-clone"]
+synthetic_data: ["exdysa/nano-banana-pro-generated-1k-clone",ash12321/seedream-4.5-generated-2k]
 synthetic_local: ["/Users/e6d64/Downloads/phantomDiffusionS3FinalImages/","/Users/e6d64/Downloads/syn_train"]
