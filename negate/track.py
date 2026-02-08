@@ -1,31 +1,36 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from negate import TrainResult, VAEModel, get_time, generate_datestamp_path, model_path
-import matplotlib.pyplot as plt
+import json
+from datetime import datetime
+from pathlib import Path
+
+import altair as alt
+import numpy as np
+from datasets import Dataset
+from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
+
+from negate.train import TrainResult
+
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+result_path = Path(__file__).parent.parent / "results" / timestamp
 
 
-def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
-    """Print diagnostics and plots for a trained model.\n
+def accuracy(train_result: TrainResult):
+    """Print diagnostics and plots for a trained model.
+
     :param train_result: Result object from training."""
-    from pathlib import Path
-    import shutil
-    import json
-    from pprint import pprint
 
-    import numpy as np
-    from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
-
-    X_train = train_result.X_train
-    pca = train_result.pca
-    d_matrix_test = train_result.d_matrix_test
     model = train_result.model
-    scale_pos_weight = train_result.scale_pos_weight
-    X_train_pca = train_result.X_train_pca
-    y_test = train_result.y_test
-    labels = train_result.labels
+    d_matrix_test = train_result.d_matrix_test
     feature_matrix = train_result.feature_matrix
+    labels = train_result.labels
+    pca = train_result.pca
     seed = train_result.seed
+    y_test = train_result.y_test
+    X_train = train_result.X_train
+    X_train_pca = train_result.X_train_pca
+    scale_pos_weight = train_result.scale_pos_weight
 
     y_pred_proba = model.predict(d_matrix_test)
     y_pred = (y_pred_proba > 0.5).astype(int)
@@ -34,7 +39,6 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     roc_auc = roc_auc_score(y_test, y_pred_proba)
     f1_macro = f1_score(y_test, y_pred, average="macro")
     f1_weighted = f1_score(y_test, y_pred, average="weighted")
-    timestamp = get_time()
 
     results = {
         "accuracy": accuracy,
@@ -60,15 +64,13 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
         "scale_pos_weight": scale_pos_weight,
         "seed": seed,
         "timestamp": timestamp,
-        "vae_type": vae_type.value,
     }
 
-    pprint(results)
-    results_file = generate_datestamp_path("results.json")
+    result_path.mkdir(parents=True, exist_ok=True)
+    results_file = str(result_path / f"results_{timestamp}.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
-    shutil.copy(results_file, model_path / Path(results_file).name)  # type: ignore no overloads
     separator = lambda: print("=" * 60)
     separator()
     print("CLASSIFICATION RESULTS")
@@ -76,99 +78,79 @@ def in_console(train_result: TrainResult, vae_type: VAEModel) -> None:
     print(classification_report(y_test, y_pred, target_names=["Real", "Synthetic"]))
 
 
-def on_graph(train_result: TrainResult) -> None:
-    """Save and show PCA variance plots for a trained model.\n
-    :param train_result: Result object from training."""
-    import numpy as np
-    from numpy.typing import NDArray
-    from sklearn.metrics import confusion_matrix
-    import seaborn as sns
+def _avg_key(ds: Dataset, key: str) -> float:
+    return float(np.mean(ds[key]))
 
-    X_train: NDArray = train_result.X_train
-    X_train_pca = train_result.X_train_pca
-    labels = train_result.labels
-    y_plot = labels[: X_train.shape[0]]
-    y_pred_proba = train_result.model.predict(train_result.d_matrix_test)
-    y_pred = (y_pred_proba > 0.5).astype(int)
 
-    pca = train_result.pca
+def show_statistics(features_dataset: Dataset) -> None:
+    """Print similarity statistics for genuine and synthetic features.
 
-    # Create a single figure with 6 subplots (2 rows × 3 columns)
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
-    ax_cum = axes[0, 0]
-    ax_bar = axes[0, 1]
-    ax_conf = axes[0, 2]
-    ax_orig = axes[1, 0]
-    ax_pca = axes[1, 1]
-    ax_heat = axes[1, 2]
+    :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
+        [label, sim_min, sim_max, idx_min, idx_max]."""
 
-    # 1. Cumulative explained variance
-    ax_cum.plot(np.cumsum(pca.explained_variance_ratio_), color="aqua")
-    ax_cum.set_xlabel("Number of Components")
-    ax_cum.set_ylabel("Cumulative Explained Variance")
-    ax_cum.set_title("PCA Explained Variance")
-    ax_cum.grid(True)
+    genuine_dataset = features_dataset.filter(lambda x: x["label"] == 0, batched=False)
+    synthetic_dataset = features_dataset.filter(lambda x: x["label"] == 1, batched=False)
 
-    # 2. First 20 components
-    ax_bar.bar(
-        range(min(20, len(pca.explained_variance_ratio_))),
-        pca.explained_variance_ratio_[:20],
-        color="aqua",
+    for key in ("sim_min", "sim_max", "idx_min", "idx_max"):
+        genuine_avg_similarity = float(np.mean(genuine_dataset[key]))
+        synthetic_avg_similarity = float(np.mean(synthetic_dataset[key]))
+        print(f"""
+        Average {key} (genuine): {genuine_avg_similarity:.4f}
+        Average {key} (synthetic): {synthetic_avg_similarity:.4f}
+        """)
+
+    gen_sim = np.array(genuine_dataset["sim_max"])
+    gen_idx = np.array(genuine_dataset["idx_max"])
+    syn_sim = np.array(synthetic_dataset["sim_max"])
+    syn_idx = np.array(synthetic_dataset["idx_max"])
+
+    gen_diff = float(np.mean(gen_sim - gen_idx))
+    syn_diff = float(np.mean(syn_sim - syn_idx))
+
+    print(f"""
+    Average (sim_max - idx_max) genuine: {gen_diff:.4f}
+    Average (sim_max - idx_max) synthetic: {syn_diff:.4f}
+    """)
+
+    def overall_avg(ds: Dataset) -> float:
+        idx = (_avg_key(ds, "idx_min") + _avg_key(ds, "idx_max")) / 2
+        sim = (_avg_key(ds, "sim_min") + _avg_key(ds, "sim_max")) / 2
+        return (idx + sim) / 2
+
+    g_avg = overall_avg(genuine_dataset)
+    s_avg = overall_avg(synthetic_dataset)
+
+    print(f"""
+    Overall average genuine cosine similarity: {g_avg:.4f}
+    Overall average synthetic cosine similarity: {s_avg:.4f}
+    Overall average cosine similarity: {(g_avg + s_avg) / 2:.4f}
+    """)
+
+
+def compare_decompositions(model_name, features_dataset: Dataset) -> None:
+    """Plot wavelet sensitivity distributions.\n
+    :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
+        [label, sim_min, sim_max, idx_min, idx_max]."""
+
+    data_frame = features_dataset.to_pandas()
+
+    # Derive sensitivity as the average of min/max similarity bounds
+    data_frame["sensitivity"] = (data_frame["sim_min"].values + data_frame["sim_max"].values) / 2  # type: ignore
+    data_frame["index_data"] = (data_frame["idx_min"].values + data_frame["idx_max"].values) / 2  # type: ignore
+
+    chart = (
+        alt.Chart(data_frame)
+        .mark_line(opacity=0.7)
+        .encode(
+            x=alt.X("sensitivity:Q", title="Cosine Similarity"),
+            y=alt.Y("density:Q", title="Density"),
+            color=alt.Color("label:N"),
+        )
+        .transform_density("sensitivity", as_=["sensitivity", "density"], groupby=["label"])
+        .transform_filter((alt.datum.sensitivity <= 1.0) & (alt.datum.sensitivity >= -1.0))
+        .properties(title=f"Sensitivity by Label\nModel: {model_name}", width=600, height=300)
     )
-    ax_bar.set_xlabel("Component")
-    ax_bar.set_ylabel("Explained Variance Ratio")
-    ax_bar.set_title("First 20 Components")
-
-    # 3. Confusion matrix
-    cm = confusion_matrix(train_result.y_test, y_pred)
-    cax = ax_conf.imshow(cm, interpolation="nearest", cmap="Reds")
-    ax_conf.set_xticks(np.arange(cm.shape[1]))
-    ax_conf.set_yticks(np.arange(cm.shape[0]))
-    ax_conf.set_xticklabels(["Real", "Synthetic"])
-    ax_conf.set_yticklabels(["Real", "Synthetic"])
-    plt.setp(ax_conf.get_xticklabels(), rotation=45, ha="right")
-    for i in range(cm.shape[0]):
-        for j in range(cm.shape[1]):
-            ax_conf.text(j, i, cm[i, j], ha="center", va="center", color="black")
-    ax_conf.set_xlabel("Predicted")
-    ax_conf.set_ylabel("Actual")
-    ax_conf.set_title("Confusion Matrix")
-    fig.colorbar(cax, ax=ax_conf)
-
-    # 4. Original data scatter
-    ax_orig.scatter(X_train[:, 0], X_train[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
-    ax_orig.set_xlabel("Feature 1")
-    ax_orig.set_ylabel("Feature 2")
-    ax_orig.set_title("Original Data (First Two Features)")
-    # ax_orig.colorbar(label="Prediction")
-
-    # 5. PCA transformed scatter
-    ax_pca.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")
-    ax_pca.set_xlabel("Principal Component 1")
-    ax_pca.set_ylabel("Principal Component 2")
-    ax_pca.set_title("PCA Transformed Data")
-    # ax_pca.colorbar(label="Prediction")
-
-    # 6. Correlation heatmap
-    corr = np.corrcoef(X_train_pca, rowvar=False)
-    upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
-    lower_triangle = corr[np.tril_indices_from(corr, k=-1)]
-    vmin = lower_triangle.min()
-    vmax = lower_triangle.max()
-    cmap = sns.diverging_palette(20, 230, as_cmap=True)
-    sns.heatmap(
-        corr,
-        mask=upper_triangle_mask,
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        center=0,
-        square=True,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.5},
-        ax=ax_heat,
-    )
-    ax_heat.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
-
-    plt.tight_layout(pad=0.5)
-    plt.savefig(generate_datestamp_path("combined_plots.png"))
+    result_path.mkdir(parents=True, exist_ok=True)
+    chart_file = str(result_path / f"sensitivity_plot_{timestamp}.html")
+    chart.save(chart_file)
+    # chart.display()

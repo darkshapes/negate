@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+import hashlib
+import os
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 
+import numpy as np
 from datasets import Dataset
+from huggingface_hub import snapshot_download
+from huggingface_hub.errors import LocalEntryNotFoundError
 from PIL.Image import Image
 
 from negate.config import negate_options as negate_opt
@@ -21,6 +26,7 @@ class VAEModel(str, Enum):
     FLUX1_FP32 = "Tongyi-MAI/Z-Image"  # zimage 'accuracy': 0.9411764705882353,
     FLUX1_FP16 = "Freepik/F-Lite-Texture"  # flite 'accuracy': 0.9509803921568627,
     MITSUA_FP16 = "exdysa/mitsua-vae-SAFETENSORS"  # mitsua 'accuracy': 0.9509803921568627,
+    NO_VAE = "None"
 
 
 @dataclass
@@ -37,6 +43,7 @@ MODEL_MAP = {
     VAEModel.FLUX2_FP16: VAEInfo(VAEModel.FLUX2_FP16, "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"),
     VAEModel.SANA_FP16: VAEInfo(VAEModel.SANA_FP16, "autoencoders.autoencoder_dc.AutoencoderDC"),
     VAEModel.SANA_FP32: VAEInfo(VAEModel.SANA_FP32, "autoencoders.autoencoder_dc.AutoencoderDC"),
+    VAEModel.NO_VAE: VAEInfo(VAEModel.NO_VAE, "None"),
 }
 
 
@@ -54,7 +61,7 @@ class FeatureExtractor:
 
     transform: T.Compose = T.Compose(
         [
-            T.CenterCrop((512, 512)),
+            T.CenterCrop((negate_opt.patch_size, negate_opt.patch_size)),
             T.ToTensor(),
             T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ]
@@ -72,17 +79,13 @@ class FeatureExtractor:
         self.device = device.value
         self.dtype = dtype
         self.model: VAEInfo = MODEL_MAP[vae_type]
-        if not hasattr(self, "vae"):
+        if not hasattr(self, "vae") and vae_type != VAEModel.NO_VAE:
             self.create_vae()
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
 
-        import os
-
         from diffusers.models import autoencoders
-        from huggingface_hub import snapshot_download
-        from huggingface_hub.errors import LocalEntryNotFoundError
 
         if negate_opt.vae_tiling:
             self.vae.enable_tiling()
@@ -101,18 +104,10 @@ class FeatureExtractor:
         vae_model.eval()
         self.vae = vae_model
 
-    def _extract_generic(self, batch: "torch.Tensor"):
-        """Encode with standard Diffusers VAE and return mean latent.\n
-        :param batch: Tensor of image + patches.
-        :return: NumPy mean latent."""
-
-        latent = self.vae.encode(batch).latent_dist.sample()  # type: ignore
-        return latent.mean(dim=0).cpu().float().numpy()
-
-    def _extract_special(self, batch: "torch.Tensor", image: Image):
+    def _extract_special(self, batch: torch.Tensor, image: Image):
         """Handle SANA and AuraEqui models.\n
         :param batch: Tensor of image + patches.
-        :param img: Original PIL image.
+        :param img: source PIL image.
         :return: NumPy mean latent."""
 
         import torch
@@ -126,34 +121,53 @@ class FeatureExtractor:
         params = torch.cat([mean, logvar], dim=1)
         dist = DiagonalGaussianDistribution(params)
         sample = dist.sample()
-        return sample.mean(dim=0).cpu().float().numpy()
+        return sample  # .mean(dim=0).cpu().float().numpy()
 
     def batch_extract(self, dataset: Dataset):
-        """Extract VAE features from a batch of images.
+        """Extract VAE features from a batch of images then use spectral contrast as divergence metric
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
 
         import torch
 
-        assert self.vae is not None
         features_list = []
-        patch_stack = []
 
         for image in dataset["image"]:
+            # reset patch buffer for each image
+            patch_buf = []
+
             rgb = image.convert("RGB")
             col = self.transform(rgb)
+
             for patches in self.residual_transform.crop_select(image):
-                patch_stack.append(self.transform(patches.convert("RGB")))
+                patch_buf.append(self.transform(patches.convert("RGB")))
 
-            batch = torch.stack([col, *patch_stack]).to(self.device, self.dtype)
-            with torch.no_grad():
-                match self.model.enum:
-                    case VAEModel.SANA_FP32 | VAEModel.SANA_FP16:
-                        mean_latent = self._extract_special(batch, image)
-                    case _:
-                        mean_latent = self._extract_generic(batch)
+            features_latent = torch.stack([*patch_buf, col]).to(self.device, self.dtype)
 
-            features_list.append(mean_latent.flatten())
+            mean_feat = features_latent.mean(dim=0).cpu().float().numpy()
+            mean_feat = mean_feat.flatten().reshape(-1, 1)
+            if not self.model.enum == VAEModel.NO_VAE:
+                with torch.no_grad():
+                    match self.model.enum:
+                        case VAEModel.SANA_FP32 | VAEModel.SANA_FP16:
+                            pass
+                            # features = self._extract_special(feat_lat, image)
+                        case _:
+                            features_latent = self.vae.encode(features_latent).latent_dist.sample()
+                            features = self.vae.decode(features_latent, return_dict=False)[0]
+
+            # mean_lat = mean_lat.flatten()
+            # mean_feat = features.mean(dim=0)  # shape: C × H × W
+
+            # spectral masks on 2‑D image
+            high_mask, fourier_shift = self.residual_transform.masked_spectral(mean_feat)
+            low_mask = ~high_mask
+            low_magnitude = np.abs(fourier_shift[low_mask])
+            high_magnitude = np.abs(fourier_shift[high_mask])
+
+            div = float(abs(np.mean(high_magnitude) - np.mean(low_magnitude)))
+            # div = float(abs(np.mean(mean_patch) - np.mean(mean_lat)))
+            features_list.append(div)
 
         return {"features": features_list}
 
@@ -188,8 +202,6 @@ def feature_cache(dataset: Dataset, vae_type: VAEModel) -> Path:
     :param vae_type: The VAE model typeselectedfor feature extraction.
     :returns: Location to cache results of feature extraction"""
 
-    import hashlib
-
     cache_dir = Path(".cache/features")  # <chud> was here
     cache_dir.mkdir(parents=True, exist_ok=True)
 
@@ -204,7 +216,7 @@ def feature_cache(dataset: Dataset, vae_type: VAEModel) -> Path:
     return cache_file
 
 
-def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
+def features(dataset: Dataset, vae_type: VAEModel, label=True) -> Dataset:
     """Generate a feature dataset from images.\n
     :param dataset: Dataset containing images.
     :param vae_type: VAE model type for feature extraction.
@@ -231,6 +243,9 @@ def features(dataset: Dataset, vae_type: VAEModel) -> Dataset:
             desc="Extracting features...",
             **kwargs,
         )
-    features_dataset.set_format(type="numpy", columns=["features", "label"])
+    columns = ["features"]
+    if label:
+        columns.append("label")
+    features_dataset.set_format(type="numpy", columns=columns)
 
     return features_dataset

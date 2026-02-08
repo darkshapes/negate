@@ -6,12 +6,16 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import xgboost as xgb
 from datasets import Dataset
+from numpy.random import default_rng
 from numpy.typing import NDArray
 from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
 from xgboost import Booster
 
-from negate.config import negate_options as negate_opt
+from negate.config import hyperparam_config as hyper_param
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
@@ -28,14 +32,14 @@ def generate_datestamp_path(file_name) -> str:
 class TrainingParameters:
     """Container holding main model parameters"""
 
-    seed: int = negate_opt.seed
-    colsample_bytree: float = negate_opt.colsample_bytree
-    eval_metric: list = field(default_factory=lambda: negate_opt.eval_metric)
-    learning_rate: float = negate_opt.learning_rate
-    max_depth: int = negate_opt.max_depth
-    objective: str = negate_opt.objective
-    scale_pos_weight: float | None = negate_opt.scale_pos_weight
-    subsample: float = negate_opt.subsample
+    seed: int = hyper_param.seed
+    colsample_bytree: float = hyper_param.colsample_bytree
+    eval_metric: list = field(default_factory=lambda: hyper_param.eval_metric)
+    learning_rate: float = hyper_param.learning_rate
+    max_depth: int = hyper_param.max_depth
+    objective: str = hyper_param.objective
+    scale_pos_weight: float | None = hyper_param.scale_pos_weight
+    subsample: float = hyper_param.subsample
 
 
 @dataclass
@@ -60,12 +64,7 @@ def grade(features_dataset: Dataset) -> TrainResult:
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
 
-    import numpy as np
-    import xgboost as xgb
-    from numpy.random import default_rng
-    from sklearn.model_selection import train_test_split
-
-    feature_matrix = np.asarray([sample["features"] for sample in features_dataset], dtype=np.float32)  # type: ignore
+    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(np.float32)  # type: ignore
     labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
 
     rng = default_rng(1)

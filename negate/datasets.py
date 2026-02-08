@@ -3,15 +3,17 @@
 
 from pathlib import Path
 
+import numpy as np
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
+from PIL import Image as PillowImage
+
+from negate import negate_d
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
     """Detect and remove NaN labels.\n
     :param dataset: Dataset with a ``label`` column.
     :return: Dataset without rows containing NaN labels."""
-
-    import numpy as np
 
     lbls = np.array(dataset["label"])
     if np.isnan(lbls).any():
@@ -21,72 +23,86 @@ def detect_nans(dataset: Dataset) -> Dataset:
     return dataset
 
 
-def load_remote_dataset(repo: str, folder_path: Path, label: int = 1) -> Dataset:
+def load_remote_dataset(repo: str, folder_path: Path, label: int, split="train") -> Dataset:
     """Load a remote dataset and attach a default label.\n
     :param repo: Repository ID of the dataset.
     :param folder_path: Local path to cache the dataset.
     :param label: The default label to assign to all images in the dataset
     :return: Dataset with a ``label`` column added and NaNs removed."""
 
-    remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split="train").cast_column("image", Image(decode=True))
+    remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split=split).cast_column("image", Image(mode="RGB", decode=True))
     remote_dataset = remote_dataset.add_column("label", [label] * len(remote_dataset))
     remote_dataset = detect_nans(remote_dataset)
     return remote_dataset
 
 
-def generate_dataset(input_path: Path) -> Dataset:
+def generate_dataset(input_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None) -> Dataset:
     """Generates a dataset from images in the given folder.\n
     :param input_path: Path to the folder containing image files.
     :return: Dataset containing images and labels with NaNs removed."""
 
-    from PIL import Image as PillowImage
+    if isinstance(input_path, Path):
+        validated_paths = []
+        valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
+        assert isinstance(input_path, Path)
 
-    print(f"Using local images from {input_path}")
-    validated_paths = []
-    valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
-    if input_path.is_dir():
-        for img_path in input_path.iterdir():
-            if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
-                continue
-            try:
-                with PillowImage.open(img_path) as _verification:
-                    pass
-            except Exception as _unreadable_file:
-                continue
-            validated_paths.append({"image": str(img_path)})
-    elif input_path.is_file() and input_path.suffix.lower() in valid_extensions:
-        validated_paths.append({"image": str(input_path)})
+        if input_path.is_dir():
+            for img_path in input_path.iterdir():
+                if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
+                    continue
+                try:
+                    with PillowImage.open(img_path) as _verification:
+                        pass
+                except Exception as _unreadable_file:
+                    continue
+                validated_paths.append({"image": str(img_path)})
+        elif input_path.is_file() and input_path.suffix.lower() in valid_extensions:
+            validated_paths.append({"image": str(input_path)})
+        else:
+            raise ValueError(f"Invalid path {input_path}")
     else:
-        raise ValueError(f"Invalid path {input_path}")
-
+        validated_paths = input_path
     dataset = Dataset.from_list(validated_paths)  # NaN Prevention: decode separately
 
     try:  # Fallback: keep the raw bytes if decoding fails.
-        dataset = dataset.cast_column("image", Image(decode=True))
+        dataset = dataset.cast_column("image", Image(mode="RGB", decode=True))
     except Exception:
         dataset = dataset.cast_column("image", Image())
 
-    dataset = dataset.add_column("label", [0] * len(validated_paths))
-    dataset = detect_nans(dataset)
+    if label is not None:
+        dataset = dataset.add_column("label", [label] * len(validated_paths))
+        dataset = detect_nans(dataset)
     return dataset
 
 
 def build_datasets(input_folder: Path | None = None) -> Dataset:
-    """Builds synthetic and original datasets.\n
+    """Builds synthetic and genuine datasets.\n
     :param input_folder: Path to folder containing data. (optional)
-    :return: Dataset containing synthetic and original images."""
+    :return: Dataset containing synthetic and genuine images."""
 
     synthetic_input_folder = Path(".datasets")
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
+    synthetic_repos = []
+    if negate_d.synthetic_data is not None:
+        print(f"Using remote images from {negate_d.synthetic_data}")
+        for data_repo in negate_d.synthetic_data:
+            synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
+    if negate_d.synthetic_local is not None:
+        print(f"Using local images from {negate_d.synthetic_local}")
+        for data_folder in negate_d.synthetic_local:
+            synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
-    if not (original_input_folder := input_folder):
-        original_input_folder = Path(__file__).parent.parent / "assets"
-        original_input_folder.mkdir(parents=True, exist_ok=True)
+    genuine_input_folder = Path("assets")
+    genuine_input_folder.mkdir(parents=True, exist_ok=True)
+    genuine_repos = []
+    if negate_d.genuine_data is not None:
+        print(f"Using remote images from {negate_d.genuine_data}")
+        for data_repo in negate_d.genuine_data:
+            genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
+    if negate_d.genuine_local is not None:
+        print(f"Using local images from {negate_d.genuine_local}")
+        for data_folder in negate_d.genuine_local:
+            genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 
-    slice_dataset = load_remote_dataset("exdysa/nano-banana-pro-generated-1k-clone", synthetic_input_folder)
-    rnd_synthetic_dataset = load_remote_dataset("exdysa/rnd_synthetic_img", synthetic_input_folder)
-
-    original_dataset = generate_dataset(original_input_folder)
-
-    dataset = concatenate_datasets([slice_dataset, rnd_synthetic_dataset, original_dataset])
+    dataset = concatenate_datasets([*genuine_repos, *synthetic_repos])
     return dataset
