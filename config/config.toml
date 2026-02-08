@@ -34,10 +34,11 @@ eval_metric = [
     "logloss", "aucpr",
     ] # Evaluation metrics
 
-[model.library]
+[model.library]                     # priority from left to right
+transformers = ["facebook/dinov3-vitl16-pretrain-sat493m","nvidia/C-RADIOv4-SO400M"]
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]
 openclip = ["timm/MobileCLIP2-S4-OpenCLIP"]
-transformers = ["facebook/dinov3-vitl16-pretrain-sat493m"]
+
 
 [library]
 default = "timm"

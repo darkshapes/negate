@@ -86,11 +86,7 @@ class WaveletAnalyzer:
                 from transformers import AutoModel, AutoProcessor
 
                 self.processor = AutoProcessor.from_pretrained(self.model_name)
-                self.model = AutoModel.from_pretrained(
-                    self.model_name,
-                    device_map="auto",
-                    dtype=self.model_dtype,
-                ).to(self.device)
+                self.model = AutoModel.from_pretrained(self.model_name, device_map="auto", dtype=self.model_dtype, local_files_only=True).to(self.device)
             case _:
                 error = f"{self.library} : Unsupported library"
                 raise NotImplementedError(error)
@@ -159,8 +155,8 @@ class WaveletAnalyzer:
                 image_features /= image_features.norm(dim=-1, keepdim=True)
 
             case "transformers":
-                image_features = self.model(image)
-                image_features.pooler_output
+                image_features = self.model(pixel_values=image)
+                image_features = image_features.pooler_output
 
             case _:
                 raise NotImplementedError("Unsupported model configuration")

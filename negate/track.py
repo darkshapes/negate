@@ -66,6 +66,7 @@ def accuracy(train_result: TrainResult):
         "timestamp": timestamp,
     }
 
+    result_path.mkdir(parents=True, exist_ok=True)
     results_file = str(result_path / f"results_{timestamp}.json")
     result_format = {k: str(v) for k, v in results.items()}
     with open(results_file, "tw", encoding="utf-8") as out_file:
@@ -143,12 +144,13 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
         .encode(
             x=alt.X("sensitivity:Q", title="Cosine Similarity"),
             y=alt.Y("density:Q", title="Density"),
-            color=alt.Color("label:N", legend=None),
+            color=alt.Color("label:N"),
         )
         .transform_density("sensitivity", as_=["sensitivity", "density"], groupby=["label"])
         .transform_filter((alt.datum.sensitivity <= 1.0) & (alt.datum.sensitivity >= -1.0))
-        .properties(title=f"Sensitivity Distribution by Label\nModel: {model_name}", width=600, height=300)
+        .properties(title=f"Sensitivity by Label\nModel: {model_name}", width=600, height=300)
     )
+    result_path.mkdir(parents=True, exist_ok=True)
     chart_file = str(result_path / f"sensitivity_plot_{timestamp}.html")
     chart.save(chart_file)
     # chart.display()
