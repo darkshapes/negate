@@ -3,8 +3,7 @@
 
 import tomllib
 from pathlib import Path
-from typing import NamedTuple
-from typing import Iterator
+from typing import Iterator, NamedTuple
 
 
 class NegateHyperParam(NamedTuple):
@@ -43,22 +42,21 @@ class NegateConfig(NamedTuple):
     :param alpha: Regularization parameter.
     :param batch_size: Batch size for processing.
     :param dim_rescale: Dimension for rescaling.
+    :param dtype: Data type for model and NumPy operations.
     :param feat_ext_path: Folder location of the feature extractor
     :param load_onnx: Use ONNX for inference.
     :param magnitude_sampling: Enable magnitude sampling.
-    :param model_dtype: Data type for model computation.
-    :param numpy_dtype: Data type for NumPy operations.
     :param patch_dim: Patch dimension for residuals."""
 
     alpha: float
     batch_size: int
+    dim_patch: int
     dim_rescale: int
+    dtype: str
+    euclidean: bool
     feat_ext_path: str
     load_onnx: bool
     magnitude_sampling: bool
-    model_dtype: str
-    numpy_dtype: str
-    patch_dim: int
 
 
 class NegateDataPaths(NamedTuple):
@@ -69,11 +67,11 @@ class NegateDataPaths(NamedTuple):
     :param synthetic_data: List of synthetic data paths or None.
     :param synthetic_local: List of local synthetic data paths or None."""
 
-    evaluation_data: list[str] | None
-    genuine_data: list[str] | None
-    genuine_local: list[str] | None
-    synthetic_data: list[str] | None
-    synthetic_local: list[str] | None
+    eval_data: list
+    genuine_data: list
+    genuine_local: list
+    synthetic_data: list
+    synthetic_local: list
 
 
 class NegateModelConfig:

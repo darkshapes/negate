@@ -9,10 +9,9 @@ from pathlib import Path
 
 import numpy as np
 from datasets import Dataset
-from huggingface_hub import snapshot_download
-from huggingface_hub.errors import LocalEntryNotFoundError
 from PIL.Image import Image
 
+from negate.config import hyperparam_config as hp_config
 from negate.config import negate_options as negate_opt
 
 
@@ -56,18 +55,7 @@ class DeviceName(str, Enum):
 
 
 class FeatureExtractor:
-    import torch
-    import torchvision.transforms as T
-
-    transform: T.Compose = T.Compose(
-        [
-            T.CenterCrop((negate_opt.patch_size, negate_opt.patch_size)),
-            T.ToTensor(),
-            T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-        ]
-    )
-
-    def __init__(self, vae_type: VAEModel, device: DeviceName, dtype: torch.dtype) -> None:
+    def __init__(self, vae_type: VAEModel, device: DeviceName, dtype) -> None:
         """Set up the extractor with a VAE model.\n
         :param vae_type: VAEModel ID of the VAE.
         :param device: Target device.
@@ -75,7 +63,7 @@ class FeatureExtractor:
 
         from negate import Residual  # `B̴̨̒e̷w̷͇̃ȁ̵͈r̸͔͛ę̵͂ ̷̫̚t̵̻̐h̶̜͒ȩ̸̋ ̵̪̄ő̷̦ù̵̥r̷͇̂o̷̫͑b̷̲͒ò̷̫r̴̢͒ô̵͍s̵̩̈́` #type: ignore
 
-        self.residual_transform = Residual(patch_size=negate_opt.patch_size, top_k=negate_opt.top_k)
+        self.residual_transform = Residual(patch_size=negate_opt.dim_patch, top_k=hp_config.top_k)
         self.device = device.value
         self.dtype = dtype
         self.model: VAEInfo = MODEL_MAP[vae_type]
@@ -84,12 +72,17 @@ class FeatureExtractor:
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
+        from huggingface_hub import snapshot_download
+        from huggingface_hub.errors import LocalEntryNotFoundError
 
-        from diffusers.models import autoencoders
+        try:
+            from diffusers.models import autoencoders
+        except (ImportError, ModuleNotFoundError, Exception):
+            raise RuntimeError("missing dependency 'diffusers'. Please install it using 'negate[extractor]'")
 
-        if negate_opt.vae_tiling:
+        if getattr(negate_opt, "vae_tiling", False):
             self.vae.enable_tiling()
-        if negate_opt.vae_slicing:
+        if getattr(negate_opt, "vae_slicing", False):
             self.vae.enable_slicing()
 
         autoencoder_cls = getattr(autoencoders, self.model.module.split(".")[-1], None)
@@ -104,14 +97,17 @@ class FeatureExtractor:
         vae_model.eval()
         self.vae = vae_model
 
-    def _extract_special(self, batch: torch.Tensor, image: Image):
+    def _extract_special(self, batch, image: Image):
         """Handle SANA and AuraEqui models.\n
         :param batch: Tensor of image + patches.
         :param img: source PIL image.
         :return: NumPy mean latent."""
 
+        try:
+            from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
+        except (ImportError, ModuleNotFoundError, Exception):
+            raise RuntimeError("missing dependency 'diffusers'. Please install it using 'negate[extractor]'")
         import torch
-        from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
         from torch import Tensor
 
         latent: Tensor = self.vae.encode(batch)  # type: ignore
@@ -127,8 +123,16 @@ class FeatureExtractor:
         """Extract VAE features from a batch of images then use spectral contrast as divergence metric
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
-
         import torch
+        import torchvision.transforms as T
+
+        self.transform: T.Compose = T.Compose(
+            [
+                T.CenterCrop((negate_opt.dim_patch, negate_opt.dim_patch)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
 
         features_list = []
 
@@ -196,8 +200,7 @@ class FeatureExtractor:
 
 def feature_cache(dataset: Dataset, vae_type: VAEModel) -> Path:
     """Generate cache filename based on dataset fingerprint and VAE model.\n
-    Dataset fingerprint automatically changes when data changes.
-
+    Dataset fingerprint automatically changes when data changes.\n
     :param dataset: The incoming dataset to be processed.
     :param vae_type: The VAE model typeselectedfor feature extraction.
     :returns: Location to cache results of feature extraction"""
@@ -224,14 +227,14 @@ def features(dataset: Dataset, vae_type: VAEModel, label=True) -> Dataset:
 
     import torch
 
-    device = DeviceName.CUDA if torch.cuda.is_available() else DeviceName.MPS if torch.mps.is_available() else DeviceName.CPU
+    device_name = "cuda" if torch.cuda.is_available() else "mps" if torch.mps.is_available() else "xpu" if torch.xpu.is_available() else "cpu"
 
-    dtype = getattr(torch, negate_opt.dtype)
+    dtype = getattr(torch, negate_opt.model_dtype)
     kwargs = {}
     match negate_opt:
         case opt if opt.batch_size > 0:
             kwargs.setdefault("batch_size", opt.batch_size)
-        case opt if opt.cache_features:
+        case opt if getattr(opt, "cache_features", False):
             cache_file_name = str(feature_cache(dataset, vae_type))
             kwargs.setdefault("cache_file_name", cache_file_name)
 

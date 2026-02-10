@@ -2,24 +2,26 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import json
-from datetime import datetime
+import time as timer_module
 from pathlib import Path
 
 import altair as alt
 import numpy as np
 from datasets import Dataset
-from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
-from negate.train import TrainResult
+from negate.train import TrainResult, get_time
 
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+timestamp = get_time()
 result_path = Path(__file__).parent.parent / "results" / timestamp
 
 
 def accuracy(train_result: TrainResult):
-    """Print diagnostics and plots for a trained model.
-
+    """Print diagnostics and plots for a trained model.\n
     :param train_result: Result object from training."""
+    try:
+        from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
+    except (ImportError, ModuleNotFoundError, Exception):
+        raise RuntimeError("missing dependencies for xgboost. Please install using 'negate[xgb]'")
 
     model = train_result.model
     d_matrix_test = train_result.d_matrix_test
@@ -79,33 +81,44 @@ def accuracy(train_result: TrainResult):
 
 
 def _avg_key(ds: Dataset, key: str) -> float:
-    return float(np.mean(ds[key]))
+    arr = np.array(ds[key]).flatten()
+    return float(np.mean(arr).item())
 
 
-def show_statistics(features_dataset: Dataset) -> None:
+def show_statistics(features_dataset: Dataset, start_ns: int | float | None = None) -> None:
     """Print similarity statistics for genuine and synthetic features.
 
     :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
         [label, sim_min, sim_max, idx_min, idx_max]."""
+    from negate import hyper_param, negate_d, negate_opt
+
+    stats = {}
 
     genuine_dataset = features_dataset.filter(lambda x: x["label"] == 0, batched=False)
     synthetic_dataset = features_dataset.filter(lambda x: x["label"] == 1, batched=False)
 
     for key in ("sim_min", "sim_max", "idx_min", "idx_max"):
-        genuine_avg_similarity = float(np.mean(genuine_dataset[key]))
-        synthetic_avg_similarity = float(np.mean(synthetic_dataset[key]))
+        genuine_values = np.array(genuine_dataset[key]).flatten()
+        synthetic_values = np.array(synthetic_dataset[key]).flatten()
+        genuine_avg_similarity = float(np.mean(genuine_values).item())
+        synthetic_avg_similarity = float(np.mean(synthetic_values).item())
+        stats[f"genuine_avg_{key}"] = genuine_avg_similarity
+        stats[f"synthetic_avg_{key}"] = synthetic_avg_similarity
         print(f"""
         Average {key} (genuine): {genuine_avg_similarity:.4f}
         Average {key} (synthetic): {synthetic_avg_similarity:.4f}
         """)
 
-    gen_sim = np.array(genuine_dataset["sim_max"])
-    gen_idx = np.array(genuine_dataset["idx_max"])
-    syn_sim = np.array(synthetic_dataset["sim_max"])
-    syn_idx = np.array(synthetic_dataset["idx_max"])
+    gen_sim = np.array(genuine_dataset["sim_max"]).flatten()
+    gen_idx = np.array(genuine_dataset["idx_max"]).flatten()
+    syn_sim = np.array(synthetic_dataset["sim_max"]).flatten()
+    syn_idx = np.array(synthetic_dataset["idx_max"]).flatten()
 
-    gen_diff = float(np.mean(gen_sim - gen_idx))
-    syn_diff = float(np.mean(syn_sim - syn_idx))
+    gen_diff = float(np.mean(gen_sim - gen_idx).item())
+    syn_diff = float(np.mean(syn_sim - syn_idx).item())
+
+    stats["genuine_avg_sim_max_minus_idx_max"] = gen_diff
+    stats["synthetic_avg_sim_max_minus_idx_max"] = syn_diff
 
     print(f"""
     Average (sim_max - idx_max) genuine: {gen_diff:.4f}
@@ -120,11 +133,30 @@ def show_statistics(features_dataset: Dataset) -> None:
     g_avg = overall_avg(genuine_dataset)
     s_avg = overall_avg(synthetic_dataset)
 
+    stats["overall_avg_genuine_cosine_similarity"] = g_avg
+    stats["overall_avg_synthetic_cosine_similarity"] = s_avg
+    stats["overall_avg_cosine_similarity"] = (g_avg + s_avg) / 2
+
     print(f"""
     Overall average genuine cosine similarity: {g_avg:.4f}
     Overall average synthetic cosine similarity: {s_avg:.4f}
     Overall average cosine similarity: {(g_avg + s_avg) / 2:.4f}
     """)
+
+    result_path.mkdir(parents=True, exist_ok=True)
+    stats_file = str(result_path / f"stats_{timestamp}.json")
+
+    if start_ns is not None:
+        elapsed_ns = timer_module.perf_counter_ns() - start_ns
+        stats["elapsed_ns"] = elapsed_ns
+        stats["ns_as_human_time"] = f"{elapsed_ns / 1e9:.2}"
+
+    stats_format = {k: str(v) for k, v in stats.items()}
+    stats_format.update(negate_opt._asdict())
+    stats_format.update(negate_d._asdict())
+    stats_format.update(hyper_param._asdict())
+    with open(stats_file, "tw", encoding="utf-8") as out_file:
+        json.dump(stats_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
 
 
 def compare_decompositions(model_name, features_dataset: Dataset) -> None:
@@ -133,10 +165,10 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
         [label, sim_min, sim_max, idx_min, idx_max]."""
 
     data_frame = features_dataset.to_pandas()
-
-    # Derive sensitivity as the average of min/max similarity bounds
     data_frame["sensitivity"] = (data_frame["sim_min"].values + data_frame["sim_max"].values) / 2  # type: ignore
-    data_frame["index_data"] = (data_frame["idx_min"].values + data_frame["idx_max"].values) / 2  # type: ignore
+    lower_bound = 0.800
+    upper_bound = 0.900
+    data_frame["is_within_range"] = (data_frame["sensitivity"] >= lower_bound) & (data_frame["sensitivity"] <= upper_bound)  # type: ignore
 
     chart = (
         alt.Chart(data_frame)
@@ -153,4 +185,8 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
     result_path.mkdir(parents=True, exist_ok=True)
     chart_file = str(result_path / f"sensitivity_plot_{timestamp}.html")
     chart.save(chart_file)
-    # chart.display()
+
+    synthetic_count = int(data_frame["is_within_range"].sum())  # type: ignore
+    non_synthetic_count = len(data_frame) - synthetic_count  # type: ignore
+    ratio = synthetic_count / non_synthetic_count if non_synthetic_count > 0 else float("inf")
+    print(f"Synthetic to non-synthetic ratio: {ratio:.3f}")
