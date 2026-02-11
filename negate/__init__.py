@@ -5,5 +5,6 @@
 from negate.config import negate_options as negate_opt, data_paths as negate_d, hyperparam_config as hyper_param, model_config
 from negate.datasets import build_datasets, generate_dataset, load_remote_dataset
 from negate.track import show_statistics, compare_decompositions
+from negate.chip import chip
+from negate.feature_vit import VITExtractor
 from negate.wavelet import WaveletAnalyzer
-from negate.train import grade, TrainResult

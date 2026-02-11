@@ -41,6 +41,7 @@ class NegateConfig(NamedTuple):
     """Config values.\n
     :param alpha: Regularization parameter.
     :param batch_size: Batch size for processing.
+    :param cache_features: Store the immediately preceding features in cache
     :param dim_rescale: Dimension for rescaling.
     :param dtype: Data type for model and NumPy operations.
     :param feat_ext_path: Folder location of the feature extractor
@@ -50,8 +51,9 @@ class NegateConfig(NamedTuple):
 
     alpha: float
     batch_size: int
+    cache_features: bool
+    dim_factor: int
     dim_patch: int
-    dim_rescale: int
     dtype: str
     euclidean: bool
     feat_ext_path: str
