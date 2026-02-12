@@ -7,13 +7,10 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
-import xgboost as xgb
 from datasets import Dataset
 from numpy.random import default_rng
 from numpy.typing import NDArray
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from xgboost import Booster
+from typing import Callable
 
 from negate.config import hyperparam_config as hyper_param
 
@@ -49,9 +46,9 @@ class TrainResult:
     d_matrix_test: NDArray
     feature_matrix: NDArray
     labels: Any
-    model: Booster
+    model: Callable
     num_features: int
-    pca: PCA
+    pca: Callable
     scale_pos_weight: float | None
     seed: int
     X_train_pca: NDArray
@@ -63,6 +60,13 @@ def grade(features_dataset: Dataset) -> TrainResult:
     """Train an XGBoost model from a feature dataset.\n
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
+
+    try:
+        import xgboost as xgb
+        from sklearn.decomposition import PCA
+        from sklearn.model_selection import train_test_split
+    except (ImportError, ModuleNotFoundError, Exception):
+        raise RuntimeError("missing dependencies for xgboost. Please install using 'negate[xgb]'")
 
     feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(np.float32)  # type: ignore
     labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
@@ -93,9 +97,9 @@ def grade(features_dataset: Dataset) -> TrainResult:
 
     return TrainResult(
         X_train=X_train,  # type: ignore
-        pca=pca,
+        pca=pca,  # type: ignore
         d_matrix_test=d_matrix_test,  # type: ignore
-        model=model,
+        model=model,  # type: ignore
         scale_pos_weight=params.scale_pos_weight,
         X_train_pca=X_train_pca,
         y_test=y_test,  # type: ignore

@@ -5,65 +5,100 @@
 :returns: None."""
 
 import argparse
+import datetime
+import time as timer_module
 from pathlib import Path
 from sys import argv
 
 from datasets import Dataset
 
 from negate import (
-    # grade,
-    WaveletAnalyzer,
+    # generate_dataset,
+    # load_remote_dataset,
+    Spec,
+    WaveletAnalyze,
     build_datasets,
-    show_statistics,
-    model_config,
     compare_decompositions,
+    # show_statistics,
+    VITExtract,
+    VAEExtract,
 )
 
 
-def calibration(model_name: str, file_or_folder_path: Path | None = None) -> None:
+start_ns = timer_module.perf_counter()
+process_time = lambda: print(str(datetime.timedelta(seconds=timer_module.process_time())), end="")
+
+
+def process(dataset: Dataset, spec: Spec) -> Dataset:
+    from pytorch_wavelets import DWTForward, DWTInverse
+
+    kwargs = {}
+    if spec.opt.batch_size > 0:
+        kwargs["batched"] = True
+        kwargs["batch_size"] = spec.opt.batch_size
+
+    dwt = DWTForward(J=2, wave="haar")
+    idwt = DWTInverse(wave="haar")
+    extract = VITExtract(spec)
+    with WaveletAnalyze(spec, dwt=dwt, idwt=idwt, extract=extract) as analyzer:  # type: ignore
+        similarity = dataset.map(
+            analyzer,
+            remove_columns=["image"],
+            desc="Computing wavelets...",
+            **kwargs,
+        )
+    return similarity
+
+
+def calibrate(model_name: str, spec: Spec, file_or_folder_path: Path | None = None) -> None:
     """Calibration of computing wavelet energy features.\n
     :param path: Dataset root folder."""
 
     print("Calibration selected.")
-    dataset: Dataset = build_datasets(file_or_folder_path)
-    analyzer = WaveletAnalyzer(model_name)
-    features_dataset = analyzer.decompose(dataset)
-    # grade(result_dataset)
-    features_dataset.set_format(type="pandas", columns=["label", "sim_min", "sim_max", "idx_min", "idx_max"])
-    show_statistics(features_dataset=features_dataset)
+    dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
+    features_dataset = process(dataset, spec=spec)
+
+    # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
     compare_decompositions(model_name=model_name, features_dataset=features_dataset)
+    timecode = timer_module.perf_counter() - start_ns
+    # print(timecode)
 
 
 def main() -> None:
     """CLI entry point.\n
     :raises ValueError: Missing image path.
     :raises NotImplementedError: Unsupported command passed."""
+    spec = Spec()
+    dataset_blurb = "Genunie/Human-original dataset path"
+    calibrate_blurb = "Check model on the dataset at the provided path from CLI or config, default `assets/`."
+    model_blurb = f"Model to use. Default :{spec.model}"  # type: ignore
+    model_choices = [repo for repo in spec.models]
+    check_blurb = "Check whether an image at the provided path is synthetic or original."
+    synthetic_blurb = "Mark image as synthetic (label = 1) for evaluation."
+    genuine_blurb = "Mark image as genuine (label = 0) for evaluation."
+    mixed_blurb = "Mark images as mixed for evaluation."
+    # train_blurb = "Train XGBoost model on wavelet features using the dataset in the provided path or `assets/`. The resulting model will be saved to disk."
 
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
-    dataset_blurb = "Genunie/Human-original dataset path"
-    train_blurb = "Train XGBoost model on wavelet features using the dataset in the provided path or `assets/`. The resulting model will be saved to disk."
-    calibrate_blurb = "Check model on the dataset at the provided path from CLI or config, default `assets/`."
-    model_blurb = f"Model to use. Default :{model_config.auto_model[0]}"  # type: ignore
-    model_choices = [repo for repo in model_config.list_models]
-    check_blurb = "Check whether an image at the provided path is synthetic or original."
-    synthetic_blurb = "Mark image as synthetic (label = 1) for evaluation."
-    genuine_blurb = "Mark image as genuine (label = 0) for evaluation."
+    # subparsers.add_parser("compare", help="Run extraction and training using all possible VAE.")
+
+    # train_parser = subparsers.add_parser("train", help=train_blurb)
+    # train_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
 
     calibrate_parser = subparsers.add_parser("calibrate", help=calibrate_blurb)
     calibrate_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
-    calibrate_parser.add_argument("-m", "--model", choices=model_choices, default=model_config.auto_model[0], help=model_blurb)  # type: ignore
-    train_parser = subparsers.add_parser("train", help=train_blurb)
-    train_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
-    args = parser.parse_args()
+    calibrate_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
 
     check_parser = subparsers.add_parser("check", help=check_blurb)
-    check_parser.add_argument("path", help="Image or folder path")
+    check_parser.add_argument("path", help="Image or folder path", nargs="?", default=None)
+    check_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
     label_grp = check_parser.add_mutually_exclusive_group()
     label_grp.add_argument("-s", "--synthetic", action="store_const", const=1, dest="label", help=synthetic_blurb)
     label_grp.add_argument("-g", "--genuine", action="store_const", const=0, dest="label", help=genuine_blurb)
-    subparsers.add_parser("compare", help="Run extraction and training using all possible VAE.")
+    label_grp.add_argument("-x", "--mixed", action="store_const", const=0, dest="label", help=mixed_blurb)
+
     args = parser.parse_args(argv[1:])
 
     match args.cmd:
@@ -73,12 +108,24 @@ def main() -> None:
             else:
                 dataset_location: Path | None = None
 
-            calibration(file_or_folder_path=dataset_location, model_name=args.model)
-        case "check":
-            if args.path is None:
-                raise ValueError("Check requires an image path.")
-
-            # predict(Path(args.path), true_label=args.label)
+            calibrate(file_or_folder_path=dataset_location, model_name=args.model, spec=spec)
+        # case "check":
+        #     if args.label is None:
+        #         if args.path is None:
+        #             raise ValueError("Check requires an image path.")
+        #         start_check(
+        #             model_name=args.model,
+        #             file_or_folder_path=Path(args.path),
+        #         )
+        #     else:
+        #         kwargs = {}
+        #         if args.path is not None:
+        #             kwargs.setdefault("file_or_folder_path", Path(args.path))
+        #         start_evaluation(
+        #             model_name=args.model,
+        #             true_label=args.label,
+        #             **kwargs,
+        #         )
         case _:
             raise NotImplementedError
 

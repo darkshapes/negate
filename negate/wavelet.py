@@ -1,223 +1,130 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clase-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-"""Wavelet-based image feature extraction."""
+"""Haar Wavelet processing"""
+
+import gc
 
 import numpy as np
 import torch
-import torchvision.transforms as T
-from datasets import Dataset, IterableDataset
-from numpy.typing import NDArray
+from datasets import Dataset
 from PIL import Image
-from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
+from torch.nn.functional import cosine_similarity
+from torchvision.transforms.functional import five_crop
 
-from negate import negate_opt, model_config
+from negate.config import Spec
+from negate.feature_vit import VITExtract
+from pytorch_wavelets import DWTForward, DWTInverse
+
+from negate.scaling import patchify_image, tensor_rescale
+
+"""Haar Wavelet processing"""
 
 
-class WaveletAnalyzer:
-    """Extract wavelet energy features from images.
+class WaveletAnalyze:
+    """Extract wavelet energy features from images."""
 
-    Attributes:
-        patch_dim: Size of square cells for analysis.
-        batch_size: Batch size for dataset processing (0 = no batching).
-        alpha: Perturbation weight for HF(x) subtraction (0 < α < 1).
+    def __init__(self, spec: Spec, dwt: DWTForward, idwt: DWTInverse, extract: VITExtract) -> None:
+        """Initialize analyzer with configuration."""
 
-    Example:
-        >>> import datasets as Datasets
-        >>> from negate.datasets import generate_dataset
-        >>> dataset = generate_dataset("path/to/images",label=0)
-        >>> analyzer = WaveletAnalyzer(patch_dim=16, resize_percent=1.0, batch_size=20, alpha:0.7)
-        >>> features: list[dict[str,NDArray]] = analyzer.decompose(dataset)
-        >>> list(features["sensitivity])
-    """
-
-    def __init__(
-        self,
-        model_name: str,
-        patch_dim: int = negate_opt.patch_dim,
-        batch_size: int = negate_opt.batch_size,
-        dim_rescale: int = negate_opt.dim_rescale,
-        alpha: float = negate_opt.alpha,
-    ) -> None:
-        """Initialize analyzer with configuration.\n
-        :param patch_dim: Dimension of square cells (default 224).
-        :param resize_percent: Resize factor before celling (default 1.0, no resize).
-        :param batch_size: Batch size for processing (0 disables batching).
-        :param alpha: Perturbation weight (0 < α < 1) for HF(x) subtraction.
-        """
-
-        self.batch_size = batch_size
-        self.alpha = alpha
-
-        self.model_name = model_name
-        self.device = torch.device("cpu")
-        self.np_dtype = getattr(np, negate_opt.numpy_dtype, "float32")
-        self.model_dtype = getattr(torch, negate_opt.model_dtype, "float32")
-        self.magnitude_sampling = negate_opt.magnitude_sampling
-        self.dim_rescale = dim_rescale
-        self.patch_dim = patch_dim
-        self._set_models()
+        self.batch_size = spec.opt.batch_size
+        self.alpha = spec.opt.alpha
+        dim_patch = spec.opt.dim_patch
+        self.dim_patch = (dim_patch, dim_patch)
+        self.dim_rescale = spec.opt.dim_factor * dim_patch
+        self.device = spec.device
+        self.np_dtype = spec.np_dtype
+        self.cast_move: dict = spec.apply
+        self.dwt = dwt.to(**self.cast_move)
+        self.idwt = idwt.to(**self.cast_move)
+        self.extract = extract
 
     @torch.inference_mode()
-    def _set_models(self):
-        self.library = model_config.library_for_model(self.model_name)
-        if torch.cuda.is_available():
-            self.device = torch.device("cuda")
-        elif torch.mps.is_available():
-            self.device = torch.device("mps")
+    def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
+        """Forward passes any resolution images and exports their spectral context attention masks.\n
+        The batch size of the tensors in the `x` list should be equal to 1, i.e. each
+        tensor in the list should correspond to a single image.
+        :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
+        :returns: A tuple containing"""
 
-        match self.library:
-            case "openclip":
-                import open_clip
+        minimum_patches = 0
+        cos_sim: list[dict[str, np.ndarray]] = []
+        image: list[Image.Image] = dataset["image"]
+        rescaled: list[Tensor] = tensor_rescale(image, self.dim_rescale, **self.cast_move)
+        for img in rescaled:
+            # Patchify the image.
+            patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
+            if patched.size(1) < minimum_patches:
+                patched: tuple[torch.Tensor, ...] = five_crop(img, [*self.dim_patch])  # type: ignore
+                patched: torch.Tensor = torch.stack(patched, dim=1)  # type: ignore
 
-                self.model, _, self.preprocess = open_clip.create_model_and_transforms(f"hf-hub:{self.model_name}", device=self.device)
-                self.model = self.model.eval()
-            case "timm":
-                import timm
+            batch, l_, channel, height, width = patched.shape
+            patched = patched.view(batch * l_, channel, height, width)  # (B*L, C, H, W)
 
-                model = timm.create_model(
-                    self.model_name,
-                    pretrained=True,
-                    features_only=True,
-                ).to(self.device)
-                self.model = model.eval()
-            case "transformers":
-                from transformers import AutoModel, AutoProcessor
+            # Perturb each patch
+            low_residual, high_coefficient = self.dwt(patched)
+            perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
+            perturbed_patches = patched - self.alpha * perturbed_high_freq
 
-                self.processor = AutoProcessor.from_pretrained(self.model_name)
-                self.model = AutoModel.from_pretrained(self.model_name, device_map="auto", dtype=self.model_dtype, local_files_only=True).to(self.device)
-            case _:
-                error = f"{self.library} : Unsupported library"
-                raise NotImplementedError(error)
+            base_features: Tensor | list[Tensor] = self.extract(patched)
+            warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
+            cos_sim.append(self.shape_extrema(base_features, warp_features, batch))
 
-    @torch.inference_mode()
-    def metric(self, tensor_patch: Tensor) -> tuple[Tensor, Tensor, Tensor, Tensor]:
-        """Compute sensitivity metrics for image patches.\n
-        :param tensor_patch: Input tensor of shape (C, H, W).
-        :returns: Tuple of (min_similarity, max_similarity, min_index, max_index).
-        """
-        dwt = DWTForward(J=2, wave="haar").to(self.device)
-        idwt = DWTInverse(wave="haar").to(self.device)
-        if tensor_patch.device != self.device:
-            tensor_patch = tensor_patch.to(self.device)
-
-        b, c, h, w = tensor_patch.shape
-
-        zero_tensor = tensor_patch.unfold(2, self.patch_dim, self.patch_dim).unfold(3, self.patch_dim, self.patch_dim)
-        reshaped = zero_tensor.reshape([b, c, -1, self.patch_dim, self.patch_dim]).transpose(1, 2)
-        patches = reshaped.reshape([-1, c, self.patch_dim, self.patch_dim])
-
-        if patches.shape[0] == 0:
-            empty = torch.tensor([], dtype=torch.float32, device=self.device)
-            return (empty[:1].fill_(0), empty[:1].fill_(0), empty[:1].long(), empty[:1].long())
-
-        yl, yh = dwt(patches.to(self.device))
-        yl_zeros = torch.zeros_like(yl)
-        pert_hf = idwt((yl_zeros, yh))
-        perturbed_patches = patches.to(self.model_dtype) - (self.alpha * pert_hf).to(self.model_dtype)
-
-        outputs = self.extract_features(patches.to(self.device))
-        perturbed_outputs = self.extract_features(perturbed_patches.to(self.device))
-
-        if isinstance(outputs, list):
-            outputs = torch.cat(outputs) if all(isinstance(x, Tensor) for x in outputs) else outputs[0]
-        if isinstance(perturbed_outputs, list):
-            perturbed_outputs = torch.cat(perturbed_outputs) if all(isinstance(x, Tensor) for x in perturbed_outputs) else perturbed_outputs[0]
-
-        similarity: Tensor = torch.nn.functional.cosine_similarity(outputs, perturbed_outputs, dim=-1)  # type: ignore
-        # similarity = similarity.unsqueeze(1)
-
-        similarity_min = torch.mean(similarity, dim=0, keepdim=True)
-        index_min = torch.argmin(similarity).view(-1)
-        similarity_max = torch.max(similarity, dim=0, keepdim=True).values
-        index_max = torch.argmax(similarity).view(-1)
-
-        return similarity_min, similarity_max, index_min, index_max
+        return {"results": cos_sim}
 
     @torch.inference_mode()
-    def extract_features(self, image: Tensor) -> NDArray:
-        """Run vision model on images to extract deep features.\n
-        :param images: Single PIL Image or list of PIL Images.
-        :returns: Numpy array of extracted feature vector(s).
+    def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, np.ndarray]:
+        """Compute minimum and maximum cosine similarity between base and warped features.\n
+        Calculates per-batch cosine similarities across feature maps, identifying both the\n
+        extreme values (min/max) and their corresponding indices within each batch.\n
+        :param base_features: Raw feature tensors from original patches\n
+        :param warp_features: Warped feature tensors after wavelet perturbation\n
+        :param batch: Number of images in current processing batch\n
+        :returns: Tuple of ndarrays containing (min_similarities, max_similarities, min_indices, max_indices)
         """
+        min_warps = []
+        max_warps = []
+        min_base = []
+        max_base = []
 
-        match self.library:
-            case "timm":
-                import timm
+        for idx, tensor in enumerate(base_features):
+            similarity = cosine_similarity(tensor, warp_features[idx], dim=-1)
+            reshaped_similarity = similarity.unsqueeze(1).reshape([batch, -1])
 
-                data_config = timm.data.resolve_model_data_config(self.model)  # type: ignore
-                transforms = timm.data.create_transform(**data_config, is_training=False)  # type: ignore
-                image_features = self.model(transforms(image))
+            similarity_min = torch.mean(reshaped_similarity, 1).view([batch])
+            base_min = torch.argmin(reshaped_similarity, 1).view(batch)
+            similarity_max = reshaped_similarity.view([-1])
+            base_max = torch.argmax(reshaped_similarity, 1).view(batch)
 
-            case "openclip":
-                image_features = self.model.encode_image(image)  # type: ignore
-                image_features /= image_features.norm(dim=-1, keepdim=True)
+            min_warps.append(similarity_min.cpu().numpy())
+            max_warps.append(similarity_max.cpu().numpy())
+            min_base.append(base_min.cpu().numpy())
+            max_base.append(base_max.cpu().numpy())
 
-            case "transformers":
-                image_features = self.model(pixel_values=image)
-                image_features = image_features.pooler_output
+        return {
+            "min_warp": np.concatenate(min_warps, dtype=self.np_dtype).flatten(),
+            "max_warp": np.concatenate(max_warps, dtype=self.np_dtype).flatten(),
+            "min_base": np.concatenate(min_base, dtype=self.np_dtype).flatten(),
+            "max_base": np.concatenate(max_base, dtype=self.np_dtype).flatten(),
+        }
 
-            case _:
-                raise NotImplementedError("Unsupported model configuration")
+    def cleanup(self) -> None:
+        """Free the VAE and GPU memory."""
 
-        return image_features
+        device_name = self.device.type
+        del self.device
+        if device_name != "cpu":
+            self.gpu = getattr(torch, device_name)
+            self.gpu.empty_cache()  # type: ignore
+        del self.dwt
+        del self.idwt
+        del self.extract
+        gc.collect()
 
-    @torch.inference_mode()
-    def compute_sensitivity(self, original_images: Image.Image | list[Image.Image]) -> tuple[NDArray, NDArray, NDArray, NDArray]:
-        """Compute WaRPAD(x) sensitivity score following Choi12025 methodology.\n
-        :param original_images: Single PIL Image or list of PIL Images.
-        :returns: Tuple of (sim_min, sim_max, idx_min, idx_max) per image.
-        """
-        rescale = negate_opt.dim_rescale
-        normalize = T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))
-        transform: T.Compose = T.Compose([T.Resize((rescale, rescale), interpolation=Image.BICUBIC), T.ToTensor(), normalize])  # type: ignore
+    def __enter__(self) -> "WaveletAnalyze":
+        return self
 
-        if isinstance(original_images, list):
-            batch_size = len(original_images)
-            tensor_patches: Tensor = torch.stack([transform(image) for image in original_images]).to(self.device)  # type: ignore
-        else:
-            batch_size = 1
-            tensor_patches = transform(original_images).unsqueeze(0).to(self.device)  # type: ignore
-
-        patch_smin, patch_smax, patch_imin, patch_imax = self.metric(tensor_patches)
-
-        # Ensure all outputs are batched (length == batch_size)
-        # metric() returns per-patch stats; for batch input, we need per-image stats
-        # Current metric() returns scalar for whole batch, but we want per-image stats
-        # So reshape/expand as needed
-        sim_min = np.full(batch_size, float(patch_smin.item()) if patch_smin.numel() == 1 else patch_smin.cpu().numpy().flatten()[0])
-        sim_max = np.full(batch_size, float(patch_smax.item()) if patch_smax.numel() == 1 else patch_smax.cpu().numpy().flatten()[0])
-        idx_min = np.full(batch_size, int(patch_imin.item()) if patch_imin.numel() == 1 else patch_imin.cpu().numpy().flatten()[0])
-        idx_max = np.full(batch_size, int(patch_imax.item()) if patch_imax.numel() == 1 else patch_imax.cpu().numpy().flatten()[0])
-
-        return sim_min, sim_max, idx_min, idx_max
-
-    def decompose(self, dataset: Dataset | IterableDataset) -> Dataset:
-        """Generate feature dataset from wavelet sensitivity scores.\n
-        :param dataset: Input dataset with image column.
-        :returns: Dataset containing similarity scores from HFwav(x).
-        """
-        kwargs = {}
-        if self.batch_size > 0:
-            kwargs["batched"] = True
-            kwargs["batch_size"] = self.batch_size
-
-        def process_batch(batch):
-            images = batch["image"]
-            sense = self.compute_sensitivity(images)
-
-            result = {
-                "sim_min": np.array(sense[0]),
-                "sim_max": np.array(sense[1]),
-                "idx_min": np.array(sense[2], dtype=int),
-                "idx_max": np.array(sense[3], dtype=int),
-            }
-            return result
-
-        return dataset.map(
-            process_batch,
-            remove_columns=["image"],
-            desc="Computing HF sensitivity...",  # type: ignore
-            **kwargs,
-        )
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if hasattr(self, "extract"):
+            self.cleanup()

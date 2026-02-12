@@ -1,17 +1,17 @@
 # Advanced Configuration and Paths for Negate CLI
 
 feat_ext_path = ""                     # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]magnitude_sampling = true              # Process high/low only (True,fast++, less mem) or all (False, maybe more accurate) image frequencies
-batch_size = 16                        # Feature extraction batch size, 0 disables batching (smaller = less memory, slightly slower)
-dim_rescale = 1344                     # Fixed dimension
-patch_dim = 224                        # Patch width for residuals (smaller is faster)
-alpha = 0.5                            # strength of perturbation
-model_dtype = "float32"                # decimal precision ("float64", "float32","bfloat16","float16", lower = less mem and accuracy)
-numpy_dtype = "float32"                # decimal precision ("float64", "float32","float16", lower = slightly less mem and accuracy)
+batch_size = 0                         # Feature extraction batch size, 0 disables batching (smaller = less memory, slightly slower)
+dim_factor = 6                         # Multiplier for image rescale size Default 6
+dim_patch = 256                        # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
+alpha = 0.3                            # strength of perturbation Default 0.3)
+dtype = "float16"                      # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
 load_onnx = false                      # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = false             # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
-
+euclidean = false                      # Substitute Cosine Similarity for Squared Euclidean Distance, (default false)
+cache_features = false                 # Cache features
 [datasets]
-evaluation_data = ["tellif/ai_vs_real_image_semantically_similar"]
+eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
 genuine_data = ["KarimSayed/cat-breed-fiass-index"]
 genuine_local = ["assets", "/Users/e6d64/Downloads/real_train"]
 synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
@@ -35,10 +35,9 @@ eval_metric = [
     ] # Evaluation metrics
 
 [model.library]                     # priority from left to right
-transformers = ["facebook/dinov3-vitl16-pretrain-sat493m","nvidia/C-RADIOv4-SO400M"]
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]
-openclip = ["timm/MobileCLIP2-S4-OpenCLIP"]
-
+transformers = ["nvidia/C-RADIOv4-SO400M","facebook/dinov3-vitl16-pretrain-sat493m"]
+openclip = ["hf-hub:timm/MobileCLIP2-S4-OpenCLIP"]
 
 [library]
 default = "timm"
