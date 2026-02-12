@@ -2,7 +2,7 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import pytest
-from negate.chip import Chip
+from negate.config import Chip
 
 
 def test_chip():
