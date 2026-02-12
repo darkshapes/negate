@@ -67,7 +67,7 @@ class VITExtract:
                 error = f"{self.library} : Unsupported library"
                 raise NotImplementedError(error)
 
-        self.model = self.model.eval().to(**self.cast_move)
+        self.model = self.model.eval().to(**self.cast_move)  # type: ignore
 
     @torch.inference_mode()
     def __call__(self, image: Tensor | list[Tensor]) -> Tensor | list[Tensor]:

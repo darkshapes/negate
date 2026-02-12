@@ -9,13 +9,14 @@ import numpy as np
 import torch
 from datasets import Dataset
 from PIL import Image
-from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 from torchvision.transforms.functional import five_crop
 
 from negate.config import Spec
 from negate.feature_vit import VITExtract
+from pytorch_wavelets import DWTForward, DWTInverse
+
 from negate.scaling import patchify_image, tensor_rescale
 
 """Haar Wavelet processing"""
@@ -24,7 +25,7 @@ from negate.scaling import patchify_image, tensor_rescale
 class WaveletAnalyze:
     """Extract wavelet energy features from images."""
 
-    def __init__(self, spec: Spec) -> None:
+    def __init__(self, spec: Spec, dwt: DWTForward, idwt: DWTInverse, extract: VITExtract) -> None:
         """Initialize analyzer with configuration."""
 
         self.batch_size = spec.opt.batch_size
@@ -35,9 +36,9 @@ class WaveletAnalyze:
         self.device = spec.device
         self.np_dtype = spec.np_dtype
         self.cast_move: dict = spec.apply
-        self.dwt = DWTForward(J=2, wave="haar").to(**self.cast_move)
-        self.idwt = DWTInverse(wave="haar").to(**self.cast_move)
-        self.extract = VITExtract(spec)
+        self.dwt = dwt.to(**self.cast_move)
+        self.idwt = idwt.to(**self.cast_move)
+        self.extract = extract
 
     @torch.inference_mode()
     def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
@@ -72,6 +73,7 @@ class WaveletAnalyze:
 
         return {"results": cos_sim}
 
+    @torch.inference_mode()
     def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, np.ndarray]:
         """Compute minimum and maximum cosine similarity between base and warped features.\n
         Calculates per-batch cosine similarities across feature maps, identifying both the\n
@@ -101,10 +103,10 @@ class WaveletAnalyze:
             max_base.append(base_max.cpu().numpy())
 
         return {
-            "min_warp": np.concatenate(min_warps, dtype=self.np_dtype).reshape([-1]),
-            "max_warp": np.concatenate(max_warps, dtype=self.np_dtype).reshape([-1]),
-            "min_base": np.concatenate(min_base, dtype=self.np_dtype).reshape([-1]),
-            "max_base": np.concatenate(max_base, dtype=self.np_dtype).reshape([-1]),
+            "min_warp": np.concatenate(min_warps, dtype=self.np_dtype).flatten(),
+            "max_warp": np.concatenate(max_warps, dtype=self.np_dtype).flatten(),
+            "min_base": np.concatenate(min_base, dtype=self.np_dtype).flatten(),
+            "max_base": np.concatenate(max_base, dtype=self.np_dtype).flatten(),
         }
 
     def cleanup(self) -> None:

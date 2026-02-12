@@ -20,6 +20,8 @@ from negate import (
     build_datasets,
     compare_decompositions,
     # show_statistics,
+    VITExtract,
+    VAEExtract,
 )
 
 
@@ -28,12 +30,17 @@ process_time = lambda: print(str(datetime.timedelta(seconds=timer_module.process
 
 
 def process(dataset: Dataset, spec: Spec) -> Dataset:
+    from pytorch_wavelets import DWTForward, DWTInverse
+
     kwargs = {}
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
 
-    with WaveletAnalyze(spec) as analyzer:
+    dwt = DWTForward(J=2, wave="haar")
+    idwt = DWTInverse(wave="haar")
+    extract = VITExtract(spec)
+    with WaveletAnalyze(spec, dwt=dwt, idwt=idwt, extract=extract) as analyzer:  # type: ignore
         similarity = dataset.map(
             analyzer,
             remove_columns=["image"],
@@ -54,7 +61,7 @@ def calibrate(model_name: str, spec: Spec, file_or_folder_path: Path | None = No
     # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
     compare_decompositions(model_name=model_name, features_dataset=features_dataset)
     timecode = timer_module.perf_counter() - start_ns
-    print(timecode)
+    # print(timecode)
 
 
 def main() -> None:

@@ -6,6 +6,8 @@ from dataclasses import dataclass
 from enum import Enum
 
 from datasets import Dataset
+from torch import Tensor
+from negate.config import Spec
 
 
 class VAEModel(str, Enum):
@@ -39,8 +41,8 @@ MODEL_MAP = {
 }
 
 
-class VAEExtractor:
-    def __init__(self, vae_type: VAEModel) -> None:
+class VAEExtract:
+    def __init__(self, spec: Spec) -> None:
         """Set up the extractor with a VAE model.\n
         :param vae_type: VAEModel ID of the VAE.
         :param device: Target device.
@@ -105,7 +107,7 @@ class VAEExtractor:
         sample = dist.sample()
         return sample  # .mean(dim=0).cpu().float().numpy()
 
-    def batch_extract(self, dataset: Dataset):
+    def __call__(self, tensor: Tensor):
         """Extract VAE features from a batch of images then use spectral contrast as divergence metric
         :param dataset: HuggingFace Dataset with 'image' column.
         :return: Dictionary with 'features' list."""
