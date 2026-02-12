@@ -7,7 +7,7 @@ import numpy as np
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 
-from negate import negate_d
+from negate.config import Spec
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
@@ -76,7 +76,10 @@ def generate_dataset(folder_path: Path | list[dict[str, PillowImage.Image]], lab
     return dataset
 
 
-def build_datasets(genuine_folder: Path | None = None) -> Dataset:
+def build_datasets(
+    spec: Spec,
+    genuine_folder: Path | None = None,
+) -> Dataset:
     """Builds synthetic and genuine datasets.\n
     :param input_folder: Path to folder containing data. (optional)
     :return: Dataset containing synthetic and genuine images."""
@@ -84,25 +87,27 @@ def build_datasets(genuine_folder: Path | None = None) -> Dataset:
     synthetic_input_folder = Path(".datasets")
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
-    if negate_d.synthetic_data is not None:
-        print(f"Using remote images from {negate_d.synthetic_data}")
-        for data_repo in negate_d.synthetic_data:
+
+    if spec.data.synthetic_data is not None:
+        print(f"Using remote images from {spec.data.synthetic_data}")
+        for data_repo in spec.data.synthetic_data:
             synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
-    if negate_d.synthetic_local is not None:
-        print(f"Using local images from {negate_d.synthetic_local}")
-        for data_folder in negate_d.synthetic_local:
+    if spec.data.synthetic_local is not None:
+        print(f"Using local images from {spec.data.synthetic_local}")
+        for data_folder in spec.data.synthetic_local:
             synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
     genuine_input_folder = genuine_folder or Path("assets")
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
-    if negate_d.genuine_data is not None:
-        print(f"Using remote images from {negate_d.genuine_data}")
-        for data_repo in negate_d.genuine_data:
+
+    if spec.data.genuine_data is not None:
+        print(f"Using remote images from {spec.data.genuine_data}")
+        for data_repo in spec.data.genuine_data:
             genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
-    if negate_d.genuine_local is not None:
-        print(f"Using local images from {negate_d.genuine_local}")
-        for data_folder in negate_d.genuine_local:
+    if spec.data.genuine_local is not None:
+        print(f"Using local images from {spec.data.genuine_local}")
+        for data_folder in spec.data.genuine_local:
             genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 
     dataset = concatenate_datasets([*genuine_repos, *synthetic_repos])

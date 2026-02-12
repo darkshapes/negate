@@ -1,13 +1,15 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clase-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+from __future__ import annotations
+
 import torch
 from torch import Tensor
 
-from negate import chip, model_config
+from negate.config import Spec
 
 
-class VITExtractor:
+class VITExtract:
     """Extract wavelet energy features from images.
 
     Attributes:
@@ -24,28 +26,23 @@ class VITExtractor:
         >>> list(features["sensitivity])
     """
 
-    def __init__(self, model_name: str) -> None:
-        """Initialize analyzer with configuration.\n
-        :param dim_patch: Dimension of square cells (default 224).
-        :param resize_percent: Resize factor before celling (default 1.0, no resize).
-        :param batch_size: Batch size for processing (0 disables batching).
-        :param alpha: Perturbation weight (0 < α < 1) for HF(x) subtraction.
-        """
-        self.model_name = model_name
-        self.dtype = chip.dtype
+    def __init__(self, spec: Spec) -> None:
+        """Initialize analyzer with configuration.\n"""
+
+        self.model_name = spec.model
+        self.dtype = spec.dtype
+        self.device = spec.device
+        self.cast_move = spec.apply
+        self.library = spec.model_config.library_for_model(self.model_name)
         self._set_models()
 
     @torch.inference_mode()
     def _set_models(self):
-        self.library = model_config.library_for_model(self.model_name)
-        self.device = chip.device
-        self.cast_move = {"device": self.device, "dtype": self.dtype}
-
         match self.library:
             case "timm":
                 import timm
 
-                self.model = timm.create_model(self.model_name, pretrained=True, features_only=True).to(**self.cast_move)
+                self.model = timm.create_model(self.model_name, pretrained=True, features_only=True).to(**self.cast_move)  # type: ignore
                 data_config = timm.data.resolve_model_data_config(self.model)  # type: ignore
                 self.transforms = timm.data.create_transform(**data_config, is_training=False)  # type: ignore
             case "openclip":
@@ -73,7 +70,7 @@ class VITExtractor:
         self.model = self.model.eval().to(**self.cast_move)
 
     @torch.inference_mode()
-    def extract_features(self, image: Tensor) -> Tensor:
+    def __call__(self, image: Tensor | list[Tensor]) -> Tensor | list[Tensor]:
         """Run vision model on images to extract deep features.\n
         :param images: Single PIL Image or list of PIL Images.
         :returns: Numpy array of extracted feature vector(s).
@@ -107,9 +104,7 @@ class VITExtractor:
 
         import gc
 
-        import torch
-
-        if self.device != "cpu":
+        if self.device.type != "cpu":
             gpu: torch.device = self.device
             gpu.empty_cache()  # type: ignore
             del gpu
@@ -117,7 +112,7 @@ class VITExtractor:
         del self.device
         gc.collect()
 
-    def __enter__(self) -> "VITExtractor":
+    def __enter__(self) -> VITExtract:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

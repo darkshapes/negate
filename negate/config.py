@@ -1,26 +1,35 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a pes */ -->
 
+from __future__ import annotations
+
 import tomllib
 from pathlib import Path
 from typing import Iterator, NamedTuple
 
+import numpy as np
+import torch
+
+
+class Spec:
+    """Manages device, dtype, and other universal settings for the package."""
+
+    def __init__(self) -> None:
+        self.data_paths: NegateDataPaths = data_paths
+        self.device: torch.device = chip.device
+        self.dtype: torch.dtype = chip.dtype
+        self.apply: dict[str, torch.device | torch.dtype] = {"device": self.device, "dtype": self.dtype}
+        self.np_dtype: np.typing.DTypeLike = chip.np_dtype
+        self.hyper_param: NegateHyperParam = hyperparam_config
+        self.models: list[str] = [repo for repo in model_config.list_models]
+        self.model = model_config.auto_model[0]
+        self.opt: NegateConfig = negate_options
+        self.data = data_paths
+        self.model_config = model_config
+
 
 class NegateHyperParam(NamedTuple):
-    """Training hyperparameter values.\n
-    :param n_components: Number of components for dimensionality reduction.
-    :param num_boost_round: Number of boosting rounds.
-    :param top_k: Number of patches.
-    :param early_stopping_rounds: Early stopping rounds.
-    :param colsample_bytree: Column sample by tree.
-    :param eval_metric: Evaluation metrics.
-    :param learning_rate: Learning rate.
-    :param max_depth: Maximum depth.
-    :param objective: Objective function.
-    :param subsample: Subsample ratio.
-    :param scale_pos_weight: Scale positive weight or None.
-    :param seed: Random seed.
-    :param export_model_path: Export model path or None."""
+    """Training hyperparameter values."""
 
     n_components: float
     num_boost_round: int
@@ -38,16 +47,7 @@ class NegateHyperParam(NamedTuple):
 
 
 class NegateConfig(NamedTuple):
-    """Config values.\n
-    :param alpha: Regularization parameter.
-    :param batch_size: Batch size for processing.
-    :param cache_features: Store the immediately preceding features in cache
-    :param dim_rescale: Dimension for rescaling.
-    :param dtype: Data type for model and NumPy operations.
-    :param feat_ext_path: Folder location of the feature extractor
-    :param load_onnx: Use ONNX for inference.
-    :param magnitude_sampling: Enable magnitude sampling.
-    :param patch_dim: Patch dimension for residuals."""
+    """Config values."""
 
     alpha: float
     batch_size: int
@@ -62,12 +62,7 @@ class NegateConfig(NamedTuple):
 
 
 class NegateDataPaths(NamedTuple):
-    """Dataset config values.\n
-    :param evaluation_data: List of evaluation data paths or None.
-    :param genuine_data: List of genuine data paths or None.
-    :param genuine_local: List of local genuine data paths or None.
-    :param synthetic_data: List of synthetic data paths or None.
-    :param synthetic_local: List of local synthetic data paths or None."""
+    """Dataset config values."""
 
     eval_data: list
     genuine_data: list
@@ -77,9 +72,7 @@ class NegateDataPaths(NamedTuple):
 
 
 class NegateModelConfig:
-    """Model configuration with library auto-selection.\n
-    :param _data: Raw config data.
-    :param _default_lib: Default library name."""
+    """Model configuration with library auto-selection."""
 
     def __init__(self, data: dict, default: str = "timm"):
         self._model_library_map = data
@@ -121,13 +114,80 @@ class NegateModelConfig:
         return self._default
 
     @property
-    def auto_model(self) -> str | None:
+    def auto_model(self) -> str:
         """First model from auto-selected library."""
         models = self.list_models
-        return next(iter(models), None)
+        return next(iter(models))  # this will fail if model list is missing
 
 
-def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig]:
+class Chip:
+    """Hardware configuration for device and dtype management."""
+
+    _instance = None
+
+    def __new__(cls) -> Chip:
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self) -> None:
+        self._device: torch.device | None = None
+        self._dtype: torch.dtype = torch.float16
+        self._np_dtype: np.typing.DTypeLike = np.float16
+        self.dtype_name: str = "float16"
+
+    @property
+    def device(self) -> torch.device:
+        """Get the compute device."""
+
+        if self._device is None:
+            if torch.cuda.is_available():
+                self._device_name = "cuda"
+            elif torch.mps.is_available() if hasattr(torch, "mps") else False:
+                self._device_name = "mps"
+            elif torch.xpu.is_available() if hasattr(torch, "xpu") else False:
+                self._device_name = "xpu"
+            else:
+                self._device_name = "cpu"
+                self._dtype = torch.float32
+                self._np_dtype = np.float32
+
+        self._device = torch.device(self._device_name)
+        return self._device
+
+    @property
+    def dtype(self) -> torch.dtype:
+        """Get PyTorch dtype."""
+        return self._dtype
+
+    @property
+    def np_dtype(self) -> np.typing.DTypeLike:
+        """Get NumPy dtype."""
+        return self._np_dtype
+
+    @device.setter
+    def device(self, value: str) -> None:
+        """Set device by name with validation."""
+        self._device = torch.device(value)
+        self._device_name = value
+
+    @dtype.setter
+    def dtype(self, value: str) -> torch.dtype:
+        """Set all dtype by name with validation."""
+        if value == "bfloat16":
+            raise NotImplementedError("bfloat16 is not supported")
+        self.dtype_name: str = value
+        self._dtype = getattr(torch, value, torch.float32)
+        self._np_dtype = getattr(np, value, np.float32)
+        return self._dtype
+
+    @np_dtype.setter
+    def np_dtype(self, value: str) -> np.typing.DTypeLike:
+        self.dtype = value
+        return self._np_dtype
+
+
+def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip]:
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
@@ -145,7 +205,8 @@ def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPat
         NegateHyperParam(**train_cfg),
         NegateDataPaths(**dataset_cfg),
         NegateModelConfig(data=models | library_cfg),
+        Chip(),
     )
 
 
-negate_options, hyperparam_config, data_paths, model_config = load_config_options()
+negate_options, hyperparam_config, data_paths, model_config, chip = load_config_options()

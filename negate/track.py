@@ -2,7 +2,6 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import json
-import time as timer_module
 from pathlib import Path
 
 import altair as alt
@@ -85,102 +84,131 @@ def _avg_key(ds: Dataset, key: str) -> float:
     return float(np.mean(arr).item())
 
 
-def show_statistics(features_dataset: Dataset, start_ns: int | float | None = None) -> None:
-    """Print similarity statistics for genuine and synthetic features.
+# def show_statistics(features_dataset: Dataset, start_ns: int | float | None = None) -> None:
+#     """Print similarity statistics for genuine and synthetic features.
 
-    :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
-        [label, sim_min, sim_max, idx_min, idx_max]."""
-    from negate import hyper_param, negate_d, negate_opt
+#     :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
+#         [label, sim_min, sim_max, idx_min, idx_max]."""
+#     from negate import hyper_param, negate_d, negate_opt
 
-    stats = {}
+#     stats = {}
 
-    genuine_dataset = features_dataset.filter(lambda x: x["label"] == 0, batched=False)
-    synthetic_dataset = features_dataset.filter(lambda x: x["label"] == 1, batched=False)
+#     genuine_dataset = features_dataset.filter(lambda x: x["label"] == 0, batched=False)
+#     synthetic_dataset = features_dataset.filter(lambda x: x["label"] == 1, batched=False)
 
-    for key in ("sim_min", "sim_max", "idx_min", "idx_max"):
-        genuine_values = np.array(genuine_dataset[key]).flatten()
-        synthetic_values = np.array(synthetic_dataset[key]).flatten()
-        genuine_avg_similarity = float(np.mean(genuine_values).item())
-        synthetic_avg_similarity = float(np.mean(synthetic_values).item())
-        stats[f"genuine_avg_{key}"] = genuine_avg_similarity
-        stats[f"synthetic_avg_{key}"] = synthetic_avg_similarity
-        print(f"""
-        Average {key} (genuine): {genuine_avg_similarity:.4f}
-        Average {key} (synthetic): {synthetic_avg_similarity:.4f}
-        """)
+#     for key in ("sim_min", "sim_max", "idx_min", "idx_max"):
+#         genuine_values = np.array(genuine_dataset[key]).flatten()
+#         synthetic_values = np.array(synthetic_dataset[key]).flatten()
+#         genuine_avg_similarity = float(np.mean(genuine_values).item())
+#         synthetic_avg_similarity = float(np.mean(synthetic_values).item())
+#         stats[f"genuine_avg_{key}"] = genuine_avg_similarity
+#         stats[f"synthetic_avg_{key}"] = synthetic_avg_similarity
+#         print(f"""
+#         Average {key} (genuine): {genuine_avg_similarity:.4f}
+#         Average {key} (synthetic): {synthetic_avg_similarity:.4f}
+#         """)
 
-    gen_sim = np.array(genuine_dataset["sim_max"]).flatten()
-    gen_idx = np.array(genuine_dataset["idx_max"]).flatten()
-    syn_sim = np.array(synthetic_dataset["sim_max"]).flatten()
-    syn_idx = np.array(synthetic_dataset["idx_max"]).flatten()
+#     gen_sim = np.array(genuine_dataset["sim_max"]).flatten()
+#     gen_idx = np.array(genuine_dataset["idx_max"]).flatten()
+#     syn_sim = np.array(synthetic_dataset["sim_max"]).flatten()
+#     syn_idx = np.array(synthetic_dataset["idx_max"]).flatten()
 
-    gen_diff = float(np.mean(gen_sim - gen_idx).item())
-    syn_diff = float(np.mean(syn_sim - syn_idx).item())
+#     gen_diff = float(np.mean(gen_sim - gen_idx).item())
+#     syn_diff = float(np.mean(syn_sim - syn_idx).item())
 
-    stats["genuine_avg_sim_max_minus_idx_max"] = gen_diff
-    stats["synthetic_avg_sim_max_minus_idx_max"] = syn_diff
+#     stats["genuine_avg_sim_max_minus_idx_max"] = gen_diff
+#     stats["synthetic_avg_sim_max_minus_idx_max"] = syn_diff
 
-    print(f"""
-    Average (sim_max - idx_max) genuine: {gen_diff:.4f}
-    Average (sim_max - idx_max) synthetic: {syn_diff:.4f}
-    """)
+#     print(f"""
+#     Average (sim_max - idx_max) genuine: {gen_diff:.4f}
+#     Average (sim_max - idx_max) synthetic: {syn_diff:.4f}
+#     """)
 
-    def overall_avg(ds: Dataset) -> float:
-        idx = (_avg_key(ds, "idx_min") + _avg_key(ds, "idx_max")) / 2
-        sim = (_avg_key(ds, "sim_min") + _avg_key(ds, "sim_max")) / 2
-        return (idx + sim) / 2
+#     def overall_avg(ds: Dataset) -> float:
+#         idx = (_avg_key(ds, "idx_min") + _avg_key(ds, "idx_max")) / 2
+#         sim = (_avg_key(ds, "sim_min") + _avg_key(ds, "sim_max")) / 2
+#         return (idx + sim) / 2
 
-    g_avg = overall_avg(genuine_dataset)
-    s_avg = overall_avg(synthetic_dataset)
+#     g_avg = overall_avg(genuine_dataset)
+#     s_avg = overall_avg(synthetic_dataset)
 
-    stats["overall_avg_genuine_cosine_similarity"] = g_avg
-    stats["overall_avg_synthetic_cosine_similarity"] = s_avg
-    stats["overall_avg_cosine_similarity"] = (g_avg + s_avg) / 2
+#     stats["overall_avg_genuine_cosine_similarity"] = g_avg
+#     stats["overall_avg_synthetic_cosine_similarity"] = s_avg
+#     stats["overall_avg_cosine_similarity"] = (g_avg + s_avg) / 2
 
-    print(f"""
-    Overall average genuine cosine similarity: {g_avg:.4f}
-    Overall average synthetic cosine similarity: {s_avg:.4f}
-    Overall average cosine similarity: {(g_avg + s_avg) / 2:.4f}
-    """)
+#     print(f"""
+#     Overall average genuine cosine similarity: {g_avg:.4f}
+#     Overall average synthetic cosine similarity: {s_avg:.4f}
+#     Overall average cosine similarity: {(g_avg + s_avg) / 2:.4f}
+#     """)
 
-    result_path.mkdir(parents=True, exist_ok=True)
-    stats_file = str(result_path / f"stats_{timestamp}.json")
+#     result_path.mkdir(parents=True, exist_ok=True)
+#     stats_file = str(result_path / f"stats_{timestamp}.json")
 
-    if start_ns is not None:
-        elapsed_ns = timer_module.perf_counter_ns() - start_ns
-        stats["elapsed_ns"] = elapsed_ns
-        stats["ns_as_human_time"] = f"{elapsed_ns / 1e9:.2}"
+#     if start_ns is not None:
+#         elapsed_ns = timer_module.perf_counter_ns() - start_ns
+#         stats["elapsed_ns"] = elapsed_ns
+#         stats["ns_as_human_time"] = f"{elapsed_ns / 1e9:.2}"
 
-    stats_format = {k: str(v) for k, v in stats.items()}
-    stats_format.update(negate_opt._asdict())
-    stats_format.update(negate_d._asdict())
-    stats_format.update(hyper_param._asdict())
-    with open(stats_file, "tw", encoding="utf-8") as out_file:
-        json.dump(stats_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
+#     stats_format = {k: str(v) for k, v in stats.items()}
+#     stats_format.update(negate_opt._asdict())
+#     stats_format.update(negate_d._asdict())
+#     stats_format.update(hyper_param._asdict())
+#     with open(stats_file, "tw", encoding="utf-8") as out_file:
+#         json.dump(stats_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
 
 
 def compare_decompositions(model_name, features_dataset: Dataset) -> None:
     """Plot wavelet sensitivity distributions.\n
     :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
-        [label, sim_min, sim_max, idx_min, idx_max]."""
+        [label, min_warp, max_warp, min_base, max_base]."""
+
+    import pandas as pd
 
     data_frame = features_dataset.to_pandas()
-    data_frame["sensitivity"] = (data_frame["sim_min"].values + data_frame["sim_max"].values) / 2  # type: ignore
-    lower_bound = 0.800
-    upper_bound = 0.900
-    data_frame["is_within_range"] = (data_frame["sensitivity"] >= lower_bound) & (data_frame["sensitivity"] <= upper_bound)  # type: ignore
+    expanded_frame = data_frame.explode("results").reset_index(drop=True)
 
+    # Convert result strings to list if needed, then extract individual components
+    if isinstance(expanded_frame["results"].iloc[0], str):
+        import ast
+
+        expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
+    expanded_frame[["min_warp", "max_warp", "min_base", "max_base"]] = pd.DataFrame(expanded_frame["results"].tolist(), index=expanded_frame.index)
+    data_frame = features_dataset.to_pandas()
+
+    # Compute min/max per wavelet_type group before melting
+    wavelet_groups = expanded_frame.groupby("label")[["min_warp", "max_warp", "min_base", "max_base"]]
+    # Normalize each wavelet column per label: (x - col_min) / (col_max - col_min)
+    # Avoid division by zero
+    norm_frame = expanded_frame.copy()
+    for col in ["min_warp", "max_warp", "min_base", "max_base"]:
+        col_min = norm_frame.groupby("label")[col].transform("min")
+        col_max = norm_frame.groupby("label")[col].transform("max")
+        denom = col_max - col_min
+        denom = denom.replace(0, 1)  # avoid division by zero
+        norm_frame[col] = (norm_frame[col] - col_min) / denom
+
+    long_frame = norm_frame.melt(id_vars=["label"], value_vars=["min_warp", "max_warp", "min_base", "max_base"], var_name="wavelet_type", value_name="sensitivity")
     chart = (
-        alt.Chart(data_frame)
+        alt.Chart(long_frame)
         .mark_line(opacity=0.7)
         .encode(
             x=alt.X("sensitivity:Q", title="Cosine Similarity"),
             y=alt.Y("density:Q", title="Density"),
-            color=alt.Color("label:N"),
+            color=alt.Color("wavelet_type:N"),
+            # strokeDash=alt.condition(
+            #     alt.datum.label == 0,
+            #     alt.value("solid"),
+            #     alt.value("dash"),
+            # ),
         )
-        .transform_density("sensitivity", as_=["sensitivity", "density"], groupby=["label"])
-        .transform_filter((alt.datum.sensitivity <= 1.0) & (alt.datum.sensitivity >= -1.0))
-        .properties(title=f"Sensitivity by Label\nModel: {model_name}", width=600, height=300)
+        .transform_density(
+            "sensitivity",
+            as_=["sensitivity", "density"],
+            groupby=["label", "wavelet_type"],
+        )
+        # .transform_filter((alt.datum.sensitivity <= 1.0) & (alt.datum.sensitivity >= -1.0))
+        .properties(title=f"Sensitivity by Label\nModel: {model_name}", width=1200, height=600)
     )
     result_path.mkdir(parents=True, exist_ok=True)
     chart_file = str(result_path / f"sensitivity_plot_{timestamp}.html")

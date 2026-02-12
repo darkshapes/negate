@@ -3,67 +3,126 @@
 
 """Haar Wavelet processing"""
 
+import gc
+
+import numpy as np
 import torch
-from numpy.typing import NDArray
+from datasets import Dataset
 from PIL import Image
 from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
+from torch.nn.functional import cosine_similarity
+from torchvision.transforms.functional import five_crop
 
-from negate import chip, negate_opt
+from negate.config import Spec
+from negate.feature_vit import VITExtract
+from negate.scaling import patchify_image, tensor_rescale
+
+"""Haar Wavelet processing"""
 
 
-class WaveletAnalyzer:
-    """Extract wavelet energy features from images.
+class WaveletAnalyze:
+    """Extract wavelet energy features from images."""
 
-    Attributes:
-        patch_dim: Size of square cells for analysis.
-        batch_size: Batch size for dataset processing (0 = no batching).
-        alpha: Perturbation weight for HF(x) subtraction (0 < α < 1).
+    def __init__(self, spec: Spec) -> None:
+        """Initialize analyzer with configuration."""
 
-    Example:
-
-    """
-
-    def __init__(self) -> None:
-        """Initialize analyzer with configuration.\n
-        :param dim_patch: Dimension of square cells (default 224).
-        :param resize_percent: Resize factor before celling (default 1.0, no resize).
-        :param batch_size: Batch size for processing (0 disables batching).
-        :param alpha: Perturbation weight (0 < α < 1) for HF(x) subtraction.
-        """
-
-        self.batch_size = negate_opt.batch_size
-        self.alpha = negate_opt.alpha
-        dim_patch = negate_opt.dim_patch
+        self.batch_size = spec.opt.batch_size
+        self.alpha = spec.opt.alpha
+        dim_patch = spec.opt.dim_patch
         self.dim_patch = (dim_patch, dim_patch)
-        self.dim_rescale = negate_opt.dim_factor * dim_patch
+        self.dim_rescale = spec.opt.dim_factor * dim_patch
+        self.device = spec.device
+        self.np_dtype = spec.np_dtype
+        self.cast_move: dict = spec.apply
         self.dwt = DWTForward(J=2, wave="haar").to(**self.cast_move)
         self.idwt = DWTInverse(wave="haar").to(**self.cast_move)
-        self.cast_move = {"device": chip.device, "dtype": chip.dtype}
+        self.extract = VITExtract(spec)
 
     @torch.inference_mode()
-    def _find_extrema(self, images: Image.Image | list[Image.Image]) -> tuple[list[NDArray], list[NDArray]]:
-        """Find min/max energy cells.\n
-        :param orig: Original numeric image (unused but kept for signature compatibility).
-        :param cells: Dict of center->cell mappings.\n
-        :returns: Tuple of (min_cells list, max_cells list) with centers and data.
+    def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
+        """Forward passes any resolution images and exports their spectral context attention masks.\n
+        The batch size of the tensors in the `x` list should be equal to 1, i.e. each
+        tensor in the list should correspond to a single image.
+        :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
+        :returns: A tuple containing"""
+
+        minimum_patches = 0
+        cos_sim: list[dict[str, np.ndarray]] = []
+        image: list[Image.Image] = dataset["image"]
+        rescaled: list[Tensor] = tensor_rescale(image, self.dim_rescale, **self.cast_move)
+        for img in rescaled:
+            # Patchify the image.
+            patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
+            if patched.size(1) < minimum_patches:
+                patched: tuple[torch.Tensor, ...] = five_crop(img, [*self.dim_patch])  # type: ignore
+                patched: torch.Tensor = torch.stack(patched, dim=1)  # type: ignore
+
+            batch, l_, channel, height, width = patched.shape
+            patched = patched.view(batch * l_, channel, height, width)  # (B*L, C, H, W)
+
+            # Perturb each patch
+            low_residual, high_coefficient = self.dwt(patched)
+            perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
+            perturbed_patches = patched - self.alpha * perturbed_high_freq
+
+            base_features: Tensor | list[Tensor] = self.extract(patched)
+            warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
+            cos_sim.append(self.shape_extrema(base_features, warp_features, batch))
+
+        return {"results": cos_sim}
+
+    def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, np.ndarray]:
+        """Compute minimum and maximum cosine similarity between base and warped features.\n
+        Calculates per-batch cosine similarities across feature maps, identifying both the\n
+        extreme values (min/max) and their corresponding indices within each batch.\n
+        :param base_features: Raw feature tensors from original patches\n
+        :param warp_features: Warped feature tensors after wavelet perturbation\n
+        :param batch: Number of images in current processing batch\n
+        :returns: Tuple of ndarrays containing (min_similarities, max_similarities, min_indices, max_indices)
         """
+        min_warps = []
+        max_warps = []
+        min_base = []
+        max_base = []
 
-        from negate.scaling import patchify_image, tensor_rescale
+        for idx, tensor in enumerate(base_features):
+            similarity = cosine_similarity(tensor, warp_features[idx], dim=-1)
+            reshaped_similarity = similarity.unsqueeze(1).reshape([batch, -1])
 
-        tensor_rescale(images, self.dim_rescale, **self.cast_move)
+            similarity_min = torch.mean(reshaped_similarity, 1).view([batch])
+            base_min = torch.argmin(reshaped_similarity, 1).view(batch)
+            similarity_max = reshaped_similarity.view([-1])
+            base_max = torch.argmax(reshaped_similarity, 1).view(batch)
 
-        min_perts = []
-        max_perts = []
-        tensor_patches: list[Tensor] = []
-        for image in tensor_patches:
-            tensor_patches.append(patchify_image(img=image, patch_size=self.dim_patch, stride=self.dim_patch))
+            min_warps.append(similarity_min.cpu().numpy())
+            max_warps.append(similarity_max.cpu().numpy())
+            min_base.append(base_min.cpu().numpy())
+            max_base.append(base_max.cpu().numpy())
 
-            yl, yh = self.dwt(tensor_patches)
-            pert_hf = self.idwt((torch.zeros_like(yl), yh))
-            perturbed_patches = tensor_patches - self.alpha * pert_hf
+        return {
+            "min_warp": np.concatenate(min_warps, dtype=self.np_dtype).reshape([-1]),
+            "max_warp": np.concatenate(max_warps, dtype=self.np_dtype).reshape([-1]),
+            "min_base": np.concatenate(min_base, dtype=self.np_dtype).reshape([-1]),
+            "max_base": np.concatenate(max_base, dtype=self.np_dtype).reshape([-1]),
+        }
 
-            min_perts.append(min(perturbed_patches))
-            max_perts.append(perturbed_patches)
+    def cleanup(self) -> None:
+        """Free the VAE and GPU memory."""
 
-        return min_perts, max_perts
+        device_name = self.device.type
+        del self.device
+        if device_name != "cpu":
+            self.gpu = getattr(torch, device_name)
+            self.gpu.empty_cache()  # type: ignore
+        del self.dwt
+        del self.idwt
+        del self.extract
+        gc.collect()
+
+    def __enter__(self) -> "WaveletAnalyze":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        if hasattr(self, "extract"):
+            self.cleanup()
