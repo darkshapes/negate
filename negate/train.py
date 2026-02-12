@@ -10,7 +10,7 @@ import numpy as np
 from datasets import Dataset
 from numpy.random import default_rng
 from numpy.typing import NDArray
-
+from typing import Callable
 
 from negate.config import hyperparam_config as hyper_param
 
@@ -43,18 +43,12 @@ class TrainingParameters:
 class TrainResult:
     """Container holding all artifacts produced by :func:`grade`."""
 
-    try:
-        from xgboost import Booster
-        from sklearn.decomposition import PCA
-    except (ImportError, ModuleNotFoundError, Exception):
-        raise RuntimeError("missing dependencies for xgboost. Please install using 'negate[xgb]'")
-
     d_matrix_test: NDArray
     feature_matrix: NDArray
     labels: Any
-    model: Booster
+    model: Callable
     num_features: int
-    pca: PCA
+    pca: Callable
     scale_pos_weight: float | None
     seed: int
     X_train_pca: NDArray
@@ -66,6 +60,7 @@ def grade(features_dataset: Dataset) -> TrainResult:
     """Train an XGBoost model from a feature dataset.\n
     :param features_dataset: Dataset of samples containing ``features`` and ``label``.
     :return: TrainResult holding the trained model, PCA, data matrices and metadata."""
+
     try:
         import xgboost as xgb
         from sklearn.decomposition import PCA
@@ -102,9 +97,9 @@ def grade(features_dataset: Dataset) -> TrainResult:
 
     return TrainResult(
         X_train=X_train,  # type: ignore
-        pca=pca,
+        pca=pca,  # type: ignore
         d_matrix_test=d_matrix_test,  # type: ignore
-        model=model,
+        model=model,  # type: ignore
         scale_pos_weight=params.scale_pos_weight,
         X_train_pca=X_train_pca,
         y_test=y_test,  # type: ignore
