@@ -1193,6 +1193,7 @@ dependencies = [
     { name = "torchvision", version = "0.25.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-mps' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-cuda') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-rocm')" },
     { name = "torchvision", version = "0.25.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform != 'darwin' or extra == 'extra-6-negate-cpu' or extra == 'extra-6-negate-cuda' or extra != 'extra-6-negate-mps' or (extra == 'extra-6-negate-mps' and extra == 'extra-6-negate-rocm')" },
     { name = "transformers" },
+    { name = "xgboost" },
 ]
 
 [package.optional-dependencies]
@@ -1298,6 +1299,7 @@ requires-dist = [
     { name = "torchvision", marker = "extra == 'cuda'" },
     { name = "torchvision", marker = "extra == 'rocm'" },
     { name = "transformers", specifier = ">=4.57.3" },
+    { name = "xgboost", specifier = ">=3.1.3" },
     { name = "xgboost", marker = "extra == 'xgb'", specifier = ">=3.1.3" },
 ]
 provides-extras = ["cuda", "rocm", "cpu", "mps", "residuals", "vae", "onnx", "xgb", "dev"]
