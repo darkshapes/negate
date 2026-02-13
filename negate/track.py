@@ -21,6 +21,7 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
     import matplotlib.pyplot as plt
 
     data_frame = features_dataset.to_pandas()
+    print(data_frame.keys())
     expanded_frame = data_frame.explode("results").reset_index(drop=True)
 
     # Convert result strings to list if needed

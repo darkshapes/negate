@@ -41,13 +41,13 @@ def process(dataset: Dataset, spec: Spec) -> Dataset:
     idwt = DWTInverse(wave="haar")
     extract = VITExtract(spec)
     with WaveletAnalyze(spec, dwt=dwt, idwt=idwt, extract=extract) as analyzer:  # type: ignore
-        similarity = dataset.map(
+        dataset = dataset.map(
             analyzer,
             remove_columns=["image"],
             desc="Computing wavelets...",
             **kwargs,
         )
-    return similarity
+    return dataset
 
 
 def calibrate(model_name: str, spec: Spec, file_or_folder_path: Path | None = None) -> None:
@@ -61,7 +61,7 @@ def calibrate(model_name: str, spec: Spec, file_or_folder_path: Path | None = No
     # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
     compare_decompositions(model_name=model_name, features_dataset=features_dataset)
     timecode = timer_module.perf_counter() - start_ns
-    # print(timecode)
+    print(timecode)
 
 
 def main() -> None:

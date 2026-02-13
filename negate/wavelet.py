@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clase-License-Condition-1.0
+# SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
 """Haar Wavelet processing"""
@@ -42,7 +42,7 @@ class WaveletAnalyze:
 
     @torch.inference_mode()
     def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
-        """Forward passes any resolution images and exports their spectral context attention masks.\n
+        """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
@@ -50,17 +50,12 @@ class WaveletAnalyze:
 
         minimum_patches = 0
         cos_sim: list[dict[str, np.ndarray]] = []
-        image: list[Image.Image] = dataset["image"]
-        rescaled: list[Tensor] = tensor_rescale(image, self.dim_rescale, **self.cast_move)
-        for img in rescaled:
-            # Patchify the image.
-            patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
-            if patched.size(1) < minimum_patches:
-                patched: tuple[torch.Tensor, ...] = five_crop(img, [*self.dim_patch])  # type: ignore
-                patched: torch.Tensor = torch.stack(patched, dim=1)  # type: ignore
 
-            batch, l_, channel, height, width = patched.shape
-            patched = patched.view(batch * l_, channel, height, width)  # (B*L, C, H, W)
+        rescaled = tensor_rescale(dataset["image"], self.dim_rescale, **self.cast_move)
+
+        for img in rescaled:
+            patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
+            batch, _, _, _tb = patched.shape
 
             # Perturb each patch
             low_residual, high_coefficient = self.dwt(patched)

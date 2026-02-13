@@ -31,7 +31,7 @@ def tensor_rescale(images: Image.Image | list[Image.Image], dim_rescale: int, de
     return tensor_rescale
 
 
-def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple[int, int], reverse: bool = True) -> torch.Tensor:
+def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple[int, int]) -> torch.Tensor:
     """Splits an input image into patches\n
     :param img: Input image of size (B, C, H, W).
     :param patch_size: (height, width) of patches.
@@ -45,4 +45,6 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     img = img.permute(0, 2, 3, 1, 4, 5)
     img = img.contiguous()
     img = img.view(img.size(0), -1, img.size(3), kh, kw)
+    batch, l_, channel, height, width = img.shape
+    img = img.view(batch * l_, channel, height, width)
     return img
