@@ -3,31 +3,65 @@
 
 """Haar Wavelet processing"""
 
+from __future__ import annotations
+
 import gc
+from typing import ContextManager
 
 import numpy as np
 import torch
 from datasets import Dataset
-from PIL import Image
+from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
-from torchvision.transforms.functional import five_crop
 
 from negate.config import Spec
 from negate.feature_vit import VITExtract
-from pytorch_wavelets import DWTForward, DWTInverse
-
-from negate.scaling import patchify_image, tensor_rescale
+from negate.feature_vae import VAEExtract
+from negate.residuals import Residual
+from negate.scaling import patchify_image, tensor_rescale, split_array
 
 """Haar Wavelet processing"""
 
 
-class WaveletAnalyze:
-    """Extract wavelet energy features from images."""
+class WaveletContext:
+    """Container for wavelet analysis dependencies."""
 
-    def __init__(self, spec: Spec, dwt: DWTForward, idwt: DWTInverse, extract: VITExtract) -> None:
-        """Initialize analyzer with configuration."""
+    spec: Spec
+    dwt: DWTForward
+    idwt: DWTInverse
+    extract: VITExtract
+    residual: Residual
 
+    def __init__(
+        self,
+        spec: Spec,
+        dwt: DWTForward | None = None,
+        idwt: DWTInverse | None = None,
+        extract: VITExtract | VAEExtract | None = None,
+        residual: Residual | None = None,
+    ):
+        self.spec = spec
+        self.dwt = dwt or DWTForward(J=2, wave="haar")
+        self.idwt = idwt or DWTInverse(wave="haar")
+        self.extract = extract or VITExtract(spec)
+        self.residual = residual or Residual(spec)
+
+    def __enter__(self) -> WaveletContext:
+        return self
+
+    def __exit__(self, *args: object) -> None:
+        pass  # Cleanup if needed.
+
+
+class WaveletAnalyze(ContextManager):
+    """Analyze images using wavelet transform."""
+
+    context: WaveletContext
+
+    def __init__(self, context: WaveletContext) -> None:
+        """Extract wavelet energy features from images."""
+        spec = context.spec
         self.batch_size = spec.opt.batch_size
         self.alpha = spec.opt.alpha
         dim_patch = spec.opt.dim_patch
@@ -36,9 +70,10 @@ class WaveletAnalyze:
         self.device = spec.device
         self.np_dtype = spec.np_dtype
         self.cast_move: dict = spec.apply
-        self.dwt = dwt.to(**self.cast_move)
-        self.idwt = idwt.to(**self.cast_move)
-        self.extract = extract
+        self.dwt = context.dwt.to(**self.cast_move)
+        self.idwt = context.idwt.to(**self.cast_move)
+        self.extract = context.extract
+        self.residual = context.residual
 
     @torch.inference_mode()
     def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
@@ -48,23 +83,23 @@ class WaveletAnalyze:
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A tuple containing"""
 
-        minimum_patches = 0
         cos_sim: list[dict[str, np.ndarray]] = []
 
-        rescaled = tensor_rescale(dataset["image"], self.dim_rescale, **self.cast_move)
-
-        for img in rescaled:
+        images = dataset["image"]
+        rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
+        for idx, img in enumerate(rescaled):
             patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
             batch, _, _, _tb = patched.shape
 
-            # Perturb each patch
             low_residual, high_coefficient = self.dwt(patched)
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
             perturbed_patches = patched - self.alpha * perturbed_high_freq
-
             base_features: Tensor | list[Tensor] = self.extract(patched)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
-            cos_sim.append(self.shape_extrema(base_features, warp_features, batch))
+
+            # residuals = self.residual(img)
+            extrema = self.shape_extrema(base_features, warp_features, batch)
+            cos_sim.append(extrema)
 
         return {"results": cos_sim}
 
@@ -97,11 +132,16 @@ class WaveletAnalyze:
             min_base.append(base_min.cpu().numpy())
             max_base.append(base_max.cpu().numpy())
 
+        min_warps = np.concatenate(split_array(np.array(min_warps))).flatten()
+        max_warps = np.concatenate(split_array(np.array(max_warps))).flatten()
+        min_base = np.concatenate(split_array(np.array(min_base))).flatten()
+        max_base = np.concatenate(split_array(np.array(max_base))).flatten()
+
         return {
-            "min_warp": np.concatenate(min_warps, dtype=self.np_dtype).flatten(),
-            "max_warp": np.concatenate(max_warps, dtype=self.np_dtype).flatten(),
-            "min_base": np.concatenate(min_base, dtype=self.np_dtype).flatten(),
-            "max_base": np.concatenate(max_base, dtype=self.np_dtype).flatten(),
+            "min_warp": min_warps,
+            "max_warp": max_warps,
+            "min_base": min_base,
+            "max_base": max_base,
         }
 
     def cleanup(self) -> None:
