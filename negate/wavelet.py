@@ -16,10 +16,10 @@ from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
 from negate.config import Spec
-from negate.feature_vit import VITExtract
 from negate.feature_vae import VAEExtract
+from negate.feature_vit import VITExtract
 from negate.residuals import Residual
-from negate.scaling import patchify_image, tensor_rescale, split_array
+from negate.scaling import patchify_image, split_array, tensor_rescale
 
 """Haar Wavelet processing"""
 
@@ -44,7 +44,7 @@ class WaveletContext:
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
-        self.extract = extract or VITExtract(spec)
+        self.extract = extract or VITExtract(spec)  # type: ignore
         self.residual = residual or Residual(spec)
 
     def __enter__(self) -> WaveletContext:
@@ -83,11 +83,13 @@ class WaveletAnalyze(ContextManager):
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A tuple containing"""
 
-        cos_sim: list[dict[str, np.ndarray]] = []
+        cos_sim: list[dict,] = []
 
         images = dataset["image"]
-        residuals = self.residual(images)
         rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
+
+        residuals = self.residual(images)
+
         for idx, img in enumerate(rescaled):
             patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
             batch, _, _, _tb = patched.shape
@@ -98,8 +100,7 @@ class WaveletAnalyze(ContextManager):
             base_features: Tensor | list[Tensor] = self.extract(patched)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
 
-            extrema = self.shape_extrema(base_features, warp_features, batch)
-            cos_sim.append(extrema)
+            cos_sim.append(self.shape_extrema(base_features, warp_features, batch))
         cos_sim.append(residuals)
         return {"results": cos_sim}
 
