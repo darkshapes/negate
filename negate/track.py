@@ -30,14 +30,14 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
         expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
 
     # Extract mean values from each dict key's numpy array
-    for key in ["min_warp", "max_warp", "min_base", "max_base"]:  # "lapl_tc"
+    for key in ["min_warp", "max_warp", "min_base", "max_base", "lapl_tc", "sobl_tc", "spcl_tc"]:
         expanded_frame[key] = expanded_frame["results"].apply(lambda x: float(np.mean(x[key])) if not np.isinf(x[key]).all() else None)
 
     # Plot all four fields with smooth lines
     plt.figure(figsize=(10, 6))
     fig, axes = plt.subplots(2, 4, figsize=(12, 10))
 
-    for i, metric in enumerate(["min_warp", "max_warp", "min_base", "max_base"]):  # "lapl_tc"
+    for i, metric in enumerate(["min_warp", "max_warp", "min_base", "max_base", "lapl_tc", "sobl_tc", "spcl_tc"]):  #
         ax = axes.flat[i]
         for label_val, color in [(0, "cyan"), (1, "red")]:
             subset = expanded_frame[expanded_frame["label"] == label_val][metric].dropna()

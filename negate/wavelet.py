@@ -86,6 +86,7 @@ class WaveletAnalyze(ContextManager):
         cos_sim: list[dict[str, np.ndarray]] = []
 
         images = dataset["image"]
+        residuals = self.residual(images)
         rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
         for idx, img in enumerate(rescaled):
             patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
@@ -97,10 +98,9 @@ class WaveletAnalyze(ContextManager):
             base_features: Tensor | list[Tensor] = self.extract(patched)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
 
-            # residuals = self.residual(img)
             extrema = self.shape_extrema(base_features, warp_features, batch)
             cos_sim.append(extrema)
-
+        cos_sim.append(residuals)
         return {"results": cos_sim}
 
     @torch.inference_mode()

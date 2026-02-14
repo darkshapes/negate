@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+from PIL import Image
 import numpy as np
 from skimage.feature import local_binary_pattern
 from skimage.filters import laplace, sobel_h, sobel_v
@@ -20,8 +21,9 @@ class Residual:
         self.np_dtype = spec.np_dtype
         self.top_k = spec.hyper_param.top_k
 
-    def __call__(self, image_tensor: Tensor, radius: int = 3) -> dict[str, list[np.ndarray] | np.ndarray]:
-        numeric_image = image_tensor.cpu().detach().numpy()
+    def __call__(self, image: Image.Image, radius: int = 3) -> dict[str, list[np.ndarray] | np.ndarray]:
+        greyscale = image.convert("L")
+        numeric_image = np.array(greyscale, dtype=self.np_dtype)
 
         if numeric_image.ndim == 4:
             numeric_image = numeric_image[0]  # Remove batch dim
@@ -29,11 +31,17 @@ class Residual:
             numeric_image = numeric_image[0] if numeric_image.shape[0] in (1, 3) else numeric_image.mean(axis=0)
 
         point = 8 * radius
-        lapl_tc = local_binary_pattern(self.laplace_residual(np.ndarray(numeric_image)), P=point, R=radius)
+        lapl_tc = local_binary_pattern(np.ndarray(self.laplace_residual(numeric_image)), P=point, R=radius)
+        sobl_tc = local_binary_pattern(np.ndarray(self.sobel_residual(numeric_image)), P=point, R=radius)
+        spcl_tc = local_binary_pattern(np.ndarray(self.spectral_residual(numeric_image)), P=point, R=radius)
         lapl_chunks = split_array(lapl_tc.flatten())
+        sobl_chunks = split_array(sobl_tc.flatten())
+        spcl_chunks = split_array(spcl_tc.flatten())
 
         return {
             "lapl_tc": lapl_chunks,
+            "sobl_tc": sobl_chunks,
+            "spcl_tc": spcl_chunks,
         }
 
     @adapt_rgb(each_channel)
