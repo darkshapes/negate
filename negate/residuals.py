@@ -31,9 +31,10 @@ class Residual:
             numeric_image = numeric_image[0] if numeric_image.shape[0] in (1, 3) else numeric_image.mean(axis=0)
 
         point = 8 * radius
-        lapl_tc = local_binary_pattern(np.ndarray(self.laplace_residual(numeric_image)), P=point, R=radius)
-        sobl_tc = local_binary_pattern(np.ndarray(self.sobel_residual(numeric_image)), P=point, R=radius)
-        spcl_tc = local_binary_pattern(np.ndarray(self.spectral_residual(numeric_image)), P=point, R=radius)
+        lapl_tc = local_binary_pattern(self.laplace_residual(numeric_image), P=point, R=radius)
+        sobl_tc = local_binary_pattern(self.sobel_residual(numeric_image), P=point, R=radius)
+        spcl_tc = local_binary_pattern(np.array(self.spectral_residual(numeric_image)), P=point, R=radius)
+
         lapl_chunks = split_array(lapl_tc.flatten())
         sobl_chunks = split_array(sobl_tc.flatten())
         spcl_chunks = split_array(spcl_tc.flatten())
@@ -44,16 +45,14 @@ class Residual:
             "spcl_tc": spcl_chunks,
         }
 
-    @adapt_rgb(each_channel)
     def laplace_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Create a 3-channel residual from a grayscale image.\n
         :param image: PIL image to process.
         :return: Residual image in greyscale mode."""
 
         residual = laplace(numeric_image, ksize=3)
-        return residual.astype(np.int8)
+        return np.asarray(residual).astype(np.int8)
 
-    @adapt_rgb(each_channel)
     def sobel_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Create a 3-channel residual using Sobel edge detection.\n
         :param image: PIL image to process.
@@ -62,7 +61,7 @@ class Residual:
         grad_x = sobel_h(numeric_image)
         grad_y = sobel_v(numeric_image)
         gradient = np.sqrt(grad_x**2 + grad_y**2)
-        return gradient.astype(np.int8)
+        return np.asarray(gradient).astype(np.int8)
 
     def spectral_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Create a 3-channel residual using FFT magnitude spectrum of the frequency domain.\n
@@ -73,7 +72,7 @@ class Residual:
         fourier_2d_shift = np.fft.fftshift(fourier_transform)
 
         magnitude_spectra = 20 * np.log(np.abs(fourier_2d_shift) + 1)
-        return magnitude_spectra.astype(np.int8)
+        return np.asarray(magnitude_spectra).astype(np.int8)
 
     def texture_complexity(self, residual: np.ndarray, patch_size: int = 16, d: float = 255.0) -> np.ndarray:
         """Compute texture complexity for each NxN patch in the residual.

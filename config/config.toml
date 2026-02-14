@@ -4,7 +4,7 @@ feat_ext_path = ""                     # Path to save the model in or null for d
 batch_size = 0                         # Feature extraction batch size, 0 disables batching default[0]
 dim_factor = 6                         # Multiplier for image rescale size Default 6
 dim_patch = 256                        # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
-alpha = 0.4                            # strength of perturbation Default 0.3)
+alpha = 0.4                           # strength of perturbation Default 0.3)
 dtype = "float16"                      # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
 load_onnx = false                      # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = false             # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
