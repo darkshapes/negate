@@ -3,42 +3,63 @@
 
 from pathlib import Path
 
+from matplotlib import pyplot as plt
 import numpy as np
 from datasets import Dataset
-
+import pandas as pd
 from negate.train import get_time
 
 timestamp = get_time()
 result_path = Path(__file__).parent.parent / "results" / timestamp
 
 
-def compare_decompositions(model_name, features_dataset: Dataset) -> None:
-    """Plot wavelet sensitivity distributions.
-    :param model_name: Name of the model.
-    :param features_dataset: Dataset from WaveletAnalyzer.decompose() with
-        [label, min_warp, max_warp, min_base, max_base].
+def summarize_residuals(features_dataset: Dataset) -> pd.DataFrame:
+    """Extract residual metrics into a structured DataFrame.
+
+    :param features_dataset: Dataset with results containing "residual" key.
+    :returns: DataFrame with flattened residual columns.
     """
-    import matplotlib.pyplot as plt
+    import pandas as pd
 
     data_frame = features_dataset.to_pandas()
     expanded_frame = data_frame.explode("results").reset_index(drop=True)
 
-    # Convert result strings to list if needed
     if isinstance(expanded_frame["results"].iloc[0], str):
         import ast
 
         expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
 
-    result_keys = list(expanded_frame["results"].iloc[0].keys())
+    rows = []
+    for idx, row in expanded_frame.iterrows():
+        res = row["results"]
+        if isinstance(res, dict) and "residual" in res:
+            row_data = {"label": row["label"], **res["residual"]}
+            rows.append(row_data)
 
-    for key in result_keys:
-        expanded_frame[key] = expanded_frame["results"].apply(lambda x: float(np.mean(x[key])) if not np.isinf(x[key]).all() else None)
+    return pd.DataFrame(rows)
 
-    plt.figure(figsize=(10, 6))
-    fig, axes = plt.subplots(2, len(result_keys), figsize=(12, 10))
 
-    for index, key in enumerate(result_keys):
-        ax = axes.flat[index]
+def compare_decompositions(model_name: str, features_dataset: Dataset) -> None:
+    """Plot wavelet sensitivity distributions."""
+
+    # Get residuals as a clean DataFrame (NEW)
+    residual_df = summarize_residuals(features_dataset)
+
+    data_frame = features_dataset.to_pandas()
+    expanded_frame = data_frame.explode("results").reset_index(drop=True)
+
+    if isinstance(expanded_frame["results"].iloc[0], str):
+        import ast
+
+        expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
+
+    for key in ["min_warp", "max_warp", "min_base", "max_base"]:
+        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
+
+    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
+
+    for idx, key in enumerate(expanded_frame):
+        ax = axes.flat[idx]
         for label_val, color in [(0, "cyan"), (1, "red")]:
             subset = expanded_frame[expanded_frame["label"] == label_val][key].dropna()
             subset = subset[~np.isinf(subset)]
@@ -47,18 +68,30 @@ def compare_decompositions(model_name, features_dataset: Dataset) -> None:
         ax.legend()
 
     plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
-    plt.title(f"Wavelet Decomposition Comparison - {model_name}")
-    plt.xlabel("Sample Index")
-    plt.ylabel("Warp/Base Values")
-    plt.legend(loc="best")
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-
-    # Save and show
     result_path.mkdir(parents=True, exist_ok=True)
     log = str(result_path / f"sensitivity_plot_{timestamp}.png")
     plt.savefig(log)
-    # plt.show()
+
+    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
+
+    for idx, key in enumerate(residual_df):
+        ax = axes.flat[idx]
+        data_by_label = []
+        labels = []
+        for label_val in [0, 1]:
+            subset = expanded_frame[expanded_frame["label"] == label_val][key].dropna()
+            if len(subset) > 0:
+                data_by_label.append(subset.values)
+                labels.append(f"Label {label_val}")
+        if data_by_label:
+            ax.boxplot(data_by_label, labels=labels, patch=True)
+        ax.set_title(f"{key} by Label")
+        ax.grid(True, alpha=0.3)
+
+    plt.suptitle(f"Residual Metrics Comparison - {model_name}")
+    result_path.mkdir(parents=True, exist_ok=True)
+    log = str(result_path / f"residual_plot_{timestamp}.png")
+    plt.savefig(log)
 
 
 # def graph_residuals(self, **kwargs):

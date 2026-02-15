@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+"""Residual image processing with GPU acceleration"""
+
 import numpy as np
+from numpy.fft import fftfreq
 import torch
+from torch import Tensor
 from PIL import Image
 from scipy.fft import fftn, fftshift
+from skimage.color.adapt_rgb import adapt_rgb, each_channel
 from skimage.feature import local_binary_pattern
 from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v, window
 
@@ -12,11 +17,10 @@ from negate.config import Spec
 
 
 class Residual:
-    """Residual image processing with GPU acceleration"""
+    """Image residual feature computations using various processing and filtering techniques."""
 
     def __init__(self, spec: Spec) -> None:
-        """Initialize residual class for residual image processing.
-
+        """Initialize residual class for residual image processing.\n
         :param spec: Configuration specification object.
         return: None."""
 
@@ -24,59 +28,94 @@ class Residual:
         self.np_dtype = spec.np_dtype
         self.top_k = spec.hyper_param.top_k
         self.device = spec.device
+        self.dim_patch = spec.opt.dim_patch
+        self.patch_resolution = self.dim_patch * self.dim_patch
 
-    def __call__(self, image: Image.Image) -> dict[str, str | dict[str, float | int]]:
-        """Process image through all residual methods and save visualizations.\n
-        :param name: Output filename for saved figure.
-        :param image: Input PIL Image to process.
-        :param radius: Parameter for LBP (unused).
-        return: Dictionary containing processing results."""
+    @adapt_rgb(each_channel)
+    def __call__(self, image: Image.Image | Tensor) -> dict[str, float]:
+        """Compute residual features from a single image.\n
+        :param image: Input PIL image.
+        :returns: Dictionary with flattened residual metrics.
+        """
 
-        numeric_image = self.make_numeric(image)
+        assert isinstance(image, (Tensor, Image.Image)), TypeError(f"Unable to detect type : {type(image)} to convert to array")
 
-        diff_res = difference_of_gaussians(numeric_image, 1, 12)
-        laplace_res = laplace(numeric_image, ksize=3).astype(self.np_dtype)
-        sobel_res = np.array(self._sobel_residual(numeric_image))
-        spectral_res = np.array(self.spectral_residual(numeric_image))
+        if isinstance(image, Tensor):
+            img_array = image.cpu().numpy()
+        else:
+            img_array = np.array(image)
 
-        img_mag, img_mean = self.window_shift(numeric_image)  # baseline: raw image spectrum
-        ff_dg_mag, tc_dg_mean = self.window_shift(diff_res)  # DoG filter effect in freq
-        ff_lapl_mag, tc_lapl_mean = self.window_shift(laplace_res)
-        ff_sobl_mag, tc_sobl_mean = self.window_shift(sobel_res)
-        ff_spc_mag, tc_spc_mean = self.window_shift(sobel_res)
+        float_image = img_array.astype(self.np_dtype)
 
-        texture_mean = {
-            "original": img_mean,
-            "diff": tc_dg_mean,
-            "laplace": tc_lapl_mean,
-            "sobel": tc_sobl_mean,
-            "spectral": tc_spc_mean,
-        }
+        diff_residual = difference_of_gaussians(img_array, low_sigma=1.5)
+        lap_residual = laplace(img_array, ksize=3)
+        sob_residual = sobel_h(img_array)
+        spec_residual = np.abs(np.fft.fftn(img_array))
+        fft_magnitude = np.log(np.abs(spec_residual) + 1)
 
-        lbp_num = {}
-        for k, v in self._find_local_pattern(
-            {
-                "original": numeric_image,
-                "diff": diff_res,
-                "laplace": laplace_res,
-                "sobel": sobel_res,
-                "spectral": spectral_res,
-            }
-        ).items():
-            lbp_num[k] = (int(np.mean(v, dtype=np.float32)), int(np.sum(v, dtype=np.float32)))
+        img_mean = float(float_image.mean())
+        img_std = float(float_image.std())
 
-        magnitudes = {
-            "original": img_mag,
-            "diff": ff_dg_mag,
-            "laplace": ff_lapl_mag,
-            "sobel": ff_sobl_mag,
-            "spectral": ff_spc_mag,
-        }
+        diff_mean = float(diff_residual.mean())
+        lap_mean = float(lap_residual.mean())
+        sob_mean = float(sob_residual.mean())
+        fft_mean = float(fft_magnitude.mean())
 
         return {
-            "texture_complexity_mean": {k: float(v) for k, v in texture_mean.items()},
-            "local binary pattern": lbp_num,
-            "magnitudes": {k: int(v) for k, v in magnitudes.items()},
+            "img_mean": img_mean,
+            "img_std": img_std,
+            "diff_mean": diff_mean,
+            "lap_mean": lap_mean,
+            "sob_mean": sob_mean,
+            "fft_mean": fft_mean,
+        }
+
+    def batch_fourier_discrepancy(self, images: np.ndarray) -> dict[str, np.ndarray]:
+        """Compute discrepancy metrics across image batch.\n
+        :param images: Batch of images (batch x H x W).
+        :returns: Dictionary with per-image metric arrays."""
+
+        results = {key: [] for key in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
+
+        for img in images:
+            disc = self.fourier_discrepancy(img)
+            for k in results:
+                results[k].append(disc[k])
+
+        return {k: np.array(v) for k, v in results.items()}
+
+    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float | list[float]]:
+        """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
+        :param image: Input numpy array.
+        :returns: Dictionary with magnitude-based discrimination metrics."""
+
+        if isinstance(image, Tensor):
+            numeric_image = image.cpu().numpy()
+        else:
+            numeric_image = np.array(image)
+
+        # Handle multi-dimensional inputs by averaging non-spatial dimensions
+        while numeric_image.ndim > 2:
+            numeric_image = numeric_image.mean(axis=tuple(range(numeric_image.ndim - 2)))
+
+        spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
+
+        normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
+
+        fft_2d = np.fft.fftn(numeric_image.astype(np.float16))
+        magnitude_spectrum = np.abs(fft_2d)
+        log_mag = np.log(magnitude_spectrum + 1e-10)
+
+        h, w = numeric_image.shape
+        center_h, center_w = h // 2, w // 2
+        spectral_centroid = float(np.sum(log_mag * fftfreq(h)[:, None] + log_mag.T * fftfreq(w)[None, :]) / (log_mag.sum() * 2 + 1e-10))
+        return {
+            "spectral_centroid": spectral_centroid,
+            "high_freq_ratio": float((magnitude_spectrum[center_h:, center_w:] ** 2).sum() / (magnitude_spectrum**2).sum()),
+            "low_freq_energy": float((magnitude_spectrum[:center_h, :center_w] ** 2).sum()),
+            "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
+            "max_magnitude": float(magnitude_spectrum.max()),
+            "mean_log_magnitude": float(log_mag.mean()),
         }
 
     def _find_local_pattern(self, images: dict[str, np.ndarray], radius: int = 3) -> dict[str, tuple[float, float]]:
@@ -92,34 +131,6 @@ class Residual:
             results[k] = (np.mean(lbp, dtype=np.float32), np.sum(lbp, dtype=np.float32))
         return results
 
-    def window_shift(self, numeric_image: np.ndarray) -> tuple[np.float32, float]:
-        """Apply FFT and compute magnitude sum + texture complexity.\n
-        :param numeric_image: Input numpy array.
-        return: Tuple of magnitude sum and texture complexity."""
-
-        if numeric_image.size == 0:
-            return np.float32(0), 0.0
-
-        if numeric_image.size >= 256 * 256:
-            import torch
-
-            img_gpu = torch.from_numpy(numeric_image).to(device=self.device, dtype=self.dtype)
-            window_hann = torch.from_numpy(window("hann", numeric_image.shape)).to(self.device, dtype=self.dtype)
-
-            fft_gpu = torch.fft.fftn(img_gpu * window_hann)
-            mag = fft_gpu.abs().cpu().numpy().astype(np.float32)
-
-            return np.sum(mag), self.texture_complexity_gpu(mag, 16)
-
-        if np.iscomplexobj(numeric_image) or numeric_image.ndim < 2:
-            mag = np.abs(numeric_image).astype(np.float32)
-        else:
-            windowed = fftn(numeric_image * window("hann", numeric_image.shape))
-            magnitude = fftshift(np.abs(windowed))  # type: ignore
-            mag = magnitude.astype(np.float32)
-
-        return np.sum(mag), self.texture_complexity_gpu(mag, 16)
-
     def _normalize_to_uint8(self, numeric_image: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 255] and convert to uint8.\n
         :param numeric_image: Input numpy array.
@@ -133,8 +144,7 @@ class Residual:
         return (normalized * 255).astype(np.uint8)
 
     def make_numeric(self, image: Image.Image) -> np.ndarray:
-        """Convert a PIL Image to a numeric numpy array.
-
+        """Convert a PIL Image to a numeric numpy array.\n
         :param image: Input PIL Image.
         return: Numeric representation of the image."""
 
@@ -151,9 +161,9 @@ class Residual:
             case _:
                 return numeric_image
 
+    @adapt_rgb(each_channel)
     def _sobel_residual(self, numeric_image: np.ndarray) -> np.ndarray:
-        """Sobel edge detection residual from grayscale image.
-
+        """Sobel edge detection residual from grayscale image.\n
         :param numeric_image: Input numpy array.
         return: Sobel residual."""
 
@@ -162,12 +172,11 @@ class Residual:
         return np.sqrt(grad_x**2 + grad_y**2).astype(self.np_dtype)
 
     def spectral_residual(self, numeric_image: np.ndarray) -> np.ndarray:
-        """Spectral residual using FFT magnitude spectrum.
-
+        """Spectral residual using FFT magnitude spectrum.\n
         :param numeric_image: Input numpy array.
         return: Spectral residual image."""
 
-        if numeric_image.size >= 256 * 256:
+        if self.patch_resolution >= 65536:
             import torch
 
             img_gpu = torch.from_numpy(numeric_image).to(self.device, dtype=torch.float32)
@@ -177,14 +186,17 @@ class Residual:
 
         fourier_transform = np.fft.fftn(numeric_image)
         fourier_2d_shift = np.fft.fftshift(fourier_transform)
+
         return (20 * np.log(np.abs(fourier_2d_shift) + 1)).astype(self.np_dtype)
 
     def texture_complexity(self, residual: np.ndarray, patch_size: int = 16) -> float:
-        """Texture complexity via nested loop over patches.
-
+        """Texture complexity via nested loop over patches.\n
         :param residual: Input numpy array for analysis.
         :param patch_size: Size of the analysis patch.
         return: Calculated texture complexity."""
+
+        if self.patch_resolution >= 65536:
+            return self.texture_complexity_gpu(residual)
 
         rows, cols = residual.shape
         tc_values = []
@@ -206,9 +218,6 @@ class Residual:
         :param patch_size: Size of the analysis patch.
         return: Calculated texture complexity."""
 
-        if residual.size < 256 * 256:
-            return self.texture_complexity(residual, patch_size)
-
         res_gpu = torch.from_numpy(residual).to(self.device, dtype=self.dtype)
 
         h, w = res_gpu.shape
@@ -216,8 +225,7 @@ class Residual:
         pad_w = (patch_size - w % patch_size) % patch_size
 
         if pad_h > 0 or pad_w > 0:
-            # Use numpy's reflect padding since PyTorch doesn't support it for 2D tensors with size=4
-            res_np = res_gpu.cpu().numpy()
+            res_np = res_gpu.cpu().numpy()  # PyTorch doesn't support reflect padding for 2D tensors with size=4
             padded_np = np.pad(res_np, [(pad_h // 2, pad_h - pad_h // 2), (pad_w // 2, pad_w - pad_w // 2)], mode="reflect")
             res_gpu = torch.from_numpy(padded_np).to(self.device)
             h_new, w_new = padded_np.shape

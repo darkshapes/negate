@@ -97,6 +97,7 @@ class VITExtract:
             case _:
                 raise NotImplementedError("Unsupported model configuration")
 
+        assert isinstance(image_features, list) and isinstance(image_features[0], Tensor), TypeError(f"Invalid feature type: {type(image_features)}")
         return image_features
 
     def cleanup(self) -> None:

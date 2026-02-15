@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-"""Haar Wavelet processing"""
+"""Haar Wavelet processing adapted from sungikchoi/WaRPAD/ and mever-team/spai"""
 
 from __future__ import annotations
 
 import gc
-from typing import ContextManager
+from typing import ContextManager, TypedDict
 
 import numpy as np
 import torch
@@ -19,9 +19,25 @@ from negate.config import Spec
 from negate.feature_vae import VAEExtract
 from negate.feature_vit import VITExtract
 from negate.residuals import Residual
-from negate.scaling import patchify_image, split_array, tensor_rescale
+from negate.scaling import patchify_image, tensor_rescale
 
 """Haar Wavelet processing"""
+
+
+class WaveletResult(TypedDict):
+    """Type for wavelet analysis result."""
+
+    min_warp: float
+    max_warp: float
+    min_base: float
+    max_base: float
+
+
+class AnalysisOutput(TypedDict):
+    """Combined output from wavelet analysis."""
+
+    wavelet: list[WaveletResult]
+    residual: dict[str, dict[str, float | list[float]]]
 
 
 class WaveletContext:
@@ -76,74 +92,85 @@ class WaveletAnalyze(ContextManager):
         self.residual = context.residual
 
     @torch.inference_mode()
-    def __call__(self, dataset: Dataset) -> dict[str, list[dict[str, np.ndarray]]]:
+    def __call__(self, dataset: Dataset) -> dict[str, AnalysisOutput]:
         """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A tuple containing"""
 
-        cos_sim: list[dict,] = []
+        wavelet_results: list[WaveletResult] = []
+        residual_discrepancies: dict[str, dict[str, float | list[float]]] = {}
 
         images = dataset["image"]
         rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
 
-        residuals = self.residual(images)
-
         for idx, img in enumerate(rescaled):
-            patched: torch.Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # 1 x L_i x C x H x W
-            batch, _, _, _tb = patched.shape
+            patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
+            batch, l_, channel, height, width = img.shape
 
-            low_residual, high_coefficient = self.dwt(patched)
+            max_magnitudes: list = []
+
+            for patch in patched:
+                disc = self.residual.fourier_discrepancy(patch)
+                max_magnitudes.append(disc["max_magnitude"])
+
+            max_idx = int(np.argmax(max_magnitudes))
+            selected = patched[[max_idx]]
+
+            residual_discrepancies[str(idx)] = {
+                "selected_patch_idx": float(max_idx),
+                "max_fourier_magnitude": float(max_magnitudes[max_idx]),
+                "all_magnitudes": max_magnitudes,
+            }
+
+            low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
-            perturbed_patches = patched - self.alpha * perturbed_high_freq
-            base_features: Tensor | list[Tensor] = self.extract(patched)
-            warp_features: Tensor | list[Tensor] = self.extract(perturbed_patches)
+            perturbed_selected = selected - self.alpha * perturbed_high_freq
+            base_features: Tensor | list[Tensor] = self.extract(selected)
+            warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
+            wavelet_results.append(self.shape_extrema(base_features, warp_features, batch))
 
-            cos_sim.append(self.shape_extrema(base_features, warp_features, batch))
-        cos_sim.append(residuals)
-        return {"results": cos_sim}
+        return {"results": AnalysisOutput(wavelet=wavelet_results, residual=residual_discrepancies)}
 
     @torch.inference_mode()
-    def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, np.ndarray]:
+    def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> WaveletResult:
         """Compute minimum and maximum cosine similarity between base and warped features.\n
-        Calculates per-batch cosine similarities across feature maps, identifying both the\n
-        extreme values (min/max) and their corresponding indices within each batch.\n
-        :param base_features: Raw feature tensors from original patches\n
-        :param warp_features: Warped feature tensors after wavelet perturbation\n
-        :param batch: Number of images in current processing batch\n
-        :returns: Tuple of ndarrays containing (min_similarities, max_similarities, min_indices, max_indices)
-        """
+        :param base_features: Raw feature tensors from original patches.
+        :param warp_features: Warped feature tensors after wavelet perturbation.
+        :param batch: Number of images in current processing batch.
+        :returns: Dictionary with min/max similarity arrays."""
+
         min_warps = []
         max_warps = []
         min_base = []
         max_base = []
 
-        for idx, tensor in enumerate(base_features):
+        for idx, tensor in enumerate(base_features):  # also from sungikchoi/WaRPAD/
             similarity = cosine_similarity(tensor, warp_features[idx], dim=-1)
-            reshaped_similarity = similarity.unsqueeze(1).reshape([batch, -1])
+            reshaped_similarity = similarity.reshape(batch, -1)
 
             similarity_min = torch.mean(reshaped_similarity, 1).view([batch])
             base_min = torch.argmin(reshaped_similarity, 1).view(batch)
             similarity_max = reshaped_similarity.view([-1])
             base_max = torch.argmax(reshaped_similarity, 1).view(batch)
 
-            min_warps.append(similarity_min.cpu().numpy())
-            max_warps.append(similarity_max.cpu().numpy())
-            min_base.append(base_min.cpu().numpy())
-            max_base.append(base_max.cpu().numpy())
+            min_warps.append(np.atleast_2d(similarity_min.cpu().numpy()))
+            max_warps.append(np.atleast_2d(similarity_max.cpu().numpy()))
+            min_base.append(np.atleast_2d(base_min.cpu().numpy()))
+            max_base.append(np.atleast_2d(base_max.cpu().numpy()))
 
-        min_warps = np.concatenate(split_array(np.array(min_warps))).flatten()
-        max_warps = np.concatenate(split_array(np.array(max_warps))).flatten()
-        min_base = np.concatenate(split_array(np.array(min_base))).flatten()
-        max_base = np.concatenate(split_array(np.array(max_base))).flatten()
+        min_warps = float(np.concatenate(min_warps, axis=None).flatten().mean())
+        max_warps = float(np.concatenate(max_warps, axis=None).flatten().mean())
+        min_base = float(np.concatenate(min_base, axis=None).flatten().mean())
+        max_base = float(np.concatenate(max_base, axis=None).flatten().mean())
 
-        return {
-            "min_warp": min_warps,
-            "max_warp": max_warps,
-            "min_base": min_base,
-            "max_base": max_base,
-        }
+        return WaveletResult(
+            min_warp=min_warps,
+            max_warp=max_warps,
+            min_base=min_base,
+            max_base=max_base,
+        )
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""

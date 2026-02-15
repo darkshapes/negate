@@ -13,14 +13,15 @@ from negate.residuals import Residual
 from negate.track import result_path, timestamp
 
 
-def run():
+def test_residual_processing():
     res_data = {}
     spec = Spec()
     residual = Residual(spec)
-    folder_path = Path("/Users/e6d64/Downloads/real/")
+    image_file = [Path(__file__).parent / "x_p.webp"]
 
-    for img_path in tqdm(folder_path.iterdir(), total=len(os.listdir(str(folder_path))), desc="real.."):
+    for img_path in tqdm(image_file, total=len(image_file), desc="real.."):
         data = Image.open(str(img_path))
+        data = data.convert("L")
         res_data[img_path.stem] = residual(image=data)
 
     result_path.mkdir(parents=True, exist_ok=True)
@@ -29,17 +30,3 @@ def run():
     with open(results_file, "tw", encoding="utf-8") as out_file:
         json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
     res_data = {}
-    folder_path = Path("/Users/e6d64/Downloads/syn/")
-
-    for img_path in tqdm(folder_path.iterdir(), total=len(os.listdir(str(folder_path))), desc="synth.."):
-        data = Image.open(str(img_path))
-        res_data[img_path.stem] = residual(image=data)
-
-    results_file = str(result_path / f"results_syn_{timestamp}.json")
-    result_format = {k: str(v) for k, v in res_data.items()}
-    with open(results_file, "tw", encoding="utf-8") as out_file:
-        json.dump(result_format, out_file, ensure_ascii=False, indent=4, sort_keys=True)
-
-
-if __name__ == "__main__":
-    run()
