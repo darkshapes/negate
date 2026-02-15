@@ -46,6 +46,8 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     img = img.permute(0, 2, 3, 1, 4, 5)
     img = img.contiguous()
     img = img.view(img.size(0), -1, img.size(3), kh, kw)
+    batch, l_, channel, height, width = img.shape
+    img = img.view(batch * l_, channel, height, width)
     return img
 
 

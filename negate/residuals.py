@@ -8,12 +8,17 @@ from numpy.fft import fftfreq
 import torch
 from torch import Tensor
 from PIL import Image
-from scipy.fft import fftn, fftshift
-from skimage.color.adapt_rgb import adapt_rgb, each_channel
+from skimage.color.adapt_rgb import adapt_rgb
 from skimage.feature import local_binary_pattern
-from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v, window
+from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v
+from skimage.color import rgb2gray
 
 from negate.config import Spec
+
+
+def as_grey(image_filter, image, *args, **kwargs):
+    gray_image = rgb2gray(image)
+    return image_filter(gray_image, *args, **kwargs)
 
 
 class Residual:
@@ -31,7 +36,7 @@ class Residual:
         self.dim_patch = spec.opt.dim_patch
         self.patch_resolution = self.dim_patch * self.dim_patch
 
-    @adapt_rgb(each_channel)
+    @adapt_rgb(as_grey)
     def __call__(self, image: Image.Image | Tensor) -> dict[str, float]:
         """Compute residual features from a single image.\n
         :param image: Input PIL image.
@@ -161,7 +166,7 @@ class Residual:
             case _:
                 return numeric_image
 
-    @adapt_rgb(each_channel)
+    @adapt_rgb(as_grey)
     def _sobel_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Sobel edge detection residual from grayscale image.\n
         :param numeric_image: Input numpy array.

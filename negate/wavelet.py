@@ -107,13 +107,11 @@ class WaveletAnalyze(ContextManager):
 
         for idx, img in enumerate(rescaled):
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            batch, l_, channel, height, width = img.shape
-
             max_magnitudes: list = []
 
             for patch in patched:
-                disc = self.residual.fourier_discrepancy(patch)
-                max_magnitudes.append(disc["max_magnitude"])
+                discrepancy = self.residual.fourier_discrepancy(patch)
+                max_magnitudes.append(discrepancy["max_magnitude"])
 
             max_idx = int(np.argmax(max_magnitudes))
             selected = patched[[max_idx]]
@@ -127,9 +125,10 @@ class WaveletAnalyze(ContextManager):
             low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
             perturbed_selected = selected - self.alpha * perturbed_high_freq
+            print(f"perturbed shape : {perturbed_selected.shape}")
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
-            wavelet_results.append(self.shape_extrema(base_features, warp_features, batch))
+            wavelet_results.append(self.shape_extrema(base_features, warp_features, selected.shape[0]))
 
         return {"results": AnalysisOutput(wavelet=wavelet_results, residual=residual_discrepancies)}
 
@@ -138,7 +137,7 @@ class WaveletAnalyze(ContextManager):
         """Compute minimum and maximum cosine similarity between base and warped features.\n
         :param base_features: Raw feature tensors from original patches.
         :param warp_features: Warped feature tensors after wavelet perturbation.
-        :param batch: Number of images in current processing batch.
+        :param batch: Number of images in current processing tensor.
         :returns: Dictionary with min/max similarity arrays."""
 
         min_warps = []
@@ -147,8 +146,9 @@ class WaveletAnalyze(ContextManager):
         max_base = []
 
         for idx, tensor in enumerate(base_features):  # also from sungikchoi/WaRPAD/
+            print(f"extrema shape:{tensor.shape}")
             similarity = cosine_similarity(tensor, warp_features[idx], dim=-1)
-            reshaped_similarity = similarity.reshape(batch, -1)
+            reshaped_similarity = similarity.unsqueeze(1).reshape([batch, -1])
 
             similarity_min = torch.mean(reshaped_similarity, 1).view([batch])
             base_min = torch.argmin(reshaped_similarity, 1).view(batch)
