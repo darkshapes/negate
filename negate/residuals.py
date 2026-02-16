@@ -1,182 +1,197 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-from typing import Literal
+"""Residual image processing with GPU acceleration"""
 
 import numpy as np
-from numpy.typing import NDArray
-from PIL.Image import Image, fromarray
+from numpy.fft import fftfreq
+from PIL import Image
+from skimage.color import rgb2gray
+from skimage.feature import local_binary_pattern
+from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v
+from torch import Tensor
+
+from negate.config import Spec
 
 
 class Residual:
-    def __init__(self, top_k: int, patch_size: int = 512, dtype: np.typing.DTypeLike = np.float32) -> None:
+    """Image residual feature computations using various processing and filtering techniques."""
+
+    def __init__(self, spec: Spec) -> None:
         """Initialize residual class for residual image processing.\n
-        :param dtype: dtype for internal numpy conversion.
+        :param spec: Configuration specification object.
         return: None."""
 
-        self.dtype = dtype
-        self.top_k = top_k
-        self.patch_size = patch_size
+        self.dtype = spec.dtype
+        self.np_dtype = spec.np_dtype
+        self.top_k = spec.hyper_param.top_k
+        self.device = spec.device
+        self.dim_patch = spec.opt.dim_patch
+        self.patch_resolution = self.dim_patch * self.dim_patch
 
-    def __call__(self, image: Image) -> Image:
-        """Create a 3-channel residual from a grayscale image.\n
-        :param image: PIL image to process.
-        :return: Residual image in RGB mode."""
-        try:
-            from skimage.filters import laplace
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency 'skimage'. Please install it using 'negate[residual]'")
+    def __call__(self, image: Image.Image | Tensor) -> dict[str, float | tuple[int, int]]:
+        """Compute residual features from a single image.\n
+        :param image: Input PIL image.
+        :returns: Dictionary with flattened residual metrics.
+        """
+        numeric_image = self.make_numeric(image)
 
-        greyscale = image.convert("L")
-        numeric_image = np.array(greyscale, dtype=self.dtype)
-        residual = laplace(numeric_image, ksize=3).astype(self.dtype)
-        residual_image: Image = fromarray(np.uint8(residual), mode="L").convert("RGB")
-        return residual_image
+        diff_residual = difference_of_gaussians(numeric_image, low_sigma=1.5)
+        laplace_residual = laplace(numeric_image, ksize=3)
+        sobel_residual = self.sobel_hv_residual(numeric_image)
 
-    def sobel(self, image: Image) -> Image:
-        """Create a 3-channel residual using Sobel edge detection.\n
-        :param image: PIL image to process.
-        :return: Residual image in RGB mode."""
-        try:
-            import cv2
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency 'opencv-python'. Please install it using 'negate[residual]'")
+        res_map = {
+            "image": numeric_image,
+            "diff": diff_residual,
+            "laplace": laplace_residual,
+            "sobel": sobel_residual,
+        }
 
-        gray = image.convert("L")
-        numeric_image = np.array(gray, dtype=self.dtype)
-        grad_x = cv2.Sobel(numeric_image, cv2.CV_64F, 1, 0, ksize=3)
-        grad_y = cv2.Sobel(numeric_image, cv2.CV_64F, 0, 1, ksize=3)
-        gradient = np.sqrt(grad_x**2 + grad_y**2)
-        residual_image: Image = fromarray(np.uint8(gradient), mode="L").convert("RGB")
-        return residual_image
+        lbp_mean, tc_mean = (
+            self.find_local_pattern(res_map),
+            self.texture_complexity(
+                {f"{label}": num for label, num in {**res_map, "spectral": numeric_image}.items()},
+            ),
+        )
 
-    def frequency(self, image: Image) -> Image:
-        """Create a 3-channel high-frequency residual using FFT magnitude spectrum.\n
-        :param image: PIL image to process.
-        :return: Residual image in RGB mode."""
+        return {
+            "image_mean_ff": float(numeric_image.mean()),
+            "image_std": float(numeric_image.std()),
+            **{f"{label}_mean": (int(np.mean(num)), int(np.sum(num))) for label, num in lbp_mean.items()},
+            **{f"{label}_tc": (int(np.mean(num)), int(np.sum(num))) for label, num in tc_mean.items()},
+        }
 
-        gray = image.convert("L")
-        numeric_image = np.array(gray, dtype=self.dtype)
+    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float | list[float]]:
+        """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
+        :param image: Input numpy array.
+        :returns: Dictionary with magnitude-based discrimination metrics."""
 
-        fourier_transform = np.fft.fft2(numeric_image)
+        numeric_image = self.make_numeric(image)
+
+        spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
+        normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
+        fft_2d = np.fft.fftn(numeric_image.astype(np.float16))
+        magnitude_spectrum = np.abs(fft_2d)
+        log_mag = np.log(magnitude_spectrum + 1e-10)
+
+        h, w = numeric_image.shape
+        center_h, center_w = h // 2, w // 2
+        spectral_centroid = float(np.sum(log_mag * fftfreq(h)[:, None] + log_mag.T * fftfreq(w)[None, :]) / (log_mag.sum() * 2 + 1e-10))
+        return {
+            "spectral_centroid": spectral_centroid,
+            "high_freq_ratio": float((magnitude_spectrum[center_h:, center_w:] ** 2).sum() / (magnitude_spectrum**2).sum()),
+            "low_freq_energy": float((magnitude_spectrum[:center_h, :center_w] ** 2).sum()),
+            "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
+            "max_magnitude": float(magnitude_spectrum.max()),
+            "mean_log_magnitude": float(log_mag.mean()),
+        }
+
+    def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:
+        """Convert a PIL Image or tensor to a 2-D grayscale numpy array.\n
+        :param image: Input image (PIL or torch.Tensor).
+        :return: Grayscale numeric representation (HxW).
+        """
+        if isinstance(image, Tensor):
+            numeric_image = image.cpu().numpy()
+        elif isinstance(image, Image.Image):
+            numeric_image = np.asarray(image)
+        else:
+            numeric_image = np.array(image)
+
+        while numeric_image.ndim > 3:
+            numeric_image = numeric_image.squeeze(0)  # remove leading batch dim
+
+        if numeric_image.ndim == 3 and numeric_image.shape[0] <= 4:  # bring channel axis to last position
+            numeric_image = np.moveaxis(numeric_image, 0, -1)
+
+        gray = rgb2gray(numeric_image)
+        return gray.astype(self.np_dtype)
+
+    def _normalize_to_uint8(self, numeric_image: np.ndarray) -> np.ndarray:
+        """Normalize array to [0, 255] and convert to uint8.\n
+        :param numeric_image: Input numpy array.
+        return: Normalized uint8 array."""
+
+        mn, mx = numeric_image.min(), numeric_image.max()
+        if mx - mn > 0:
+            normalized = (numeric_image - mn) / (mx - mn)
+        else:
+            normalized = np.zeros_like(numeric_image)
+        return (normalized * 255).astype(np.uint8)
+
+    def batch_fourier_discrepancy(self, images: np.ndarray) -> dict[str, np.ndarray]:
+        """Compute discrepancy metrics across image batch.\n
+        :param images: Batch of images (batch x H x W).
+        :returns: Dictionary with per-image metric arrays."""
+
+        results = {key: [] for key in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
+
+        for img in images:
+            disc = self.fourier_discrepancy(img)
+            for k in results:
+                results[k].append(disc[k])
+
+        return {k: np.array(v) for k, v in results.items()}
+
+    def find_local_pattern(self, images: dict[str, np.ndarray], radius: int = 3) -> dict[str, tuple[float, float]]:
+        """Compute (mean, sum) for each LBP result.\n
+        :param images: Dictionary of image arrays.
+        :param radius: Radius parameter for Local Binary Pattern.
+        return: Dictionary with mean and sum results."""
+
+        point = 8 * radius
+        results = {}
+        for k, img in images.items():
+            lbp = local_binary_pattern(self._normalize_to_uint8(img), P=point, R=radius)
+            results[k] = (np.mean(lbp), np.sum(lbp))
+        return results
+
+    def sobel_hv_residual(self, numeric_image: np.ndarray) -> np.ndarray:
+        """Sobel edge detection residual from grayscale image.\n
+        :param numeric_image: Input numpy array.
+        return: Sobel residual."""
+
+        grad_x = sobel_h(numeric_image)
+        grad_y = sobel_v(numeric_image)
+        return np.sqrt(grad_x**2 + grad_y**2).astype(self.np_dtype)
+
+    def spectral_residual(self, numeric_image: np.ndarray) -> np.ndarray:
+        """Spectral residual using FFT magnitude spectrum.\n
+        :param numeric_image: Input numpy array.
+        return: Spectral residual image."""
+
+        if self.patch_resolution >= 65536:
+            import torch
+
+            img_gpu = torch.from_numpy(numeric_image).to(self.device, dtype=torch.float32)  # unsupported half precision
+            fft_gpu = torch.fft.fftn(img_gpu)
+            result = (20 * torch.log(fft_gpu.abs() + 1)).cpu().numpy()
+            return np.fft.fftshift(result)
+
+        fourier_transform = np.fft.fftn(numeric_image)
         fourier_2d_shift = np.fft.fftshift(fourier_transform)
 
-        magnitude_spectrum = 20 * np.log(np.abs(fourier_2d_shift) + 1)
+        return (20 * np.log(np.abs(fourier_2d_shift) + 1)).astype(self.np_dtype)
 
-        residual_image: Image = fromarray(np.uint8(magnitude_spectrum), mode="L").convert("RGB")
-        return residual_image
+    def texture_complexity(self, residuals: dict[str, np.ndarray], patch_size: int = 16) -> dict[str, float]:
+        """Texture complexity via nested loop over patches.\n
+        :param residual: Input numpy array for analysis.
+        :param patch_size: Size of the analysis patch.
+        return: Calculated texture complexity."""
 
-    def spectral(self, image: Image) -> Image:
-        """Create a 3-channel spectral residual using magnitude of frequency domain.\n
-        :param image: PIL image to process.
-        :return: Residual image in RGB mode."""
+        results = {}
+        for label, residual in residuals.items():
+            rows, cols = residual.shape
+            tc_values = []
 
-        gray = image.convert("L")
-        numeric_image = np.array(gray, dtype=self.dtype)
+            for num in range(0, rows - patch_size + 1, patch_size):
+                for j in range(0, cols - patch_size + 1, patch_size):
+                    patch = residual[num : num + patch_size, j : j + patch_size]
+                    r_sq_mean = np.mean(patch**2)
+                    t_val = 1.0 - (r_sq_mean / 255.0**2)
 
-        f_transform = np.fft.fft2(numeric_image)
-        f_shift = np.fft.fftshift(f_transform)
+                    if 0 < t_val < 1:
+                        tc_values.append(np.log(t_val / (1 - t_val)) + 4)
 
-        magnitude_spectrum = 20 * np.log(np.abs(f_shift) + 1)
-
-        residual_image: Image = fromarray(np.uint8(magnitude_spectrum), mode="L").convert("RGB")
-        return residual_image
-
-    def masked_spectral(self, numeric_image: NDArray, mask_radius: int = 50) -> tuple[NDArray, NDArray]:
-        """Apply Masked Spectral Learning logic to an image.\n
-        :param image: PIL image to process.
-        :param mask_radius: Radius r for the circular mask.
-        :param mask_type: 'high' to zero out center (low-freq), 'low' to zero out edges (high-freq).
-        :return: Masked spectral image in RGB mode."""
-
-        fourier_transform = np.fft.fft2(numeric_image)  # Compute Discrete Fourier Transform: chi = F(x)
-        fourier_shift = np.fft.fftshift(fourier_transform)
-
-        rows, cols = fourier_shift.shape
-        center = (rows // 2, cols // 2)
-
-        y, x = np.ogrid[:rows, :cols]
-        euclid_dist_from_center: NDArray = np.sqrt((x - center[1]) ** 2 + (y - center[0]) ** 2)
-
-        mask: NDArray = euclid_dist_from_center < mask_radius
-
-        return mask, fourier_shift  # type: ignore
-
-    def image_from_fourier(self, masked_spectrum: NDArray, fourier_shift: NDArray, mask_type: Literal["high", "low"] = "high") -> Image:
-        """Return image from Fourier domain.\n
-        :return: PIL Image.
-        :param masked_spectrum: masked spectrum array.
-        :param fourier_shf: original shift array.
-        :param mask_type: "high" or "low" band fouriers.
-        :raises ValueError: mask_type must be 'high' or 'low'."""
-
-        match mask_type:
-            case "high":
-                masked_spectrum = fourier_shift * masked_spectrum
-            case "low":
-                masked_spectrum = fourier_shift * (1 - masked_spectrum)
-            case _:
-                raise ValueError("mask_type must be 'high' or 'low'")
-
-        fourier_inverse_shift = np.fft.ifftshift(masked_spectrum)
-        reconstructed = np.fft.ifft2(fourier_inverse_shift)
-
-        reconstructed_real = np.real(reconstructed)
-        reconstructed_uint8 = ((reconstructed_real - reconstructed_real.min()) / (reconstructed_real.max() - reconstructed_real.min()) * 255).astype(np.uint8)
-
-        return fromarray(reconstructed_uint8, mode="L").convert("RGB")
-
-    def mask_patches(self, numeric_image: NDArray):
-        """Crop patches and compute freq divergence.\n
-        :return: List of (divergence, patch Image).
-        :param numeric_image: Image converted into an array.
-        :param size: Patch dimensions in pixels."""
-
-        metrics: list[tuple[float, Image]] = []
-        patch_size = self.patch_size
-        h, w = numeric_image.shape
-        nx = (w + patch_size - 1) // patch_size
-        ny = (h + patch_size - 1) // patch_size
-        for iy in range(ny):
-            for ix in range(nx):
-                x0 = ix * patch_size
-                y0 = iy * patch_size
-                patch_arr = numeric_image[y0 : y0 + patch_size, x0 : x0 + patch_size]
-                if patch_arr.shape != (patch_size, patch_size):
-                    pad = np.zeros((patch_size, patch_size), dtype=self.dtype)
-                    pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
-                    patch_arr = pad
-
-                high_mask, fourier_shift = self.masked_spectral(patch_arr)
-                low_mask = ~high_mask
-
-                low_magnitude = np.abs(fourier_shift[low_mask])
-                high_magnitude = np.abs(fourier_shift[high_mask])
-
-                div = float(abs(np.mean(high_magnitude) - np.mean(low_magnitude)))
-
-                patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
-                metrics.append((div, patch_img))
-        return metrics
-
-    def crop_select(self, image: Image) -> list[Image]:
-        """Crop image into patches, compute freq-divergence, return most extreme patches.\n
-        :param image: PIL image to process.
-        :param size: Patch dimension.
-        :param top_k: Number of extreme patches to return.
-        :param mask_radius: Radius used in masked_spectral logic.
-        :return: List of selected patch images."""
-
-        gray = image.convert("L")
-        numeric_image = np.array(gray, dtype=self.dtype)
-
-        metrics: list[tuple[float, Image]] = self.mask_patches(numeric_image)
-
-        metrics.sort(key=lambda x: x[0], reverse=True)
-
-        chosen: list[Image] = []
-        top_k = self.top_k
-        chosen.extend([p for _, p in metrics[:top_k]])  # high diverges
-        chosen.extend([p for _, p in metrics[-top_k:]])  # low diverges
-
-        return chosen
+            results[label] = float(np.mean(tc_values)) if tc_values else 0.0
+        return results

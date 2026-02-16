@@ -6,10 +6,11 @@
 
 """Scaling utilities for image tensors."""
 
+import numpy as np
 import torch
-from torch import Tensor
 import torchvision.transforms as T
 from PIL import Image
+from torch import Tensor
 
 
 def tensor_rescale(images: Image.Image | list[Image.Image], dim_rescale: int, device: torch.device, dtype: torch.dtype):
@@ -31,7 +32,7 @@ def tensor_rescale(images: Image.Image | list[Image.Image], dim_rescale: int, de
     return tensor_rescale
 
 
-def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple[int, int], reverse: bool = True) -> torch.Tensor:
+def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple[int, int]) -> torch.Tensor:
     """Splits an input image into patches\n
     :param img: Input image of size (B, C, H, W).
     :param patch_size: (height, width) of patches.
@@ -45,4 +46,16 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     img = img.permute(0, 2, 3, 1, 4, 5)
     img = img.contiguous()
     img = img.view(img.size(0), -1, img.size(3), kh, kw)
+    batch, l_, channel, height, width = img.shape
+    img = img.view(batch * l_, channel, height, width)
     return img
+
+
+def split_array(form: np.ndarray, limit: int = 2**31 - 1) -> list[np.ndarray]:
+    """Yield sub-arrays of ``form`` with length ≤ ``limit``."""
+    if form.size <= limit:
+        return [form]
+    items: list[np.ndarray] = []
+    for index in range(0, form.size, limit):
+        items.append(form[index : index + limit])
+    return items

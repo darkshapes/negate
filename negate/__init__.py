@@ -7,4 +7,5 @@ from negate.datasets import build_datasets, generate_dataset, load_remote_datase
 from negate.track import compare_decompositions
 from negate.feature_vit import VITExtract
 from negate.feature_vae import VAEExtract
-from negate.wavelet import WaveletAnalyze
+from negate.wavelet import WaveletAnalyze, WaveletContext
+from negate.residuals import Residual

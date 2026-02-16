@@ -7,7 +7,7 @@ license_name: MPL-2.0 + Commons Clause 1.0
 
 <div align="center">
 
-![Two stylized futuristic lines styled to appear to show an invisible wall and a gate at the same time](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
+![Stylized futuristic lines in the shape of an N](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
 
 # negate <br><sub> entrypoint synthetic image classifier</sub>
 
@@ -79,7 +79,7 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 
 Basic Syntax:
 
-```sh
+```bash
 usage: negate [-h] {calibrate,train} ...
 
 Negate CLI
@@ -96,7 +96,7 @@ options:
 
 Evaluating the haar-wavelet method:
 
-```sh
+```bash
 usage: negate calibrate [-h]
                         [-m {['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['timm/vit_base_patch16_dinov3.lvd1689m'],['timm/MobileCLIP2-S4-OpenCLIP']}]
                         [path]
@@ -112,7 +112,7 @@ options:
 
 Training a model to distinguish genuine from synthetic art:
 
-```sh
+```bash
 usage: negate train [-h] [path]
 
 positional arguments:
@@ -135,6 +135,6 @@ options:
     title={negate},
     year={2026},
     primaryClass={cs.CV},
-    url={https://github.com/darkshapes/negate},
+    howpublished={\url={https://github.com/darkshapes/negate}},
 }
 ```
