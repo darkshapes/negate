@@ -7,7 +7,7 @@ license_name: MPL-2.0 + Commons Clause 1.0
 
 <div align="center">
 
-![Two stylized futuristic lines styled to appear to show an invisible wall and a gate at the same time](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
+![Stylized futuristic lines in the shape of an N](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
 
 # negate <br><sub> entrypoint synthetic image classifier</sub>
 
@@ -135,6 +135,6 @@ options:
     title={negate},
     year={2026},
     primaryClass={cs.CV},
-    url={https://github.com/darkshapes/negate},
+    howpublished={\url={https://github.com/darkshapes/negate}},
 }
 ```

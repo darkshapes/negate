@@ -21,7 +21,7 @@ def test_residual_processing():
 
     for img_path in tqdm(image_file, total=len(image_file), desc="real.."):
         data = Image.open(str(img_path))
-        data = data.convert("L")
+        data = data.convert("RGB")
         res_data[img_path.stem] = residual(image=data)
 
     result_path.mkdir(parents=True, exist_ok=True)

@@ -5,20 +5,13 @@
 
 import numpy as np
 from numpy.fft import fftfreq
-import torch
-from torch import Tensor
 from PIL import Image
-from skimage.color.adapt_rgb import adapt_rgb
+from skimage.color import rgb2gray
 from skimage.feature import local_binary_pattern
 from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v
-from skimage.color import rgb2gray
+from torch import Tensor
 
 from negate.config import Spec
-
-
-def as_grey(image_filter, image, *args, **kwargs):
-    gray_image = rgb2gray(image)
-    return image_filter(gray_image, *args, **kwargs)
 
 
 class Residual:
@@ -36,77 +29,47 @@ class Residual:
         self.dim_patch = spec.opt.dim_patch
         self.patch_resolution = self.dim_patch * self.dim_patch
 
-    @adapt_rgb(as_grey)
-    def __call__(self, image: Image.Image | Tensor) -> dict[str, float]:
+    def __call__(self, image: Image.Image | Tensor) -> dict[str, float | tuple[int, int]]:
         """Compute residual features from a single image.\n
         :param image: Input PIL image.
         :returns: Dictionary with flattened residual metrics.
         """
+        numeric_image = self.make_numeric(image)
 
-        assert isinstance(image, (Tensor, Image.Image)), TypeError(f"Unable to detect type : {type(image)} to convert to array")
+        diff_residual = difference_of_gaussians(numeric_image, low_sigma=1.5)
+        laplace_residual = laplace(numeric_image, ksize=3)
+        sobel_residual = self.sobel_hv_residual(numeric_image)
 
-        if isinstance(image, Tensor):
-            img_array = image.cpu().numpy()
-        else:
-            img_array = np.array(image)
-
-        float_image = img_array.astype(self.np_dtype)
-
-        diff_residual = difference_of_gaussians(img_array, low_sigma=1.5)
-        lap_residual = laplace(img_array, ksize=3)
-        sob_residual = sobel_h(img_array)
-        spec_residual = np.abs(np.fft.fftn(img_array))
-        fft_magnitude = np.log(np.abs(spec_residual) + 1)
-
-        img_mean = float(float_image.mean())
-        img_std = float(float_image.std())
-
-        diff_mean = float(diff_residual.mean())
-        lap_mean = float(lap_residual.mean())
-        sob_mean = float(sob_residual.mean())
-        fft_mean = float(fft_magnitude.mean())
-
-        return {
-            "img_mean": img_mean,
-            "img_std": img_std,
-            "diff_mean": diff_mean,
-            "lap_mean": lap_mean,
-            "sob_mean": sob_mean,
-            "fft_mean": fft_mean,
+        res_map = {
+            "image": numeric_image,
+            "diff": diff_residual,
+            "laplace": laplace_residual,
+            "sobel": sobel_residual,
         }
 
-    def batch_fourier_discrepancy(self, images: np.ndarray) -> dict[str, np.ndarray]:
-        """Compute discrepancy metrics across image batch.\n
-        :param images: Batch of images (batch x H x W).
-        :returns: Dictionary with per-image metric arrays."""
+        lbp_mean, tc_mean = (
+            self.find_local_pattern(res_map),
+            self.texture_complexity(
+                {f"{label}": num for label, num in {**res_map, "spectral": numeric_image}.items()},
+            ),
+        )
 
-        results = {key: [] for key in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
-
-        for img in images:
-            disc = self.fourier_discrepancy(img)
-            for k in results:
-                results[k].append(disc[k])
-
-        return {k: np.array(v) for k, v in results.items()}
+        return {
+            "image_mean_ff": float(numeric_image.mean()),
+            "image_std": float(numeric_image.std()),
+            **{f"{label}_mean": (int(np.mean(num)), int(np.sum(num))) for label, num in lbp_mean.items()},
+            **{f"{label}_tc": (int(np.mean(num)), int(np.sum(num))) for label, num in tc_mean.items()},
+        }
 
     def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float | list[float]]:
         """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
         :param image: Input numpy array.
         :returns: Dictionary with magnitude-based discrimination metrics."""
 
-        if isinstance(image, Tensor):
-            numeric_image = image.cpu().numpy()
-        else:
-            numeric_image = np.array(image)
-
-        # Handle multi-dimensional inputs by averaging non-spatial dimensions
-        while numeric_image.ndim > 2:
-            numeric_image = numeric_image.mean(axis=tuple(range(numeric_image.ndim - 2)))
+        numeric_image = self.make_numeric(image)
 
         spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
-
         normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
-
         fft_2d = np.fft.fftn(numeric_image.astype(np.float16))
         magnitude_spectrum = np.abs(fft_2d)
         log_mag = np.log(magnitude_spectrum + 1e-10)
@@ -123,18 +86,26 @@ class Residual:
             "mean_log_magnitude": float(log_mag.mean()),
         }
 
-    def _find_local_pattern(self, images: dict[str, np.ndarray], radius: int = 3) -> dict[str, tuple[float, float]]:
-        """Compute (mean, sum) for each LBP result.\n
-        :param images: Dictionary of image arrays.
-        :param radius: Radius parameter for Local Binary Pattern.
-        return: Dictionary with mean and sum results."""
+    def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:
+        """Convert a PIL Image or tensor to a 2-D grayscale numpy array.\n
+        :param image: Input image (PIL or torch.Tensor).
+        :return: Grayscale numeric representation (HxW).
+        """
+        if isinstance(image, Tensor):
+            numeric_image = image.cpu().numpy()
+        elif isinstance(image, Image.Image):
+            numeric_image = np.asarray(image)
+        else:
+            numeric_image = np.array(image)
 
-        point = 8 * radius
-        results = {}
-        for k, img in images.items():
-            lbp = local_binary_pattern(self._normalize_to_uint8(img), P=point, R=radius)
-            results[k] = (np.mean(lbp, dtype=np.float32), np.sum(lbp, dtype=np.float32))
-        return results
+        while numeric_image.ndim > 3:
+            numeric_image = numeric_image.squeeze(0)  # remove leading batch dim
+
+        if numeric_image.ndim == 3 and numeric_image.shape[0] <= 4:  # bring channel axis to last position
+            numeric_image = np.moveaxis(numeric_image, 0, -1)
+
+        gray = rgb2gray(numeric_image)
+        return gray.astype(self.np_dtype)
 
     def _normalize_to_uint8(self, numeric_image: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 255] and convert to uint8.\n
@@ -148,26 +119,34 @@ class Residual:
             normalized = np.zeros_like(numeric_image)
         return (normalized * 255).astype(np.uint8)
 
-    def make_numeric(self, image: Image.Image) -> np.ndarray:
-        """Convert a PIL Image to a numeric numpy array.\n
-        :param image: Input PIL Image.
-        return: Numeric representation of the image."""
+    def batch_fourier_discrepancy(self, images: np.ndarray) -> dict[str, np.ndarray]:
+        """Compute discrepancy metrics across image batch.\n
+        :param images: Batch of images (batch x H x W).
+        :returns: Dictionary with per-image metric arrays."""
 
-        original_grey = image.convert("L")
-        numeric_image = np.array(original_grey, dtype=self.np_dtype)
+        results = {key: [] for key in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
 
-        match numeric_image.ndim:
-            case 4:
-                return numeric_image[0]
-            case 3 if numeric_image.shape[0] in (1, 3):
-                return numeric_image[0]
-            case 3:
-                return numeric_image.mean(axis=0)
-            case _:
-                return numeric_image
+        for img in images:
+            disc = self.fourier_discrepancy(img)
+            for k in results:
+                results[k].append(disc[k])
 
-    @adapt_rgb(as_grey)
-    def _sobel_residual(self, numeric_image: np.ndarray) -> np.ndarray:
+        return {k: np.array(v) for k, v in results.items()}
+
+    def find_local_pattern(self, images: dict[str, np.ndarray], radius: int = 3) -> dict[str, tuple[float, float]]:
+        """Compute (mean, sum) for each LBP result.\n
+        :param images: Dictionary of image arrays.
+        :param radius: Radius parameter for Local Binary Pattern.
+        return: Dictionary with mean and sum results."""
+
+        point = 8 * radius
+        results = {}
+        for k, img in images.items():
+            lbp = local_binary_pattern(self._normalize_to_uint8(img), P=point, R=radius)
+            results[k] = (np.mean(lbp), np.sum(lbp))
+        return results
+
+    def sobel_hv_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Sobel edge detection residual from grayscale image.\n
         :param numeric_image: Input numpy array.
         return: Sobel residual."""
@@ -184,7 +163,7 @@ class Residual:
         if self.patch_resolution >= 65536:
             import torch
 
-            img_gpu = torch.from_numpy(numeric_image).to(self.device, dtype=torch.float32)
+            img_gpu = torch.from_numpy(numeric_image).to(self.device, dtype=torch.float32)  # unsupported half precision
             fft_gpu = torch.fft.fftn(img_gpu)
             result = (20 * torch.log(fft_gpu.abs() + 1)).cpu().numpy()
             return np.fft.fftshift(result)
@@ -194,61 +173,25 @@ class Residual:
 
         return (20 * np.log(np.abs(fourier_2d_shift) + 1)).astype(self.np_dtype)
 
-    def texture_complexity(self, residual: np.ndarray, patch_size: int = 16) -> float:
+    def texture_complexity(self, residuals: dict[str, np.ndarray], patch_size: int = 16) -> dict[str, float]:
         """Texture complexity via nested loop over patches.\n
         :param residual: Input numpy array for analysis.
         :param patch_size: Size of the analysis patch.
         return: Calculated texture complexity."""
 
-        if self.patch_resolution >= 65536:
-            return self.texture_complexity_gpu(residual)
+        results = {}
+        for label, residual in residuals.items():
+            rows, cols = residual.shape
+            tc_values = []
 
-        rows, cols = residual.shape
-        tc_values = []
+            for num in range(0, rows - patch_size + 1, patch_size):
+                for j in range(0, cols - patch_size + 1, patch_size):
+                    patch = residual[num : num + patch_size, j : j + patch_size]
+                    r_sq_mean = np.mean(patch**2)
+                    t_val = 1.0 - (r_sq_mean / 255.0**2)
 
-        for i in range(0, rows - patch_size + 1, patch_size):
-            for j in range(0, cols - patch_size + 1, patch_size):
-                patch = residual[i : i + patch_size, j : j + patch_size]
-                r_sq_mean = np.mean(patch**2)
-                t_val = 1.0 - (r_sq_mean / 255.0**2)
+                    if 0 < t_val < 1:
+                        tc_values.append(np.log(t_val / (1 - t_val)) + 4)
 
-                if 0 < t_val < 1:
-                    tc_values.append(np.log(t_val / (1 - t_val)) + 4)
-
-        return float(np.mean(tc_values)) if tc_values else 0.0
-
-    def texture_complexity_gpu(self, residual: np.ndarray, patch_size: int = 16) -> float:
-        """Vectorized texture complexity using PyTorch GPU if available.\n
-        :param residual: Input numpy array for analysis.
-        :param patch_size: Size of the analysis patch.
-        return: Calculated texture complexity."""
-
-        res_gpu = torch.from_numpy(residual).to(self.device, dtype=self.dtype)
-
-        h, w = res_gpu.shape
-        pad_h = (patch_size - h % patch_size) % patch_size
-        pad_w = (patch_size - w % patch_size) % patch_size
-
-        if pad_h > 0 or pad_w > 0:
-            res_np = res_gpu.cpu().numpy()  # PyTorch doesn't support reflect padding for 2D tensors with size=4
-            padded_np = np.pad(res_np, [(pad_h // 2, pad_h - pad_h // 2), (pad_w // 2, pad_w - pad_w // 2)], mode="reflect")
-            res_gpu = torch.from_numpy(padded_np).to(self.device)
-            h_new, w_new = padded_np.shape
-        else:
-            h_new, w_new = h, w
-
-        n_patches_h = h_new // patch_size
-        n_patches_w = w_new // patch_size
-
-        patches = res_gpu.reshape(n_patches_h, patch_size, n_patches_w, patch_size).permute(2, 0, 3, 1)
-        patches = patches.reshape(-1, patch_size, patch_size)
-
-        r_sq_mean = (patches**2).mean(dim=(1, 2))
-        t_val = 1.0 - (r_sq_mean / 255.0**2)
-
-        valid = (t_val > 0) & (t_val < 1)
-        if not valid.any():
-            return 0.0
-
-        tc_values = torch.log(t_val[valid] / (1 - t_val[valid])) + 4
-        return float(tc_values.mean().item())
+            results[label] = float(np.mean(tc_values)) if tc_values else 0.0
+        return results

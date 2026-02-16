@@ -120,12 +120,11 @@ class WaveletAnalyze(ContextManager):
                 "selected_patch_idx": float(max_idx),
                 "max_fourier_magnitude": float(max_magnitudes[max_idx]),
                 "all_magnitudes": max_magnitudes,
-            }
+            } | self.residual(selected)
 
             low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
             perturbed_selected = selected - self.alpha * perturbed_high_freq
-            print(f"perturbed shape : {perturbed_selected.shape}")
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
             wavelet_results.append(self.shape_extrema(base_features, warp_features, selected.shape[0]))
@@ -146,7 +145,6 @@ class WaveletAnalyze(ContextManager):
         max_base = []
 
         for idx, tensor in enumerate(base_features):  # also from sungikchoi/WaRPAD/
-            print(f"extrema shape:{tensor.shape}")
             similarity = cosine_similarity(tensor, warp_features[idx], dim=-1)
             reshaped_similarity = similarity.unsqueeze(1).reshape([batch, -1])
 
@@ -173,16 +171,13 @@ class WaveletAnalyze(ContextManager):
         )
 
     def cleanup(self) -> None:
-        """Free the VAE and GPU memory."""
+        """Free resources once discarded."""
 
         device_name = self.device.type
         del self.device
         if device_name != "cpu":
             self.gpu = getattr(torch, device_name)
             self.gpu.empty_cache()  # type: ignore
-        del self.dwt
-        del self.idwt
-        del self.extract
         gc.collect()
 
     def __enter__(self) -> "WaveletAnalyze":
