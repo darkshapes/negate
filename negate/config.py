@@ -2,7 +2,7 @@
 # <!-- // /*  d a r k s h a pes */ -->
 
 from __future__ import annotations
-
+import os
 import tomllib
 from pathlib import Path
 from typing import Iterator, NamedTuple
@@ -59,6 +59,7 @@ class NegateConfig(NamedTuple):
     feat_ext_path: str
     load_onnx: bool
     magnitude_sampling: bool
+    residual_dtype: str
 
 
 class NegateDataPaths(NamedTuple):
@@ -187,11 +188,11 @@ class Chip:
         return self._np_dtype
 
 
-def load_config_options() -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip]:
+def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip]:
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
-    config_path = Path(__file__).parent.parent / "config" / "config.toml"
+    config_path = Path(__file__).parent.parent / file_path_named
     with open(config_path, "rb") as config_file:
         data = tomllib.load(config_file)
 

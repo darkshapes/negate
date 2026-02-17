@@ -53,7 +53,6 @@ def multi_prediction(model_name: str, spec: Spec, file_or_folder_path: Path | No
     features_dataset = preprocessing(dataset, spec=spec)
 
     # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
-    print(features_dataset.info)
     compare_decompositions(model_name=model_name, features_dataset=features_dataset)
     timecode = timer_module.perf_counter() - start_ns
 

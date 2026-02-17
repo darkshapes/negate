@@ -1,125 +1,140 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+import json
+import shutil
 from pathlib import Path
-
-from matplotlib import pyplot as plt
+import pandas as pd
 import numpy as np
 from datasets import Dataset
-import pandas as pd
+from matplotlib import pyplot as plt
+
 from negate.train import get_time
 
 timestamp = get_time()
 result_path = Path(__file__).parent.parent / "results" / timestamp
+plot_file = "plot_xp_data.json"
 
 
-def summarize_residuals(features_dataset: Dataset) -> pd.DataFrame:
-    """Extract residual metrics into a structured DataFrame.
+def graph_decompositions(folder_name: str) -> None:
+    plot_path = Path(__file__).parent.parent / "results" / folder_name
+    with open(str(plot_path / plot_file), "r") as plot_data:
+        saved_frames = json.load(plot_data)
 
-    :param features_dataset: Dataset with results containing "residual" key.
-    :returns: DataFrame with flattened residual columns.
-    """
-    import pandas as pd
+    xp_frames = pd.DataFrame()
+    xp_frames.from_dict(saved_frames)
+    model_name = xp_frames.pop("model_name")
 
-    data_frame = features_dataset.to_pandas()
-    expanded_frame = data_frame.explode("results").reset_index(drop=True)
+    wavelet_keys = ["min_warp", "max_warp", "min_base", "max_base"]
+    residual_keys = [
+        "all_magnitudes",
+        "diff_mean",
+        "diff_tc",
+        "high_freq_ratio",
+        "image_mean",
+        "image_mean_ff",
+        "image_std",
+        "image_tc",
+        "laplace_mean",
+        "laplace_tc",
+        "low_freq_energy",
+        "max_fourier_magnitude",
+        "max_magnitude",
+        "mean_log_magnitude",
+        "selected_patch_idx",
+        "sobel_mean",
+        "sobel_tc",
+        "spectral_centroid",
+        "spectral_entropy",
+        "spectral_tc",
+    ]
 
-    if isinstance(expanded_frame["results"].iloc[0], str):
-        import ast
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    for idx, key in enumerate(wavelet_keys):
+        ax = axes.flat[idx] if len(wavelet_keys) > 1 else axes
+        for lbl, col in [(0, "cyan"), (1, "red")]:
+            vals = xp_frames.loc[xp_frames["label"] == lbl, key].dropna()
+            ax.hist(vals.astype(float), bins=50, alpha=0.5, label=f"Label {lbl}", density=True, color=col)
+        ax.set_title(f"{key} Distribution by Label")
+        ax.legend()
+    plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
+    plt.tight_layout()
 
-        expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
+    wav_log = str(plot_path / f"sensitivity_plot_{timestamp}.png")
+    plt.savefig(wav_log)
 
-    rows = []
-    for idx, row in expanded_frame.iterrows():
-        res = row["results"]
-        if isinstance(res, dict) and "residual" in res:
-            row_data = {"label": row["label"], **res["residual"]}
-            rows.append(row_data)
+    fig, axes = plt.subplots(5, 4, figsize=(14, 8))
+    for idx, key in enumerate(residual_keys):
+        ax = axes.flat[idx]
 
-    return pd.DataFrame(rows)
+        series = (
+            xp_frames[key]  # type: ignore arg is not missing for columns
+            .apply(lambda v: (v.tolist() if isinstance(v, np.ndarray) else v) if isinstance(v, (list, np.ndarray)) else [v] if v is not None else [])
+            .explode()
+            .apply(lambda x: float(x) if not isinstance(x, (list, np.ndarray)) else np.nan)
+            .astype(float)
+        )
+        data_by_label = [series[xp_frames["label"] == lbl].dropna() for lbl in [0, 1]]  # type: ignore dropna
+        labels = [f"Label {lbl}" for lbl in [0, 1]]
+
+        ax.boxplot(data_by_label, labels=labels, notch=True)
+        ax.set_title(key)
+        ax.grid(alpha=0.3)
+
+    plt.suptitle(f"Residual Metrics Comparison - {model_name}")
+    plt.tight_layout()
+
+    res_log = str(plot_path / f"residual_plot_{timestamp}.png")
+    plt.savefig(res_log)
 
 
 def compare_decompositions(model_name: str, features_dataset: Dataset) -> None:
-    """Plot wavelet sensitivity distributions."""
+    """Plot wavelet and residual metric distributions for both label values.\n
+    :param model_name : Name of the model whose results are visualised.
+    :param features_dataset : HuggingFace ``Dataset`` containing a ``label`` column and a nested ``results`` dictionary for each example.
+    """
 
-    # Get residuals as a clean DataFrame (NEW)
-    residual_df = summarize_residuals(features_dataset)
+    wavelet_keys = ["min_warp", "max_warp", "min_base", "max_base"]
+    residual_keys = [
+        "all_magnitudes",
+        "diff_mean",
+        "diff_tc",
+        "high_freq_ratio",
+        "image_mean",
+        "image_mean_ff",
+        "image_std",
+        "image_tc",
+        "laplace_mean",
+        "laplace_tc",
+        "low_freq_energy",
+        "max_fourier_magnitude",
+        "max_magnitude",
+        "mean_log_magnitude",
+        "selected_patch_idx",
+        "sobel_mean",
+        "sobel_tc",
+        "spectral_centroid",
+        "spectral_entropy",
+        "spectral_tc",
+    ]
 
     data_frame = features_dataset.to_pandas()
-    expanded_frame = data_frame.explode("results").reset_index(drop=True)
+    xp_frames = data_frame.copy()  # type: ignore can access copy stfu
 
-    if isinstance(expanded_frame["results"].iloc[0], str):
-        import ast
+    xp_frames["flat_res"] = xp_frames["results"].apply(lambda x: x.get("0", {}) if isinstance(x, dict) else {})  # Extract the inner dict (under key “0”) once
 
-        expanded_frame["results"] = expanded_frame["results"].apply(ast.literal_eval)
+    for key in wavelet_keys:
+        xp_frames[key] = xp_frames["flat_res"].apply(lambda d, k=key: float(d[k]) if k in d else None)
 
-    for key in ["min_warp", "max_warp", "min_base", "max_base"]:
-        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
+    for key in residual_keys:
+        xp_frames[key] = xp_frames["flat_res"].apply(lambda d, k=key: d.get(k))
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-
-    for idx, key in enumerate(expanded_frame):
-        ax = axes.flat[idx]
-        for label_val, color in [(0, "cyan"), (1, "red")]:
-            subset = expanded_frame[expanded_frame["label"] == label_val][key].dropna()
-            subset = subset[~np.isinf(subset)]
-            ax.hist(subset, bins=50, alpha=0.5, label=f"Label {label_val}", density=True, color=color)
-        ax.set_title(f"{key} Distribution by Label")
-        ax.legend()
-
-    plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
+    xp_frames["model_name"] = model_name
     result_path.mkdir(parents=True, exist_ok=True)
-    log = str(result_path / f"sensitivity_plot_{timestamp}.png")
-    plt.savefig(log)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
 
-    fig, axes = plt.subplots(2, 3, figsize=(14, 8))
-
-    for idx, key in enumerate(residual_df):
-        ax = axes.flat[idx]
-        data_by_label = []
-        labels = []
-        for label_val in [0, 1]:
-            subset = expanded_frame[expanded_frame["label"] == label_val][key].dropna()
-            if len(subset) > 0:
-                data_by_label.append(subset.values)
-                labels.append(f"Label {label_val}")
-        if data_by_label:
-            ax.boxplot(data_by_label, labels=labels, patch=True)
-        ax.set_title(f"{key} by Label")
-        ax.grid(True, alpha=0.3)
-
-    plt.suptitle(f"Residual Metrics Comparison - {model_name}")
-    result_path.mkdir(parents=True, exist_ok=True)
-    log = str(result_path / f"residual_plot_{timestamp}.png")
-    plt.savefig(log)
-
-
-# def graph_residuals(self, **kwargs):
-#     fig, ax = plt.subplots(nrows=5, ncols=2, figsize=(10, 16))
-
-#     ax[0, 0].imshow(numeric_image, cmap="gray")
-#     ax[0, 0].set_title(f"Original Image {img_mean:.4f}")
-#     ax[0, 1].imshow(np.log(img_mag), cmap="magma")
-#     ax[0, 1].set_title("Original FFT Magnitude (log)")
-
-#     ax[1, 0].imshow(self._normalize_to_uint8(diff_res), cmap="gray")
-#     ax[1, 0].set_title(f"Difference of Gaussians {tc_dg_mean:.4f}")
-#     ax[1, 1].imshow(np.log(ff_dg_mag), cmap="magma")
-#     ax[1, 1].set_title("DoG FFT Magnitude (log)")
-
-#     ax[2, 0].imshow(laplace_res, cmap="gray")
-#     ax[2, 0].set_title(f"Laplacian Residual: {tc_lapl_mean:.4f}")
-#     ax[2, 1].imshow(np.log(ff_lapl_mag), cmap="magma")
-#     ax[2, 1].set_title("Laplacian FFT Magnitude (log)")
-
-#     ax[3, 0].imshow(sobel_res, cmap="gray")
-#     ax[3, 0].set_title(f"Sobel Residual: {tc_sobl_mean:.4f}")
-#     ax[3, 1].imshow(np.log(ff_sobl_mag), cmap="magma")
-#     ax[3, 1].set_title("Sobel FFT Magnitude (log)")
-
-#     ax[4, 0].imshow(spectral_res, cmap="gray")
-#     ax[4, 0].set_title(f"Spectral Residual: {tc_spc_mean:.4f}")
-#     ax[4, 1].imshow(np.log(ff_spc_mag), cmap="magma")
-#     ax[4, 1].set_title("Spectral FFT Magnitude (log)")
-#     plt.tight_layout()
-#     plt.savefig(str(Path(__file__).parent.parent / "results" / "gaussian" / name))
+    xp_frames = xp_frames.to_json()
+    data_log = str(result_path / plot_file)
+    with open(data_log, mode="tw+") as plot_data:
+        json.dump(xp_frames, plot_data, indent=4, ensure_ascii=False, sort_keys=False)
