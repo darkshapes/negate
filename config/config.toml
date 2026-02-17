@@ -4,8 +4,9 @@ feat_ext_path = ""         # Path to save the model in or null for default: [$HO
 batch_size = 0             # Feature extraction batch size, 0 disables batching default[0]
 dim_factor = 6             # Multiplier for image rescale size Default 6
 dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
-alpha = 0.4                # strength of perturbation Default 0.3)
+alpha = 0.1                # strength of perturbation Default 0.3)
 dtype = "float16"          # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
+residual_dtype = "float32" # decimal precision for numpy processing
 load_onnx = false          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = false # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
 euclidean = false          # Substitute Cosine Similarity for Squared Euclidean Distance, (default false)
@@ -13,10 +14,10 @@ cache_features = false     # Cache features
 
 [datasets]
 eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data = []                                                                    #["KarimSayed/cat-breed-fiass-index"]
-genuine_local = ["/Users/e6d64/Documents/GitHub/darkshapes/negate/tests/x_p.webp"]   #["assets", "/Users/e6d64/Downloads/real_train"]
-synthetic_data = []                                                                  #["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
-synthetic_local = ["/Users/e6d64/Documents/GitHub/darkshapes/negate/tests/x_p.webp"] # ["/Users/e6d64/Downloads/phantomDiffusionS3FinalImages/", "/Users/e6d64/Downloads/syn_train"]
+genuine_data = ["KarimSayed/cat-breed-fiass-index"]
+genuine_local = ["assets", "/Users/e6d64/Downloads/real_train"]
+synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
+synthetic_local = ["/Users/e6d64/Downloads/phantomDiffusionS3FinalImages/", "/Users/e6d64/Downloads/syn_train"]
 
 [train]
 scale_pos_weight = ""              # Scale positive weight

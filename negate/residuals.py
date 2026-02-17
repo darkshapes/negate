@@ -22,8 +22,7 @@ class Residual:
         :param spec: Configuration specification object.
         return: None."""
 
-        self.dtype = spec.dtype
-        self.np_dtype = spec.np_dtype
+        self.residual_dtype = getattr(np, spec.opt.residual_dtype, np.float32)
         self.top_k = spec.hyper_param.top_k
         self.device = spec.device
         self.dim_patch = spec.opt.dim_patch
@@ -70,7 +69,7 @@ class Residual:
 
         spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
         normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
-        fft_2d = np.fft.fftn(numeric_image.astype(np.float16))
+        fft_2d = np.fft.fftn(numeric_image.astype(np.float32))
         magnitude_spectrum = np.abs(fft_2d)
         log_mag = np.log(magnitude_spectrum + 1e-10)
 
@@ -105,7 +104,7 @@ class Residual:
             numeric_image = np.moveaxis(numeric_image, 0, -1)
 
         gray = rgb2gray(numeric_image)
-        return gray.astype(self.np_dtype)
+        return gray.astype(self.residual_dtype)
 
     def _normalize_to_uint8(self, numeric_image: np.ndarray) -> np.ndarray:
         """Normalize array to [0, 255] and convert to uint8.\n
@@ -124,14 +123,14 @@ class Residual:
         :param images: Batch of images (batch x H x W).
         :returns: Dictionary with per-image metric arrays."""
 
-        results = {key: [] for key in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
+        results = {label: [] for label in ["spectral_centroid", "high_freq_ratio", "max_magnitude"]}
 
         for img in images:
             disc = self.fourier_discrepancy(img)
-            for k in results:
-                results[k].append(disc[k])
+            for label in results:
+                results[label].append(disc[label])
 
-        return {k: np.array(v) for k, v in results.items()}
+        return {label: np.array(result) for label, result in results.items()}
 
     def find_local_pattern(self, images: dict[str, np.ndarray], radius: int = 3) -> dict[str, tuple[float, float]]:
         """Compute (mean, sum) for each LBP result.\n
@@ -141,9 +140,9 @@ class Residual:
 
         point = 8 * radius
         results = {}
-        for k, img in images.items():
+        for label, img in images.items():
             lbp = local_binary_pattern(self._normalize_to_uint8(img), P=point, R=radius)
-            results[k] = (np.mean(lbp), np.sum(lbp))
+            results[label] = (np.mean(lbp), np.sum(lbp))
         return results
 
     def sobel_hv_residual(self, numeric_image: np.ndarray) -> np.ndarray:
@@ -153,7 +152,7 @@ class Residual:
 
         grad_x = sobel_h(numeric_image)
         grad_y = sobel_v(numeric_image)
-        return np.sqrt(grad_x**2 + grad_y**2).astype(self.np_dtype)
+        return np.sqrt(grad_x**2 + grad_y**2).astype(self.residual_dtype)
 
     def spectral_residual(self, numeric_image: np.ndarray) -> np.ndarray:
         """Spectral residual using FFT magnitude spectrum.\n
@@ -171,7 +170,7 @@ class Residual:
         fourier_transform = np.fft.fftn(numeric_image)
         fourier_2d_shift = np.fft.fftshift(fourier_transform)
 
-        return (20 * np.log(np.abs(fourier_2d_shift) + 1)).astype(self.np_dtype)
+        return (20 * np.log(np.abs(fourier_2d_shift) + 1)).astype(self.residual_dtype)
 
     def texture_complexity(self, residuals: dict[str, np.ndarray], patch_size: int = 16) -> dict[str, float]:
         """Texture complexity via nested loop over patches.\n
