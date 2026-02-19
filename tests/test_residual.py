@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from negate.config import Spec
 from negate.residuals import Residual
-from negate.track import result_path, timestamp
+from negate.train import result_path, timestamp
 
 
 def test_residual_processing():
