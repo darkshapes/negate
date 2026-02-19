@@ -1,140 +1,75 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-import json
-import shutil
-from pathlib import Path
 import pandas as pd
 import numpy as np
 from datasets import Dataset
-from matplotlib import pyplot as plt
-
-from negate.train import get_time
-
-timestamp = get_time()
-result_path = Path(__file__).parent.parent / "results" / timestamp
-plot_file = "plot_xp_data.json"
-
-
-def graph_decompositions(folder_name: str) -> None:
-    plot_path = Path(__file__).parent.parent / "results" / folder_name
-    with open(str(plot_path / plot_file), "r") as plot_data:
-        saved_frames = json.load(plot_data)
-
-    xp_frames = pd.DataFrame()
-    xp_frames.from_dict(saved_frames)
-    model_name = xp_frames.pop("model_name")
-
-    wavelet_keys = ["min_warp", "max_warp", "min_base", "max_base"]
-    residual_keys = [
-        "all_magnitudes",
-        "diff_mean",
-        "diff_tc",
-        "high_freq_ratio",
-        "image_mean",
-        "image_mean_ff",
-        "image_std",
-        "image_tc",
-        "laplace_mean",
-        "laplace_tc",
-        "low_freq_energy",
-        "max_fourier_magnitude",
-        "max_magnitude",
-        "mean_log_magnitude",
-        "selected_patch_idx",
-        "sobel_mean",
-        "sobel_tc",
-        "spectral_centroid",
-        "spectral_entropy",
-        "spectral_tc",
-    ]
-
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
-    for idx, key in enumerate(wavelet_keys):
-        ax = axes.flat[idx] if len(wavelet_keys) > 1 else axes
-        for lbl, col in [(0, "cyan"), (1, "red")]:
-            vals = xp_frames.loc[xp_frames["label"] == lbl, key].dropna()
-            ax.hist(vals.astype(float), bins=50, alpha=0.5, label=f"Label {lbl}", density=True, color=col)
-        ax.set_title(f"{key} Distribution by Label")
-        ax.legend()
-    plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
-    plt.tight_layout()
-
-    wav_log = str(plot_path / f"sensitivity_plot_{timestamp}.png")
-    plt.savefig(wav_log)
-
-    fig, axes = plt.subplots(5, 4, figsize=(14, 8))
-    for idx, key in enumerate(residual_keys):
-        ax = axes.flat[idx]
-
-        series = (
-            xp_frames[key]  # type: ignore arg is not missing for columns
-            .apply(lambda v: (v.tolist() if isinstance(v, np.ndarray) else v) if isinstance(v, (list, np.ndarray)) else [v] if v is not None else [])
-            .explode()
-            .apply(lambda x: float(x) if not isinstance(x, (list, np.ndarray)) else np.nan)
-            .astype(float)
-        )
-        data_by_label = [series[xp_frames["label"] == lbl].dropna() for lbl in [0, 1]]  # type: ignore dropna
-        labels = [f"Label {lbl}" for lbl in [0, 1]]
-
-        ax.boxplot(data_by_label, labels=labels, notch=True)
-        ax.set_title(key)
-        ax.grid(alpha=0.3)
-
-    plt.suptitle(f"Residual Metrics Comparison - {model_name}")
-    plt.tight_layout()
-
-    res_log = str(plot_path / f"residual_plot_{timestamp}.png")
-    plt.savefig(res_log)
+from scipy.stats import iqr
+from negate.plot import (
+    graph_tail_separations,
+    graph_wavelet,
+    residual_keys,
+    wavelet_keys,
+    graph_residual,
+    graph_kde,
+    graph_cohen,
+)
 
 
-def compare_decompositions(model_name: str, features_dataset: Dataset) -> None:
-    """Plot wavelet and residual metric distributions for both label values.\n
-    :param model_name : Name of the model whose results are visualised.
-    :param features_dataset : HuggingFace ``Dataset`` containing a ``label`` column and a nested ``results`` dictionary for each example.
-    """
+def compute_tail_separation(data_frame, residual_keys) -> pd.DataFrame:
+    """Score metrics by class separation and long-tail outlier tendency.\n
+    :param data_frame: Expanded DataFrame with residual columns.
+    :param residual_keys: List of metric column names to analyze.
+    :returns: DataFrame with scores sorted by separateness."""
 
-    wavelet_keys = ["min_warp", "max_warp", "min_base", "max_base"]
-    residual_keys = [
-        "all_magnitudes",
-        "diff_mean",
-        "diff_tc",
-        "high_freq_ratio",
-        "image_mean",
-        "image_mean_ff",
-        "image_std",
-        "image_tc",
-        "laplace_mean",
-        "laplace_tc",
-        "low_freq_energy",
-        "max_fourier_magnitude",
-        "max_magnitude",
-        "mean_log_magnitude",
-        "selected_patch_idx",
-        "sobel_mean",
-        "sobel_tc",
-        "spectral_centroid",
-        "spectral_entropy",
-        "spectral_tc",
-    ]
+    results = []
+    for key in residual_keys:
+        vals_0 = data_frame[data_frame["label"] == 0][key].dropna().values
+        vals_1 = data_frame[data_frame["label"] == 1][key].dropna().values
+
+        if len(vals_0) < 5 or len(vals_1) < 5:
+            continue
+
+        def tail_score(arr):
+            q75, q25 = np.percentile(arr, [75, 25])
+            iqr_ = q75 - q25
+            if iqr_ == 0:
+                return 0
+            return (np.percentile(arr, 95) - np.median(arr)) / iqr_
+
+        tail_0 = tail_score(vals_0)
+        tail_1 = tail_score(vals_1)
+        avg_tail = (tail_0 + tail_1) / 2
+
+        p95_0, p95_1 = np.percentile(vals_0, 95), np.percentile(vals_1, 95)
+        p05_0, p05_1 = np.percentile(vals_0, 5), np.percentile(vals_1, 5)
+
+        overlap_gid = max(p05_0, p05_1) - min(p95_0, p95_1)
+        pooled_iqr = (iqr(vals_0) + iqr(vals_1)) / 2
+
+        separation_norm = abs((np.median(vals_0) - np.median(vals_1))) / (pooled_iqr if pooled_iqr > 0 else 1)
+        combined_score = avg_tail * max(0, separation_norm)
+
+        results.append({"metric": key, "tail_score": avg_tail, "separation": separation_norm, "combined_score": combined_score, "no_overlap": overlap_gid < 0})
+
+    return pd.DataFrame(results).sort_values("combined_score", ascending=False)
+
+
+def chart_decompositions(model_name: str, features_dataset: Dataset, timecode: float) -> None:
+    """Plot wavelet sensitivity distributions."""
 
     data_frame = features_dataset.to_pandas()
-    xp_frames = data_frame.copy()  # type: ignore can access copy stfu
-
-    xp_frames["flat_res"] = xp_frames["results"].apply(lambda x: x.get("0", {}) if isinstance(x, dict) else {})  # Extract the inner dict (under key “0”) once
+    expanded_frame = data_frame.explode("results").reset_index(drop=True)
 
     for key in wavelet_keys:
-        xp_frames[key] = xp_frames["flat_res"].apply(lambda d, k=key: float(d[k]) if k in d else None)
+        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
 
     for key in residual_keys:
-        xp_frames[key] = xp_frames["flat_res"].apply(lambda d, k=key: d.get(k))
+        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
 
-    xp_frames["model_name"] = model_name
-    result_path.mkdir(parents=True, exist_ok=True)
-    config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
-
-    xp_frames = xp_frames.to_json()
-    data_log = str(result_path / plot_file)
-    with open(data_log, mode="tw+") as plot_data:
-        json.dump(xp_frames, plot_data, indent=4, ensure_ascii=False, sort_keys=False)
+    scores_dataframe = compute_tail_separation(expanded_frame, residual_keys)
+    graph_tail_separations(model_name, scores_dataframe=scores_dataframe)
+    graph_wavelet(model_name, wavelet_dataframe=expanded_frame)
+    graph_residual(model_name, residual_dataframe=expanded_frame)
+    graph_kde(model_name, residual_dataframe=expanded_frame)
+    graph_cohen(model_name, residual_dataframe=expanded_frame)

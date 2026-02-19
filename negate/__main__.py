@@ -4,6 +4,7 @@
 """Negate CLI entry point for training and inference.\n
 :returns: None."""
 
+import shutil
 import argparse
 import datetime
 import time as timer_module
@@ -18,8 +19,9 @@ from negate import (
     Spec,
     WaveletAnalyze,
     build_datasets,
-    compare_decompositions,
+    chart_decompositions,
     WaveletContext,
+    result_path,
 )
 
 
@@ -53,8 +55,13 @@ def multi_prediction(model_name: str, spec: Spec, file_or_folder_path: Path | No
     features_dataset = preprocessing(dataset, spec=spec)
 
     # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
-    compare_decompositions(model_name=model_name, features_dataset=features_dataset)
+    # expanded_data = compare_decompositions(model_name=model_name, features_dataset=features_dataset)
     timecode = timer_module.perf_counter() - start_ns
+    result_path.mkdir(parents=True, exist_ok=True)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+
+    chart_decompositions(features_dataset=features_dataset, model_name=model_name, timecode=timecode)
 
 
 def main() -> None:
