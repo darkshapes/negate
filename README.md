@@ -24,7 +24,7 @@ A CLI tool and Python library for image processing and analysis of feature extra
 
 <img src="results/visualization_20260209_101743.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the DinoViTL Model"></div>
 
-Negate is a modular system of image processing and feature extraction pipelines aimed towards critical analysis of effective techniques that can differentiate synthetic and human-origin works including spectral residual analysis, laplacian residual analysis, random resize crop, and haar wavelet perturbation. We also study the efficacy of a gradient-boosted decision tree and PCA trained to distinguish between images of synthetic and human origin. Preliminary results demonstrate high accuracy in detecting synthetic images.
+Negate is a modular system of image processing and feature extraction pipelines aimed towards critical analysis of effective techniques that can differentiate synthetic and human-origin works. Techniques include spectral residual analysis, laplacian residual analysis, random resize crop, local binary pattern and haar wavelet perturbation. We also study the efficacy of a gradient-boosted decision tree and PCA trained to distinguish between images of synthetic and human origin. Preliminary results demonstrate high accuracy in detecting synthetic images.
 
 This repo provides a simple command‑line interface to invoke classification and examples of integrating our library of training scripts, predictions and metrics into other works. We make all attempts to follow continuous integration best practices for deploying and maintaining software, ensuring the code is readied for production environments.
 
@@ -128,6 +128,16 @@ options:
 <img src="results/visualization_20260208_1151.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the MobileClip model">
 <img src="results/visualization_20260208_222311.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the Nvidia C-RADIOv4-SO400M Model">
 <img src="results/combined_plots.png" style="width:50%; max-width:500px;" alt="Bar and grid graph comparing variance of the synthetic and real images">
+
+## Related Research:
+
+- [arxiv:2511.14030](https://arxiv.org/abs/2511.14030)
+- [arxiv:2505.11278](https://arxiv.org/abs/2505.11278)
+- [arxiv:2502.15176](https://arxiv.org/abs/2502.15176)
+- [arxiv:2411.19417](https://arxiv.org/abs/2411.19417)
+- [arxiv:2409.07913](https://arxiv.org/abs/2409.07913)
+- [VeridisQuo](https://github.com/VeridisQuo-orga/VeridisQuo)
+- https://drive.google.com/file/d/1bxDmREBn-TkTe-GkcLVD9_bVw3nokehI/view
 
 ```bib
 @misc{darkshapes2026,

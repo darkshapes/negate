@@ -74,34 +74,41 @@ class WaveletAnalyze(ContextManager):
         self.idwt = context.idwt.to(**self.cast_move)
         self.extract = context.extract
         self.residual = context.residual
+        self.magnitude_sampling = spec.opt.magnitude_sampling
 
     @torch.inference_mode()
-    def __call__(self, dataset: Dataset, extrema=False) -> dict[str, dict[str, Any]]:
+    def __call__(self, dataset: Dataset, extrema=False) -> dict[str, Any]:
         """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A tuple containing"""
 
-        results: dict[str, dict[str, float | list[float]]] = {}
+        results: list[dict[str, Any]] = []
 
         images = dataset["image"]
         rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
 
         for idx, img in enumerate(rescaled):
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            max_magnitudes: list = []
-            discrepancy: dict[str, float | list[float]] = {}
-            for patch in patched:
-                discrepancy = self.residual.fourier_discrepancy(patch)
-                max_magnitudes.append(discrepancy["max_magnitude"])
+            discrepancy_results = {}
+            if self.magnitude_sampling:
+                max_magnitudes: list = []
+                discrepancy: dict[str, float | list[float]] = {}
 
-            if not max_magnitudes:
-                continue
+                for patch in patched:
+                    discrepancy = self.residual.fourier_discrepancy(patch)
+                    max_magnitudes.append(discrepancy["max_magnitude"])
 
-            max_idx = int(np.argmax(max_magnitudes))
-            if extrema:
+                if not max_magnitudes:
+                    continue
+
+                max_idx = int(np.argmax(max_magnitudes))
                 selected = patched[[max_idx]]
+                discrepancy_results = {
+                    "selected_patch_idx": float(max_idx),
+                    "max_fourier_magnitude": float(max_magnitudes[max_idx]),
+                }
             else:
                 selected = patched
 
@@ -110,16 +117,9 @@ class WaveletAnalyze(ContextManager):
             perturbed_selected = selected - self.alpha * perturbed_high_freq
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
-            results[str(idx)] = (
-                {
-                    "selected_patch_idx": float(max_idx),
-                    "max_fourier_magnitude": float(max_magnitudes[max_idx]),
-                    "all_magnitudes": max_magnitudes,
-                }
-                | discrepancy
-                | self.residual(selected)
-                | self.shape_extrema(base_features, warp_features, selected.shape[0])
-            )
+            prelim_result = discrepancy_results | self.residual(selected) | self.shape_extrema(base_features, warp_features, selected.shape[0])
+            print(prelim_result.keys())
+            results.append(prelim_result)
 
         return {"results": results}
 

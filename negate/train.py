@@ -4,19 +4,21 @@
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 from datasets import Dataset
 from numpy.random import default_rng
 from numpy.typing import NDArray
-from typing import Callable
 
 from negate.config import hyperparam_config as hyper_param
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
 model_path = Path(__file__).parent.parent / "models"
+
+timestamp = get_time()
+result_path = Path(__file__).parent.parent / "results" / timestamp
 
 
 def generate_datestamp_path(file_name) -> str:
