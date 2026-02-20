@@ -38,6 +38,7 @@ residual_keys = [
     "spectral_entropy",
     "spectral_tc",
 ]
+vae_loss_keys = ["l1_loss", "mse_loss"]
 
 
 def save_frames(data_frame: pd.DataFrame, model_name: str) -> None:
@@ -220,11 +221,34 @@ def graph_cohen(model_name: str, residual_dataframe: pd.DataFrame) -> None:
         effect_sizes.append(effect_size)
 
     heatmap_data = pd.DataFrame({"Effect Size": effect_sizes}, index=residual_keys)
-    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="coolwarm", ax=ax, cbar=False)
+    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="viridis", ax=ax, cbar=False)
 
     plt.title(f"Class Separation (Cohen's d) - {model_name}", fontsize=11)
     effect_size_plot = str(result_path / f"effect_size_heatmap_{timestamp}.png")
     plt.savefig(effect_size_plot)
     invert_image(effect_size_plot, effect_size_plot)
 
-    print(f"[TRACK] Saved plots to {result_path}")
+
+def graph_vae_loss(vae_name: str, vae_dataframe: pd.DataFrame) -> None:
+    """Plot wavelet sensitivity distributions.\n
+
+    :param model_name: Name of the model being analyzed.
+    :features_dataset: Dataset containing feature results.
+    :param timecode: Timestamp for file naming."""
+
+    fig, axes = plt.subplots(1, len(vae_loss_keys), figsize=(10, 6))
+
+    for idx, key in enumerate(vae_loss_keys):
+        ax = axes.flat[idx]
+        for label_val, color in [(0, "blue"), (1, "green")]:
+            subset = vae_dataframe[vae_dataframe["label"] == label_val][key].dropna()
+            subset = subset[~np.isinf(subset)]
+            ax.hist(subset, bins=50, alpha=0.5, label=f"Label {label_val}", density=True, color=color)
+        ax.set_title("Distribution by Label")
+        ax.legend()
+
+    plt.tight_layout()
+    plt.suptitle(f"VAE Loss Comparison - {vae_name}")
+    vae_plot = str(result_path / f"vae_plot{timestamp}.png")
+    plt.savefig(vae_plot)
+    invert_image(vae_plot, vae_plot)

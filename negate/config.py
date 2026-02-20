@@ -75,9 +75,10 @@ class NegateDataPaths(NamedTuple):
 class NegateModelConfig:
     """Model configuration with library auto-selection."""
 
-    def __init__(self, data: dict, default: str = "timm"):
+    def __init__(self, data: dict, vae: dict, default: str = "timm"):
         self._model_library_map = data
         self._default = default
+        self._vae = vae
 
     @property
     def libraries(self) -> list[str]:
@@ -119,6 +120,18 @@ class NegateModelConfig:
         """First model from auto-selected library."""
         models = self.list_models
         return next(iter(models))  # this will fail if model list is missing
+
+    @property
+    def list_vae(self) -> Iterator[list[str]]:
+        """All available model names."""
+        return (y for _x, y in self._vae["library"].items())
+
+    @property
+    def auto_vae(self) -> list[str]:
+        """First vae from auto-selected library.
+        :returns: List of vae name and import library"""
+        vae = self.list_vae
+        return next(iter(vae))
 
 
 class Chip:
@@ -197,6 +210,7 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
         data = tomllib.load(config_file)
 
     models = data.pop("model")
+    vae = data.pop("vae")
     train_cfg = data.pop("train", {})
     dataset_cfg = data.pop("datasets", {})
     library_cfg = data.pop("library", {})
@@ -205,7 +219,7 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
         NegateConfig(**data),
         NegateHyperParam(**train_cfg),
         NegateDataPaths(**dataset_cfg),
-        NegateModelConfig(data=models | library_cfg),
+        NegateModelConfig(data=models | library_cfg, vae=vae),
         Chip(),
     )
 

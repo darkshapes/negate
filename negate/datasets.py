@@ -1,11 +1,14 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+import os
+from itertools import chain
 from pathlib import Path
 
 import numpy as np
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
+from tqdm import tqdm
 
 from negate.config import Spec
 
@@ -48,7 +51,7 @@ def generate_dataset(folder_path: Path | list[dict[str, PillowImage.Image]], lab
         assert isinstance(folder_path, Path)
 
         if folder_path.is_dir():
-            for img_path in folder_path.iterdir():
+            for img_path in tqdm(folder_path.iterdir(), total=len(os.listdir(str(folder_path))), desc="Creating dataset..."):
                 if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
                     continue
                 try:
