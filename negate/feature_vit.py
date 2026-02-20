@@ -28,6 +28,7 @@ class VITExtract:
 
     def __init__(self, spec: Spec) -> None:
         """Initialize analyzer with configuration.\n"""
+        print("Initializing VIT...")
 
         self.model_name = spec.model
         self.dtype = spec.dtype

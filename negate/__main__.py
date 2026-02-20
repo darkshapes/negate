@@ -50,8 +50,9 @@ def multi_prediction(model_name: str, spec: Spec, file_or_folder_path: Path | No
     """Calibration of computing wavelet energy features.\n
     :param path: Dataset root folder."""
 
-    print("Calibration selected.")
+    print("Prediction selected.")
     dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
+    print("Beginning preprocessing.")
     features_dataset = preprocessing(dataset, spec=spec)
 
     # show_statistics(features_dataset=features_dataset, start_ns=start_ns)
@@ -61,7 +62,7 @@ def multi_prediction(model_name: str, spec: Spec, file_or_folder_path: Path | No
     config_name = "config.toml"
     shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
 
-    chart_decompositions(features_dataset=features_dataset, model_name=model_name, timecode=timecode)
+    chart_decompositions(features_dataset=features_dataset, model_name=model_name, vae_name=spec.model_config.auto_vae)
 
 
 def main() -> None:

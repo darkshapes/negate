@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import gc
-from typing import ContextManager, TypedDict, Any
+from typing import ContextManager, Any
 
 import numpy as np
 import torch
@@ -38,13 +38,15 @@ class WaveletContext:
         spec: Spec,
         dwt: DWTForward | None = None,
         idwt: DWTInverse | None = None,
-        extract: VITExtract | VAEExtract | None = None,
+        extract: VITExtract | None = None,
+        vae: VAEExtract | None = None,
         residual: Residual | None = None,
     ):
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
         self.extract = extract or VITExtract(spec)  # type: ignore
+        self.vae = vae or VAEExtract(spec)
         self.residual = residual or Residual(spec)
 
     def __enter__(self) -> WaveletContext:
@@ -61,23 +63,27 @@ class WaveletAnalyze(ContextManager):
 
     def __init__(self, context: WaveletContext) -> None:
         """Extract wavelet energy features from images."""
+        print("Initializing Analyzer...")
         spec = context.spec
-        self.batch_size = spec.opt.batch_size
-        self.alpha = spec.opt.alpha
-        dim_patch = spec.opt.dim_patch
-        self.dim_patch = (dim_patch, dim_patch)
-        self.dim_rescale = spec.opt.dim_factor * dim_patch
-        self.device = spec.device
-        self.np_dtype = spec.np_dtype
         self.cast_move: dict = spec.apply
         self.dwt = context.dwt.to(**self.cast_move)
         self.idwt = context.idwt.to(**self.cast_move)
         self.extract = context.extract
         self.residual = context.residual
+        self.vae = context.vae
+        self.batch_size = spec.opt.batch_size
+        self.alpha = spec.opt.alpha
+        dim_patch = spec.opt.dim_patch
+        self.dim_patch = (dim_patch, dim_patch)
+        self.dim_rescale = spec.opt.dim_factor * dim_patch
+        print("Initializing device...")
+        self.device = spec.device
+        self.np_dtype = spec.np_dtype
         self.magnitude_sampling = spec.opt.magnitude_sampling
+        print("Please wait...")
 
     @torch.inference_mode()
-    def __call__(self, dataset: Dataset, extrema=False) -> dict[str, Any]:
+    def __call__(self, dataset: Dataset, sim_extrema=False) -> dict[str, Any]:
         """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
@@ -91,7 +97,7 @@ class WaveletAnalyze(ContextManager):
 
         for idx, img in enumerate(rescaled):
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            discrepancy_results = {}
+            fourier_max = {}
             if self.magnitude_sampling:
                 max_magnitudes: list = []
                 discrepancy: dict[str, float | list[float]] = {}
@@ -105,7 +111,7 @@ class WaveletAnalyze(ContextManager):
 
                 max_idx = int(np.argmax(max_magnitudes))
                 selected = patched[[max_idx]]
-                discrepancy_results = {
+                fourier_max = {
                     "selected_patch_idx": float(max_idx),
                     "max_fourier_magnitude": float(max_magnitudes[max_idx]),
                 }
@@ -117,9 +123,10 @@ class WaveletAnalyze(ContextManager):
             perturbed_selected = selected - self.alpha * perturbed_high_freq
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
-            prelim_result = discrepancy_results | self.residual(selected) | self.shape_extrema(base_features, warp_features, selected.shape[0])
-            print(prelim_result.keys())
-            results.append(prelim_result)
+            residuals = self.residual(selected)
+            latent_drift = self.vae.latent_drift(selected)
+            sim_extrema = self.shape_extrema(base_features, warp_features, selected.shape[0])
+            results.append(fourier_max | residuals | sim_extrema | latent_drift)
 
         return {"results": results}
 
