@@ -58,7 +58,7 @@ def compute_tail_separation(data_frame, residual_keys) -> pd.DataFrame:
     return pd.DataFrame(results).sort_values("combined_score", ascending=False)
 
 
-def chart_decompositions(model_name: str, features_dataset: Dataset, vae_name) -> None:
+def chart_decompositions(model_name: str, features_dataset: Dataset, vae_name: str) -> None:
     """Plot wavelet sensitivity distributions."""
 
     data_frame = features_dataset.to_pandas()
@@ -79,5 +79,5 @@ def chart_decompositions(model_name: str, features_dataset: Dataset, vae_name) -
     graph_residual(model_name, residual_dataframe=expanded_frame)
     graph_kde(model_name, residual_dataframe=expanded_frame)
     graph_cohen(model_name, residual_dataframe=expanded_frame)
-    graph_vae_loss(model_name, vae_dataframe=expanded_frame)
+    graph_vae_loss(vae_name, vae_dataframe=expanded_frame)
     print(f"[TRACK] Saved plots to {result_path}")
