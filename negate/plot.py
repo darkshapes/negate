@@ -38,7 +38,16 @@ residual_keys = [
     "spectral_entropy",
     "spectral_tc",
 ]
-vae_loss_keys = ["l1_loss", "mse_loss"]
+vae_loss_keys = [
+    "l1_loss",
+    "mse_loss",
+    "perturbed_l1_loss",
+    "perturbed_mse_loss",
+    "kl_loss",
+    "bce_loss",
+    "perturbed_kl_loss",
+    "perturbed_bce_loss",
+]
 
 
 def save_frames(data_frame: pd.DataFrame, model_name: str) -> None:
@@ -118,13 +127,12 @@ def graph_tail_separations(model_name: str, scores_dataframe: pd.DataFrame) -> N
     axes[1].axhline(med_sep, color="gray", linestyle="--", linewidth=0.5)
     axes[1].axvline(med_tail, color="gray", linestyle="--", linewidth=0.5)
 
-    legend_elements_2 = [Patch(facecolor="magenta", label="No Overlap")]
+    legend_elements_2 = [Patch(facecolor="green", label="No Overlap")]
     axes[1].legend(handles=legend_elements_2, loc="lower right")
 
     plt.tight_layout()
     tail_separation_plot = str(result_path / f"tail_separation_plot_{timestamp}.png")
     plt.savefig(tail_separation_plot)
-    invert_image(tail_separation_plot, tail_separation_plot)
 
 
 def graph_wavelet(model_name: str, wavelet_dataframe: pd.DataFrame) -> None:
@@ -140,16 +148,18 @@ def graph_wavelet(model_name: str, wavelet_dataframe: pd.DataFrame) -> None:
         ax = axes.flat[idx]
         for label_val, color in [(0, "cyan"), (1, "red")]:
             subset = wavelet_dataframe[wavelet_dataframe["label"] == label_val][key].dropna()
+            subset = pd.to_numeric(subset, errors="coerce").dropna()
             subset = subset[~np.isinf(subset)]
-            ax.hist(subset, bins=50, alpha=0.5, label=f"Label {label_val}", density=True, color=color)
-        ax.set_title(f"{key} Distribution by Label")
-        ax.legend()
+            ax.hist(subset, bins=50, alpha=0.5, label=f"{label_val} {'syn' if label_val == 1 else 'gnd'}", density=True, color=color)
+        ax.set_title(f"{key} Distribution")
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(fontsize=8)
 
     plt.tight_layout()
     plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
     sensitivity_plot = str(result_path / f"sensitivity_plot_{timestamp}.png")
     plt.savefig(sensitivity_plot)
-    invert_image(sensitivity_plot, sensitivity_plot)
 
 
 def graph_residual(model_name: str, residual_dataframe: pd.DataFrame) -> None:
@@ -167,7 +177,7 @@ def graph_residual(model_name: str, residual_dataframe: pd.DataFrame) -> None:
             subset = residual_dataframe[residual_dataframe["label"] == label_val][key].dropna()
             if len(subset) > 0:
                 data_by_label.append(subset.values)
-                labels.append(f"Label {label_val}")
+                labels.append(f"{label_val} {'syn' if label_val == 1 else 'gnd'}")
         if data_by_label:
             ax.boxplot(data_by_label, labels=labels)
         ax.set_title(f"{key} by Label")
@@ -178,7 +188,6 @@ def graph_residual(model_name: str, residual_dataframe: pd.DataFrame) -> None:
 
     residual_plot = str(result_path / f"residual_plot_{timestamp}.png")
     plt.savefig(residual_plot)
-    invert_image(residual_plot, residual_plot)
 
 
 def graph_kde(model_name: str, residual_dataframe: pd.DataFrame) -> None:
@@ -193,15 +202,17 @@ def graph_kde(model_name: str, residual_dataframe: pd.DataFrame) -> None:
         for label_val, color in [(0, "tab:cyan"), (1, "tab:red")]:
             subset = residual_dataframe[residual_dataframe["label"] == label_val][key].dropna()
             if len(subset) > 0:
-                sns.kdeplot(data=subset, ax=ax, fill=True, alpha=0.4, label=f"L{label_val}", color=color)
+                sns.kdeplot(data=subset, ax=ax, fill=True, alpha=0.4, label=f"L{label_val} {'syn' if label_val == 1 else 'gnd'}", color=color)
         ax.set_title(key, fontsize=9)
         ax.grid(True, alpha=0.3)
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:  # Only add legend if there are artists
+            ax.legend()
 
     plt.suptitle(f"Residual Metrics KDE Comparison - {model_name}")
     plt.tight_layout()
     kde_plot = str(result_path / f"residual_kde_plot_{timestamp}.png")
     plt.savefig(kde_plot)
-    invert_image(kde_plot, kde_plot)
 
 
 def graph_cohen(model_name: str, residual_dataframe: pd.DataFrame) -> None:
@@ -214,19 +225,19 @@ def graph_cohen(model_name: str, residual_dataframe: pd.DataFrame) -> None:
 
         if len(vals_0) > 1 and len(vals_1) > 1:
             mean_diff = abs(np.mean(vals_1) - np.mean(vals_0))
-            pooled_std = np.sqrt((np.std(vals_0) ** 2 + np.std(vals_1) ** 2) / 2)
-            effect_size = mean_diff / (pooled_std if pooled_std > 0 else 1)
+            pooled_std = np.sqrt((np.std(vals_0, ddof=1) ** 2 + np.std(vals_1, ddof=1) ** 2) / 2)
+            if pooled_std > 0 and not (np.isnan(mean_diff) or np.isnan(pooled_std)):
+                effect_size = mean_diff / pooled_std
         else:
             effect_size = 0
         effect_sizes.append(effect_size)
 
     heatmap_data = pd.DataFrame({"Effect Size": effect_sizes}, index=residual_keys)
-    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="viridis", ax=ax, cbar=False)
+    sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="magma", ax=ax, cbar=False)
 
     plt.title(f"Class Separation (Cohen's d) - {model_name}", fontsize=11)
     effect_size_plot = str(result_path / f"effect_size_heatmap_{timestamp}.png")
     plt.savefig(effect_size_plot)
-    invert_image(effect_size_plot, effect_size_plot)
 
 
 def graph_vae_loss(vae_name: str, vae_dataframe: pd.DataFrame) -> None:
@@ -236,19 +247,24 @@ def graph_vae_loss(vae_name: str, vae_dataframe: pd.DataFrame) -> None:
     :features_dataset: Dataset containing feature results.
     :param timecode: Timestamp for file naming."""
 
-    fig, axes = plt.subplots(1, len(vae_loss_keys), figsize=(10, 6))
+    num_keys = len(vae_loss_keys)
+    cols = int(round(num_keys**0.5))
+    rows = (num_keys + cols - 1) // cols
+    fig, axes = plt.subplots(rows, cols, figsize=(10, 10))
 
     for idx, key in enumerate(vae_loss_keys):
         ax = axes.flat[idx]
         for label_val, color in [(0, "orange"), (1, "magenta")]:
             subset = vae_dataframe[vae_dataframe["label"] == label_val][key].dropna()
+            subset = pd.to_numeric(subset, errors="coerce").dropna()
             subset = subset[~np.isinf(subset)]
-            ax.hist(subset, bins=50, alpha=0.5, label=f"Label {label_val}", density=True, color=color)
-        ax.set_title("Distribution by Label")
-        ax.legend()
+            ax.hist(subset, bins=50, alpha=0.5, label=f"{label_val} {'syn' if label_val == 1 else 'gnd'}", density=True, color=color)
+        ax.set_title(f"{key}")
+        handles, labels = ax.get_legend_handles_labels()
+        if handles:
+            ax.legend(fontsize=8)
 
     plt.tight_layout()
     plt.suptitle(f"VAE Loss Comparison - {vae_name[0]}")
     vae_plot = str(result_path / f"vae_plot{timestamp}.png")
     plt.savefig(vae_plot)
-    # invert_image(vae_plot, vae_plot)

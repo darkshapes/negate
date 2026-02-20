@@ -79,10 +79,7 @@ def generate_dataset(folder_path: Path | list[dict[str, PillowImage.Image]], lab
     return dataset
 
 
-def build_datasets(
-    spec: Spec,
-    genuine_folder: Path | None = None,
-) -> Dataset:
+def build_datasets(spec: Spec, genuine_folder: Path | None = None) -> Dataset:
     """Builds synthetic and genuine datasets.\n
     :param input_folder: Path to folder containing data. (optional)
     :return: Dataset containing synthetic and genuine images."""
@@ -90,26 +87,22 @@ def build_datasets(
     synthetic_input_folder = Path(".datasets")
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
+    print(f"Using images from {spec.data}")
 
     if spec.data.synthetic_data is not None:
-        print(f"Using remote images from {spec.data.synthetic_data}")
         for data_repo in spec.data.synthetic_data:
             synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
     if spec.data.synthetic_local is not None:
-        print(f"Using local images from {spec.data.synthetic_local}")
         for data_folder in spec.data.synthetic_local:
             synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
     genuine_input_folder = genuine_folder or Path("assets")
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
-
     if spec.data.genuine_data is not None:
-        print(f"Using remote images from {spec.data.genuine_data}")
         for data_repo in spec.data.genuine_data:
             genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
     if spec.data.genuine_local is not None:
-        print(f"Using local images from {spec.data.genuine_local}")
         for data_folder in spec.data.genuine_local:
             genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 

@@ -51,11 +51,9 @@ class NegateConfig(NamedTuple):
 
     alpha: float
     batch_size: int
-    cache_features: bool
     dim_factor: int
     dim_patch: int
     dtype: str
-    euclidean: bool
     feat_ext_path: str
     load_onnx: bool
     magnitude_sampling: bool

@@ -124,9 +124,14 @@ class WaveletAnalyze(ContextManager):
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
             residuals = self.residual(selected)
-            latent_drift = self.vae.latent_drift(selected)
+            if self.vae.model is not None:
+                latent_drift = self.vae.latent_drift(selected)
+                perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
+            else:
+                latent_drift = {}
+                perturbed_drift = {}
             sim_extrema = self.shape_extrema(base_features, warp_features, selected.shape[0])
-            results.append(fourier_max | residuals | sim_extrema | latent_drift)
+            results.append(fourier_max | residuals | sim_extrema | latent_drift | perturbed_drift)
 
         return {"results": results}
 
