@@ -240,7 +240,7 @@ def graph_vae_loss(vae_name: str, vae_dataframe: pd.DataFrame) -> None:
 
     for idx, key in enumerate(vae_loss_keys):
         ax = axes.flat[idx]
-        for label_val, color in [(0, "blue"), (1, "green")]:
+        for label_val, color in [(0, "orange"), (1, "magenta")]:
             subset = vae_dataframe[vae_dataframe["label"] == label_val][key].dropna()
             subset = subset[~np.isinf(subset)]
             ax.hist(subset, bins=50, alpha=0.5, label=f"Label {label_val}", density=True, color=color)
@@ -248,7 +248,7 @@ def graph_vae_loss(vae_name: str, vae_dataframe: pd.DataFrame) -> None:
         ax.legend()
 
     plt.tight_layout()
-    plt.suptitle(f"VAE Loss Comparison - {vae_name}")
+    plt.suptitle(f"VAE Loss Comparison - {vae_name[0]}")
     vae_plot = str(result_path / f"vae_plot{timestamp}.png")
     plt.savefig(vae_plot)
-    invert_image(vae_plot, vae_plot)
+    # invert_image(vae_plot, vae_plot)
