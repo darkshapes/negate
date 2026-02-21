@@ -1,6 +1,21 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+"""
+Variational Autoencoder feature extraction and latent analysis.
+
+This module provides VAE-based feature extraction for image analysis using
+pretrained variational autoencoders from the HuggingFace model hub. It supports
+multiple VAE architectures and computes reconstruction losses as quality metrics.
+
+The extractor implements context management for proper resource cleanup and
+supports both standard VAEs and specialized SANA/AuraEqui models with custom
+latent distributions.
+
+Classes:
+    VAEExtract: Main feature extraction interface with latent drift analysis.
+"""
+
 from __future__ import annotations
 
 import gc
@@ -14,11 +29,32 @@ from negate.config import Spec
 
 
 class VAEExtract:
+    """VAE-based feature extractor for image analysis.
+
+    This class manages loading pretrained variational autoencoders from HuggingFace,
+    extracting latent representations, and computing reconstruction quality metrics.
+    It supports various VAE architectures including DiagonalGaussianDistribution models.
+
+    Attributes:
+        spec: Configuration specification containing device/dtype settings.
+        device: Compute device for model execution.
+        dtype: Data type for tensors (float16/float32).
+        vae: The loaded VAE model instance.
+
+    Example:
+        >>> from negate import Spec
+        >>> spec = Spec()
+        >>> with VAEExtract(spec) as extractor:
+        ...     features = extractor(tensor)
+        >>> print(features['features'])
+    """
+
     def __init__(self, spec: Spec) -> None:
-        """Set up the extractor with a VAE model.\n
-        :param vae_type: VAEModel ID of the VAE.
-        :param device: Target device.
-        :param dtype: Data type for tensors."""
+        """Initialize the VAE extractor with configuration.\n
+        :param spec: Specification container with model config and hardware settings.\n
+        :raises RuntimeError: If diffusers package is not installed.
+        :raises ImportError: If required VAE library cannot be imported.
+        """
         print("Initializing VAE...")
 
         self.spec = spec

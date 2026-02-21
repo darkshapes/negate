@@ -8,6 +8,7 @@ residual_dtype = "float32" # decimal precision for numpy processing
 load_onnx = false          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = true  # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
 feat_ext_path = ""         # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
+top_k = 1                  # Highest percent threshold of patch difference to keep
 
 [datasets]
 eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
@@ -16,20 +17,23 @@ genuine_local = ["assets", "/Users/e6d64/Downloads/real_train"]
 synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
 synthetic_local = ["/Users/e6d64/Downloads/phantomDiffusionS3FinalImages", "/Users/e6d64/Downloads/syn_train"]
 
-[train]
-scale_pos_weight = ""              # Scale positive weight
-seed = 0                           # Random seed
+[param]
 colsample_bytree = 0.8             # Column sample by tree
-early_stopping_rounds = 10         # Early stopping rounds
-export_model_path = "model"        # Path to save the model at
+eval_metric = ["logloss", "aucpr"] # Evaluation metrics
 learning_rate = 0.1                # Learning rate
 max_depth = 4                      # Maximum depth
-n_components = 0.95                # Number of components for dimensionality reduction
-num_boost_round = 200              # Number of boosting rounds
 objective = "binary:logistic"      # Objective function
+seed = 0                           # Random seed, or set manually > 0
 subsample = 0.8                    # Subsample ratio
-top_k = 3                          # Highest percent threshold of patch difference to keep
-eval_metric = ["logloss", "aucpr"] # Evaluation metrics
+
+[rounds]
+early_stopping_rounds = 10  # Early stopping rounds
+export_model_path = "model" # Path to save the model at
+max_rnd = 0xFFFFFFFF        # max rnd seed
+n_components = 0.95         # Number of components for dimensionality reduction
+num_boost_round = 200       # Number of boosting rounds
+test_size = 0.2             # 80/20 training split default
+verbose_eval = 20
 
 [model.library] # priority from left to right
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]

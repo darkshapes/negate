@@ -30,29 +30,29 @@ classifiers = [
 dependencies = [
     "accelerate>=1.12.0",
     "altair>=6.1.0.dev20260126", # visualization
-    "datasets>=4.5.0",
-    "diffusers>=0.36.0",
+    "datasets>=4.5.0",           # data processing
+    "diffusers>=0.36.0",         # vae
     "einops>=0.8.2",             # nvidia radio
-    "huggingface-hub>=1.3.2",
+    "huggingface-hub>=1.3.2",    # download
     "ipython>=9.10.0",           # altair
     "matplotlib>=3.10.8",
     "numpy==2.4.1",
     "open-clip-torch>=3.2.0",    # mobileclip2
-    "pillow>=12.1.0",
+    "pillow>=12.1.0",            # image processing
     "plotly>=6.5.2",
     "protobuf>=7.34.0rc2",       # nvidia radio
-    "pytorch-wavelets>=1.3.0",
+    "pytorch-wavelets>=1.3.0",   # residuals
     "pywavelets>=1.9.0",         # haar wavelet methods
-    "scikit-image>=0.26.0",
-    "scikit-learn>=1.8.0",
+    "scikit-image>=0.26.0",      # residuals
+    "scikit-learn>=1.8.0",       # training
     "seaborn>=0.13.2",           # visualization
     "sentencepiece>=0.2.1",      # nvidia radio
     "tiktoken>=0.12.0",          # nvidia radio
     "timm>=1.0.24",              # timm model
     "torch>=2.10.0",
     "torchvision>=0.25.0",
-    "transformers>=4.57.3",
-    "xgboost>=3.1.3",
+    "transformers>=4.57.3",      # vit
+    "xgboost>=3.1.3",            # training
 ]
 
 [dependency-groups]
