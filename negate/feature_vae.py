@@ -1,6 +1,21 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+"""
+Variational Autoencoder feature extraction and latent analysis.
+
+This module provides VAE-based feature extraction for image analysis using
+pretrained variational autoencoders from the HuggingFace model hub. It supports
+multiple VAE architectures and computes reconstruction losses as quality metrics.
+
+The extractor implements context management for proper resource cleanup and
+supports both standard VAEs and specialized SANA/AuraEqui models with custom
+latent distributions.
+
+Classes:
+    VAEExtract: Main feature extraction interface with latent drift analysis.
+"""
+
 from __future__ import annotations
 
 import gc
@@ -8,16 +23,38 @@ import os
 
 import torch
 from torch import Tensor
-from torch.nn import KLDivLoss, MSELoss, L1Loss
+from torch.nn import KLDivLoss, BCELoss, MSELoss, L1Loss
+from torch.nn import functional as F
 from negate.config import Spec
 
 
 class VAEExtract:
+    """VAE-based feature extractor for image analysis.
+
+    This class manages loading pretrained variational autoencoders from HuggingFace,
+    extracting latent representations, and computing reconstruction quality metrics.
+    It supports various VAE architectures including DiagonalGaussianDistribution models.
+
+    Attributes:
+        spec: Configuration specification containing device/dtype settings.
+        device: Compute device for model execution.
+        dtype: Data type for tensors (float16/float32).
+        vae: The loaded VAE model instance.
+
+    Example:
+        >>> from negate import Spec
+        >>> spec = Spec()
+        >>> with VAEExtract(spec) as extractor:
+        ...     features = extractor(tensor)
+        >>> print(features['features'])
+    """
+
     def __init__(self, spec: Spec) -> None:
-        """Set up the extractor with a VAE model.\n
-        :param vae_type: VAEModel ID of the VAE.
-        :param device: Target device.
-        :param dtype: Data type for tensors."""
+        """Initialize the VAE extractor with configuration.\n
+        :param spec: Specification container with model config and hardware settings.\n
+        :raises RuntimeError: If diffusers package is not installed.
+        :raises ImportError: If required VAE library cannot be imported.
+        """
         print("Initializing VAE...")
 
         self.spec = spec
@@ -28,6 +65,7 @@ class VAEExtract:
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
         self.kl_div = KLDivLoss(log_target=True)
+        self.bce_loss = BCELoss()
         self.mse_loss = MSELoss()
         self.l1_loss = L1Loss()
 
@@ -70,8 +108,8 @@ class VAEExtract:
             raise RuntimeError("missing dependency 'diffusers'. Please install it using 'negate[extractor]'")
         import torch
 
-        latent: Tensor = self.vae.encode(batch)  # type: ignore
-        mean = torch.mean(latent.latent, dim=0).cpu().float()  # type: ignore
+        latent: Tensor = self.vae.encode(batch).latent  # type: ignore
+        mean = torch.mean(latent, dim=0).cpu().float()  # type: ignore
 
         logvar = torch.zeros_like(mean).cpu().float()
         params = torch.cat([mean, logvar], dim=1)
@@ -82,7 +120,7 @@ class VAEExtract:
     @torch.inference_mode()
     def __call__(self, tensor: Tensor) -> dict[str, Tensor | list[Tensor]]:
         """Extract VAE features from a batch of images then use spectral contrast as divergence metric
-        :param dataset: HuggingFace Dataset with 'image' column.
+        :param tensor: 4D image tensor
         :return: Dictionary with 'features' list."""
         import torch
 
@@ -102,15 +140,25 @@ class VAEExtract:
 
     @torch.inference_mode()
     def latent_drift(self, tensors: Tensor) -> dict[str, float]:
-        """Compute L1/MSE loss between input and VAE reconstruction.\n"""
+        """Compute L1/MSE/KL/BCE loss between input and VAE reconstruction.\n
+        :param tensor: 4D image tensor
+        """
 
-        latents = self.vae.encode(tensors).latent_dist.sample()  # type: ignore
+        if "AutoencoderDC" in self.library:
+            latents = self.vae.encode(tensors).latent
+        else:
+            latents = self.vae.encode(tensors).latent_dist.sample()  # type: ignore
         reconstructed = self.vae.decode(latents).sample  # depends on API
 
         l1_mean = self.l1_loss(reconstructed, tensors)
         mse_mean = self.mse_loss(reconstructed, tensors)
+        bce_mean = self.bce_loss(reconstructed, tensors)
 
-        return {"mse_loss": float(mse_mean), "l1_loss": float(l1_mean)}
+        log_input = F.log_softmax(reconstructed, dim=1)  # batch, features
+        log_target = F.log_softmax(tensors, dim=1)
+        kl_mean = self.kl_div(log_input, log_target)
+
+        return {"bce_loss": float(bce_mean), "l1_mean": float(l1_mean), "mse_mean": float(mse_mean), "kl_loss": float(kl_mean)}
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""

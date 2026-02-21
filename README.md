@@ -24,7 +24,7 @@ A CLI tool and Python library for image processing and analysis of feature extra
 
 <img src="results/visualization_20260209_101743.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the DinoViTL Model"></div>
 
-Negate is a modular system of image processing and feature extraction pipelines aimed towards critical analysis of effective techniques that can differentiate synthetic and human-origin works. Techniques include spectral residual analysis, laplacian residual analysis, random resize crop, local binary pattern and haar wavelet perturbation. We also study the efficacy of a gradient-boosted decision tree and PCA trained to distinguish between images of synthetic and human origin. Preliminary results demonstrate high accuracy in detecting synthetic images.
+Negate is a modular system of image processing and feature extraction pipelines aimed towards critical analysis of effective techniques that can differentiate synthetic and human-origin works. Techniques include spectral residual analysis, laplacian residual analysis, random resize crop, local binary pattern, haar wavelet perturbation, and measuring l1 and mse loss. We also study the efficacy of a gradient-boosted decision tree and PCA trained to distinguish between images of synthetic and human origin.
 
 This repo provides a simple command‑line interface to invoke classification and examples of integrating our library of training scripts, predictions and metrics into other works. We make all attempts to follow continuous integration best practices for deploying and maintaining software, ensuring the code is readied for production environments.
 

@@ -23,7 +23,7 @@ class Residual:
         return: None."""
 
         self.residual_dtype = getattr(np, spec.opt.residual_dtype, np.float32)
-        self.top_k = spec.hyper_param.top_k
+        self.top_k = spec.opt.top_k
         self.device = spec.device
         self.dim_patch = spec.opt.dim_patch
         self.patch_resolution = self.dim_patch * self.dim_patch

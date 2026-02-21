@@ -1,7 +1,26 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a pes */ -->
 
+"""
+Configuration management for the Negate package.
+
+This module provides centralized configuration handling including hardware settings
+(device selection, data types), model configurations, training hyperparameters,
+and dataset paths. It implements a singleton pattern for hardware detection and
+lazy-loading of configuration values from TOML files.
+
+Classes:
+    Spec: Main specification container aggregating all configuration objects.
+    Chip: Hardware abstraction layer for device and dtype management.
+    NegateConfig: Core runtime settings (batch size, VAE options).
+    NegateHyperParam: Training hyperparameters for XGBoost model.
+    NegateDataPaths: Dataset directory paths configuration.
+    NegateModelConfig: Vision transformer and VAE model registry.
+"""
+
 from __future__ import annotations
+
+from dataclasses import dataclass
 import os
 import tomllib
 from pathlib import Path
@@ -12,15 +31,36 @@ import torch
 
 
 class Spec:
-    """Manages device, dtype, and other universal settings for the package."""
+    """Main specification container aggregating all configuration objects.
+
+    This class serves as the central access point for all package configuration,
+    combining settings from NegateConfig, NegateHyperParam, NegateDataPaths,
+    and hardware detection via Chip. It is typically instantiated once at
+    application startup.
+
+    Attributes:
+        opt: Core runtime configuration (batch size, VAE options).
+        hyper_param: Training hyperparameters.
+        data_paths: Dataset directory paths.
+        model_config: Model registry for vision transformers and VAEs.
+        chip: Hardware abstraction layer.
+
+    Example:
+        >>> spec = Spec()
+        >>> print(f"Using device: {spec.chip.device}")
+        Using device: cuda
+    """
 
     def __init__(self) -> None:
+        """Initialize specification container with loaded configuration."""
+
         self.data_paths: NegateDataPaths = data_paths
         self.device: torch.device = chip.device
         self.dtype: torch.dtype = chip.dtype
         self.apply: dict[str, torch.device | torch.dtype] = {"device": self.device, "dtype": self.dtype}
         self.np_dtype: np.typing.DTypeLike = chip.np_dtype
         self.hyper_param: NegateHyperParam = hyperparam_config
+        self.train_rounds: NegateTrainRounds = train_rounds
         self.models: list[str] = [repo for repo in model_config.list_models]
         self.model = model_config.auto_model[0]
         self.opt: NegateConfig = negate_options
@@ -28,22 +68,44 @@ class Spec:
         self.model_config = model_config
 
 
-class NegateHyperParam(NamedTuple):
+class NegateTrainRounds(NamedTuple):
     """Training hyperparameter values."""
 
+    early_stopping_rounds: int
+    export_model_path: str | None
+    max_rnd: int
     n_components: float
     num_boost_round: int
-    top_k: int
-    early_stopping_rounds: int
+    test_size: float
+    verbose_eval: int
+
+
+@dataclass
+class NegateHyperParam:
+    """Container holding XGBoost model hyperparameters.
+
+    Attributes:
+        seed: Random seed for reproducibility in splitting and PCA.
+        colsample_bytree: Fraction of features to sample per tree.
+        eval_metric: List of evaluation metrics ['auc', 'error'].
+        learning_rate: Step size shrinkage to prevent overfitting.
+        max_depth: Maximum depth of decision trees.
+        objective: Learning objective (binary:logistic).
+        subsample: Fraction of training data to sample per tree.
+
+    Example:
+        >>> params = TrainingParameters(learning_rate=0.05, max_depth=6)
+        >>> print(params.seed)
+        12345
+    """
+
+    seed: int
     colsample_bytree: float
     eval_metric: list
     learning_rate: float
     max_depth: int
     objective: str
     subsample: float
-    scale_pos_weight: float | None
-    seed: int
-    export_model_path: str | None
 
 
 class NegateConfig(NamedTuple):
@@ -51,15 +113,14 @@ class NegateConfig(NamedTuple):
 
     alpha: float
     batch_size: int
-    cache_features: bool
     dim_factor: int
     dim_patch: int
     dtype: str
-    euclidean: bool
     feat_ext_path: str
     load_onnx: bool
     magnitude_sampling: bool
     residual_dtype: str
+    top_k: int
 
 
 class NegateDataPaths(NamedTuple):
@@ -135,11 +196,30 @@ class NegateModelConfig:
 
 
 class Chip:
-    """Hardware configuration for device and dtype management."""
+    """Hardware abstraction layer for device and dtype management.
+
+    Implements a singleton pattern to ensure consistent hardware configuration
+    across the application. Automatically detects available compute devices
+    (CUDA, MPS, XPU) and selects appropriate data types.
+
+    Attributes:
+        device: The current compute device (cuda, mps, xpu, cpu).
+        dtype: PyTorch tensor data type.
+        np_dtype: NumPy array data type.
+        dtype_name: String name of the current dtype.
+
+    Example:
+        >>> chip = Chip()
+        >>> print(chip.device)
+        cuda
+        >>> chip.dtype = "float32"
+    """
 
     _instance = None
 
     def __new__(cls) -> Chip:
+        """Return singleton instance or create new one."""
+
         if cls._instance is None:
             cls._instance = super().__new__(cls)
         return cls._instance
@@ -152,7 +232,15 @@ class Chip:
 
     @property
     def device(self) -> torch.device:
-        """Get the compute device."""
+        """Get the compute device, auto-detecting available hardware.
+
+        Checks for CUDA, MPS (Apple Silicon), XPU (Intel XPU), and falls back to CPU.
+        Automatically adjusts dtype to float32 on CPU for compatibility.
+
+        :return: PyTorch device object.
+
+        :raises RuntimeError: If no supported device is available.
+        """
 
         if self._device is None:
             if torch.cuda.is_available():
@@ -201,7 +289,7 @@ class Chip:
         return self._np_dtype
 
 
-def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip]:
+def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip, NegateTrainRounds]:
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
@@ -211,17 +299,19 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
 
     models = data.pop("model")
     vae = data.pop("vae")
-    train_cfg = data.pop("train", {})
+    param_cfg = data.pop("param", {})
     dataset_cfg = data.pop("datasets", {})
     library_cfg = data.pop("library", {})
+    rounds_cfg = data.pop("rounds", {})
 
     return (
         NegateConfig(**data),
-        NegateHyperParam(**train_cfg),
+        NegateHyperParam(**param_cfg),
         NegateDataPaths(**dataset_cfg),
         NegateModelConfig(data=models | library_cfg, vae=vae),
         Chip(),
+        NegateTrainRounds(**rounds_cfg),
     )
 
 
-negate_options, hyperparam_config, data_paths, model_config, chip = load_config_options()
+negate_options, hyperparam_config, data_paths, model_config, chip, train_rounds = load_config_options()

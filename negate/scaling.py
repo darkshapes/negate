@@ -6,7 +6,6 @@
 
 """Scaling utilities for image tensors."""
 
-import numpy as np
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -49,13 +48,3 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     batch, l_, channel, height, width = img.shape
     img = img.view(batch * l_, channel, height, width)
     return img
-
-
-def split_array(form: np.ndarray, limit: int = 2**31 - 1) -> list[np.ndarray]:
-    """Yield sub-arrays of ``form`` with length ≤ ``limit``."""
-    if form.size <= limit:
-        return [form]
-    items: list[np.ndarray] = []
-    for index in range(0, form.size, limit):
-        items.append(form[index : index + limit])
-    return items
