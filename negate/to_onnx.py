@@ -136,6 +136,7 @@ def model_data_type_to_onnx(model_dtype):
         DataType.TYPE_BOOL: onnxmltools.convert.common.data_types.BooleanTensorType,  # type: ignore
         DataType.TYPE_INT32: onnxmltools.convert.common.data_types.Int32TensorType,  # type: ignore
         DataType.TYPE_INT64: onnxmltools.convert.common.data_types.Int64TensorType,  # type: ignore
+        DataType.TYPE_FP16: onnxmltools.convert.common.data_types.Float16TensorType,  # type: ignore
         DataType.TYPE_FP32: onnxmltools.convert.common.data_types.FloatTensorType,  # type: ignore
         DataType.TYPE_FP64: onnxmltools.convert.common.data_types.DoubleTensorType,  # type: ignore
         DataType.TYPE_STRING: onnxmltools.convert.common.data_types.StringType,  # type: ignore

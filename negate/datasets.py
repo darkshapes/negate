@@ -39,18 +39,18 @@ def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int 
     return remote_dataset
 
 
-def generate_dataset(folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None) -> Dataset:
-    """Generates a dataset from images in the given folder.\n
+def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None) -> Dataset:
+    """Generates a dataset from an image file or folder of images.\n
     :param folder_path: Path to the folder containing image files.
     :return: Dataset containing images and labels with NaNs removed."""
 
-    if isinstance(folder_path, Path):
+    if isinstance(file_or_folder_path, Path):
         validated_paths = []
         valid_extensions = {".jpg", ".webp", ".jpeg", ".png", ".tif", ".tiff"}
-        assert isinstance(folder_path, Path)
+        assert isinstance(file_or_folder_path, Path)
 
-        if folder_path.is_dir():
-            for img_path in tqdm(folder_path.iterdir(), total=len(os.listdir(str(folder_path))), desc="Creating dataset..."):
+        if file_or_folder_path.is_dir():
+            for img_path in tqdm(file_or_folder_path.iterdir(), total=len(os.listdir(str(file_or_folder_path))), desc="Creating dataset..."):
                 if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
                     continue
                 try:
@@ -59,12 +59,12 @@ def generate_dataset(folder_path: Path | list[dict[str, PillowImage.Image]], lab
                 except Exception as _unreadable_file:
                     continue
                 validated_paths.append({"image": str(img_path)})
-        elif folder_path.is_file() and folder_path.suffix.lower() in valid_extensions:
-            validated_paths.append({"image": str(folder_path)})
+        elif file_or_folder_path.is_file() and file_or_folder_path.suffix.lower() in valid_extensions:
+            validated_paths.append({"image": str(file_or_folder_path)})
         else:
-            raise ValueError(f"Invalid path {folder_path}")
+            raise ValueError(f"Invalid path {file_or_folder_path}")
     else:
-        validated_paths = folder_path
+        validated_paths = file_or_folder_path
     dataset = Dataset.from_list(validated_paths)  # NaN Prevention: decode separately
 
     try:  # Fallback: keep the raw bytes if decoding fails.
