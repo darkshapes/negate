@@ -5,14 +5,15 @@ import json
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
+import seaborn as sns
 from matplotlib import pyplot as plt
 from matplotlib.patches import Patch
-import seaborn as sns
-from PIL import Image
-import pandas as pd
 from pandas import Series
-from negate.train import timestamp, result_path
+from PIL import Image
 
+from negate.config import Spec
+from negate.train import result_path, timestamp
 
 plot_file = "plot_xp_data.json"
 
@@ -87,7 +88,7 @@ def invert_image(input_path: str, output_path: str) -> None:
     inverted.save(output_path)
 
 
-def graph_tail_separations(model_name: str, scores_dataframe: pd.DataFrame) -> None:
+def graph_tail_separations(spec: Spec, scores_dataframe: pd.DataFrame) -> None:
     """Plot tail-separation analysis for residual metrics.\n
 
     :param model_name: Name of the model being analyzed.
@@ -101,7 +102,7 @@ def graph_tail_separations(model_name: str, scores_dataframe: pd.DataFrame) -> N
 
     axes[0].set_yticks(range(len(scores_dataframe)), labels=scores_dataframe["metric"])
     axes[0].set_xlabel("Tail x Separation Score")
-    axes[0].set_title(f"Long-Tail Outlier Separability - {model_name}")
+    axes[0].set_title(f"Long-Tail Outlier Separability - {spec.model}")
     axes[0].axvline(x=0, color="magenta", linestyle="-", linewidth=0.5)
 
     for i, (score, no) in enumerate(zip(scores_dataframe["combined_score"], scores_dataframe["no_overlap"])):
@@ -119,7 +120,7 @@ def graph_tail_separations(model_name: str, scores_dataframe: pd.DataFrame) -> N
 
     axes[1].set_xlabel("Tail Score (heavy-tail tendency)")
     axes[1].set_ylabel("Separation (Cohen's d-like)")
-    axes[1].set_title(f"Metric Diagnostic - {model_name}")
+    axes[1].set_title(f"Metric Diagnostic - {spec.model}")
     axes[1].grid(True, alpha=0.3)
 
     med_sep = scores_dataframe["separation"].median()
@@ -135,7 +136,7 @@ def graph_tail_separations(model_name: str, scores_dataframe: pd.DataFrame) -> N
     plt.savefig(tail_separation_plot)
 
 
-def graph_wavelet(model_name: str, wavelet_dataframe: pd.DataFrame) -> None:
+def graph_wavelet(spec: Spec, wavelet_dataframe: pd.DataFrame) -> None:
     """Plot wavelet sensitivity distributions.\n
 
     :param model_name: Name of the model being analyzed.
@@ -157,12 +158,12 @@ def graph_wavelet(model_name: str, wavelet_dataframe: pd.DataFrame) -> None:
             ax.legend(fontsize=8)
 
     plt.tight_layout()
-    plt.suptitle(f"Wavelet Decomposition Comparison - {model_name}")
+    plt.suptitle(f"Wavelet Decomposition Comparison - {spec.model}")
     sensitivity_plot = str(result_path / f"sensitivity_plot_{timestamp}.png")
     plt.savefig(sensitivity_plot)
 
 
-def graph_residual(model_name: str, residual_dataframe: pd.DataFrame) -> None:
+def graph_residual(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
     num_keys = len(residual_keys)
     cols = int(round(num_keys**0.5))
     rows = (num_keys + cols - 1) // cols
@@ -183,14 +184,14 @@ def graph_residual(model_name: str, residual_dataframe: pd.DataFrame) -> None:
         ax.set_title(f"{key} by Label")
         ax.grid(True, alpha=0.3)
 
-    plt.suptitle(f"Residual Metrics Comparison - {model_name}")
+    plt.suptitle(f"Residual Metrics Comparison - {spec.model}")
     plt.tight_layout()
 
     residual_plot = str(result_path / f"residual_plot_{timestamp}.png")
     plt.savefig(residual_plot)
 
 
-def graph_kde(model_name: str, residual_dataframe: pd.DataFrame) -> None:
+def graph_kde(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
     num_keys = len(residual_keys)
     cols = int(round(num_keys**0.5))
     rows = (num_keys + cols - 1) // cols
@@ -209,13 +210,13 @@ def graph_kde(model_name: str, residual_dataframe: pd.DataFrame) -> None:
         if handles:  # Only add legend if there are artists
             ax.legend()
 
-    plt.suptitle(f"Residual Metrics KDE Comparison - {model_name}")
+    plt.suptitle(f"Residual Metrics KDE Comparison - {spec.model}")
     plt.tight_layout()
     kde_plot = str(result_path / f"residual_kde_plot_{timestamp}.png")
     plt.savefig(kde_plot)
 
 
-def graph_cohen(model_name: str, residual_dataframe: pd.DataFrame) -> None:
+def graph_cohen(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
     fig, ax = plt.subplots(figsize=(10, max(4, len(residual_keys) * 0.3)))
 
     effect_sizes = []
@@ -235,12 +236,12 @@ def graph_cohen(model_name: str, residual_dataframe: pd.DataFrame) -> None:
     heatmap_data = pd.DataFrame({"Effect Size": effect_sizes}, index=residual_keys)
     sns.heatmap(heatmap_data, annot=True, fmt=".2f", cmap="magma", ax=ax, cbar=False)
 
-    plt.title(f"Class Separation (Cohen's d) - {model_name}", fontsize=11)
+    plt.title(f"Class Separation (Cohen's d) - {spec.model}", fontsize=11)
     effect_size_plot = str(result_path / f"effect_size_heatmap_{timestamp}.png")
     plt.savefig(effect_size_plot)
 
 
-def graph_vae_loss(vae_name: str | list[str], vae_dataframe: pd.DataFrame) -> None:
+def graph_vae_loss(spec: Spec, vae_dataframe: pd.DataFrame) -> None:
     """Plot wavelet sensitivity distributions.\n
 
     :param model_name: Name of the model being analyzed.
@@ -266,8 +267,7 @@ def graph_vae_loss(vae_name: str | list[str], vae_dataframe: pd.DataFrame) -> No
 
     plt.tight_layout()
 
-    if isinstance(vae_name, list):
-        vae_name = vae_name[0]
-    plt.suptitle(f"VAE Loss Comparison - {vae_name[0]}")
+    vae_name = spec.vae[0] if isinstance(spec.vae, list) else spec.vae
+    plt.suptitle(f"VAE Loss Comparison - {vae_name}")
     vae_plot = str(result_path / f"vae_plot{timestamp}.png")
     plt.savefig(vae_plot)

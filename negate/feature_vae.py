@@ -61,7 +61,7 @@ class VAEExtract:
 
         self.device = spec.device
         self.dtype = spec.dtype
-        self.model, self.library = spec.model_config.auto_vae
+        self.model, self.library = spec.vae or spec.model_config.auto_vae
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
         self.kl_div = KLDivLoss(log_target=True)

@@ -1179,7 +1179,13 @@ dependencies = [
     { name = "huggingface-hub" },
     { name = "ipython" },
     { name = "matplotlib" },
+    { name = "mongoengine" },
     { name = "numpy" },
+    { name = "onnx" },
+    { name = "onnxconverter-common" },
+    { name = "onnxmltools" },
+    { name = "onnxoptimizer" },
+    { name = "onnxruntime" },
     { name = "open-clip-torch" },
     { name = "pillow" },
     { name = "plotly" },
@@ -1190,6 +1196,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "seaborn" },
     { name = "sentencepiece" },
+    { name = "skl2onnx" },
     { name = "tiktoken" },
     { name = "timm" },
     { name = "torch", version = "2.10.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-mps' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-cuda') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-rocm')" },
@@ -1221,15 +1228,6 @@ mps = [
     { name = "torchvision", version = "0.25.0", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "(sys_platform == 'darwin' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-mps' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-cuda') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-rocm')" },
     { name = "torchvision", version = "0.25.0", source = { registry = "https://pypi.org/simple" }, marker = "(sys_platform != 'darwin' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-cuda') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cpu' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-mps') or (extra == 'extra-6-negate-cuda' and extra == 'extra-6-negate-rocm') or (extra == 'extra-6-negate-mps' and extra == 'extra-6-negate-rocm')" },
 ]
-onnx = [
-    { name = "mongoengine" },
-    { name = "onnx" },
-    { name = "onnxconverter-common" },
-    { name = "onnxmltools" },
-    { name = "onnxoptimizer" },
-    { name = "onnxruntime" },
-    { name = "skl2onnx" },
-]
 rocm = [
     { name = "torch", version = "2.10.0", source = { registry = "https://pypi.org/simple" } },
     { name = "torchvision", version = "0.25.0", source = { registry = "https://pypi.org/simple" } },
@@ -1253,13 +1251,13 @@ requires-dist = [
     { name = "huggingface-hub", specifier = ">=1.3.2" },
     { name = "ipython", specifier = ">=9.10.0" },
     { name = "matplotlib", specifier = ">=3.10.8" },
-    { name = "mongoengine", marker = "extra == 'onnx'", specifier = ">=0.29.1" },
+    { name = "mongoengine", specifier = ">=0.29.1" },
     { name = "numpy", specifier = "==2.4.1" },
-    { name = "onnx", marker = "extra == 'onnx'", specifier = ">=1.20.1" },
-    { name = "onnxconverter-common", marker = "extra == 'onnx'", specifier = ">=1.16.0" },
-    { name = "onnxmltools", marker = "extra == 'onnx'", specifier = ">=1.15.0" },
-    { name = "onnxoptimizer", marker = "extra == 'onnx'", specifier = ">=0.4.2" },
-    { name = "onnxruntime", marker = "extra == 'onnx'", specifier = ">=1.24.0.dev20251031003" },
+    { name = "onnx", specifier = ">=1.20.1" },
+    { name = "onnxconverter-common", specifier = ">=1.16.0" },
+    { name = "onnxmltools", specifier = ">=1.15.0" },
+    { name = "onnxoptimizer", specifier = ">=0.4.2" },
+    { name = "onnxruntime", specifier = ">=1.24.0.dev20251031003" },
     { name = "open-clip-torch", specifier = ">=3.2.0" },
     { name = "pillow", specifier = ">=12.1.0" },
     { name = "plotly", specifier = ">=6.5.2" },
@@ -1274,7 +1272,7 @@ requires-dist = [
     { name = "scikit-learn", specifier = ">=1.8.0" },
     { name = "seaborn", specifier = ">=0.13.2" },
     { name = "sentencepiece", specifier = ">=0.2.1" },
-    { name = "skl2onnx", marker = "extra == 'onnx'", specifier = ">=1.19.1" },
+    { name = "skl2onnx", specifier = ">=1.19.1" },
     { name = "tiktoken", specifier = ">=0.12.0" },
     { name = "timm", specifier = ">=1.0.24" },
     { name = "torch", specifier = ">=2.10.0" },
@@ -1292,7 +1290,7 @@ requires-dist = [
     { name = "transformers", specifier = ">=4.57.3" },
     { name = "xgboost", specifier = ">=3.1.3" },
 ]
-provides-extras = ["cuda", "rocm", "cpu", "mps", "onnx", "dev"]
+provides-extras = ["cuda", "rocm", "cpu", "mps", "dev"]
 
 [package.metadata.requires-dev]
 dev = [
