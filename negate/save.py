@@ -61,9 +61,9 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     num_features = train_result.feature_matrix.shape[1]
     pca = train_result.pca
 
-    input_shape = IOShape(  # XGBoost expects a 2‑D array [batch, features] at float32
+    input_shape = IOShape(  # XGBoost expects a 2‑D array [batch, features]
         shape=[-1, num_features],
-        dtype=DataType.TYPE_FP16,
+        dtype=DataType.TYPE_FP32,  # onnx supports FloatType (32) or Int64
         name="input",
         format=ModelInputFormat.FORMAT_NONE,  # Used for TensorRT
     )

@@ -79,55 +79,78 @@ Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
 
 Basic Syntax:
 
+### Command List
+
 ```bash
-usage: negate [-h] {calibrate,train} ...
+usage: negate [-h] {pretrain,train,infer} ...
 
 Negate CLI
 
 positional arguments:
-  {calibrate,train}
-    calibrate        Check model on the dataset at the provided path from CLI or config, default `assets/`.
-    train            Train XGBoost model on wavelet features using the dataset in the provided path or `assets/`. The resulting model will be
-                     saved to disk.
-
-options:
-  -h, --help         show this help message and exit
-```
-
-Evaluating the haar-wavelet method:
-
-```bash
-usage: negate calibrate [-h]
-                        [-m {['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['timm/vit_base_patch16_dinov3.lvd1689m'],['timm/MobileCLIP2-S4-OpenCLIP']}]
-                        [path]
-
-positional arguments:
-  path                  Genunie/Human-original dataset path
+  {pretrain,train,infer}
+    pretrain            Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default
+                        `assets/`.
+    train               Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will
+                        be saved to disk.
+    infer               Infer whether an image at the provided path is synthetic or original.
 
 options:
   -h, --help            show this help message and exit
-  -m, --model {['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['timm/vit_base_patch16_dinov3.lvd1689m'],['timm/MobileCLIP2-S4-OpenCLIP']}
-                        Model to use. Default :nvidia/C-RADIOv4-SO400M
+```
+
+Run pre-training pipe (ensemble image preprocessing and analysis):
+
+```bash
+uusage: negate pretrain [-h]
+                       [-m {['timm/vit_base_patch16_dinov3.lvd1689m'],['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['hf-hub:timm/MobileCLIP2-S4-OpenCLIP']}]
+                       [-a {tonera/FLUX.2-klein-9B-Int8-TorchAo,exdysa/dc-ae-f32c32-sana-1.1-diffusers,Freepik/F-Lite-Texture,exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,Tongyi-MAI/Z-Image,exdysa/mitsua-vae-SAFETENSORS,,}]
+                       [path]
+
+positional arguments:
+  path                  Genunie/Human-original image dataset path
+
+options:
+  -h, --help            show this help message and exit
+  -m, --model {['timm/vit_base_patch16_dinov3.lvd1689m'],['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['hf-hub:timm/MobileCLIP2-S4-OpenCLIP']}
+                        Model to use. Default :timm/vit_base_patch16_dinov3.lvd1689m
+  -a, --ae {tonera/FLUX.2-klein-9B-Int8-TorchAo,exdysa/dc-ae-f32c32-sana-1.1-diffusers,Freepik/F-Lite-Texture,exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,Tongyi-MAI/Z-Image,exdysa/mitsua-vae-SAFETENSORS,,}
+                        Model to use. Default :timm/vit_base_patch16_dinov3.lvd1689m
 ```
 
 Training a model to distinguish genuine from synthetic art:
 
 ```bash
-usage: negate train [-h] [path]
+  from pkg_resources import resource_stream
+usage: negate train [-h]
+                    [-m {['timm/vit_base_patch16_dinov3.lvd1689m'],['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['hf-hub:timm/MobileCLIP2-S4-OpenCLIP']}]
+                    [-a {tonera/FLUX.2-klein-9B-Int8-TorchAo,exdysa/dc-ae-f32c32-sana-1.1-diffusers,Freepik/F-Lite-Texture,exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,Tongyi-MAI/Z-Image,exdysa/mitsua-vae-SAFETENSORS,,}]
+                    [path]
 
 positional arguments:
-  path        Genunie/Human-original dataset path
+  path                  Genunie/Human-original image dataset path
 
 options:
-  -h, --help  show this help message and exit
+  -h, --help            show this help message and exit
+  -m, --model {['timm/vit_base_patch16_dinov3.lvd1689m'],['nvidia/C-RADIOv4-SO400M', 'facebook/dinov3-vitl16-pretrain-sat493m'],['hf-hub:timm/MobileCLIP2-S4-OpenCLIP']}
+                        Model to use. Default :timm/vit_base_patch16_dinov3.lvd1689m
+  -a, --ae {tonera/FLUX.2-klein-9B-Int8-TorchAo,exdysa/dc-ae-f32c32-sana-1.1-diffusers,Freepik/F-Lite-Texture,exdysa/dc-ae-f32c32-sana-1.1-diffusers,black-forest-labs/FLUX.2-dev,Tongyi-MAI/Z-Image,exdysa/mitsua-vae-SAFETENSORS,,}
+                        Model to use. Default :timm/vit_base_patch16_dinov3.lvd1689m
 ```
 
-## Fourier Feature Comparison by Model
+Infer the origin of an image or folder of images:
 
-<img src="results/visualization_20260209_101743.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the TIMM DinoV3_Base Model">
-<img src="results/visualization_20260208_1151.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the MobileClip model">
-<img src="results/visualization_20260208_222311.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the Nvidia C-RADIOv4-SO400M Model">
-<img src="results/combined_plots.png" style="width:50%; max-width:500px;" alt="Bar and grid graph comparing variance of the synthetic and real images">
+```
+usage: negate infer [-h] [-m {20260221_182340,20260219_221715}] path
+
+positional arguments:
+  path                  Path to the image or directory containing images of unknown origin
+
+options:
+  -h, --help            show this help message and exit
+  -m, --model {20260221_182340,20260219_221715}
+```
+
+## Graph Results
 
 ## Related Research:
 

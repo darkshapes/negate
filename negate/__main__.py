@@ -34,7 +34,6 @@ from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
 
 from negate import (
-    load_config_options,
     Spec,
     WaveletAnalyze,
     WaveletContext,
@@ -42,6 +41,7 @@ from negate import (
     chart_decompositions,
     generate_dataset,
     grade,
+    load_config_options,
     prepare_dataset,
     result_path,
     save_metadata,
@@ -52,38 +52,6 @@ from negate.track import accuracy
 
 start_ns = timer_module.perf_counter()
 process_time = lambda: print(str(datetime.timedelta(seconds=timer_module.process_time())), end="")
-
-
-def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet decomposition analysis to dataset images.\n
-    :param dataset: HuggingFace Dataset containing 'image' column with PIL images.
-    :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column containing wavelet coefficients.\n
-    :raises KeyError: If dataset missing required 'image' column.
-    :raises RuntimeError: If wavelet analyzer fails to initialize.
-
-    .. note::
-        The preprocessing is memory-efficient and supports batched processing
-        when config.toml `batch_size` > 0.
-    """
-    kwargs = {}
-    if spec.opt.batch_size > 0:
-        kwargs["batched"] = True
-        kwargs["batch_size"] = spec.opt.batch_size
-
-    context = WaveletContext(spec)
-    with WaveletAnalyze(context) as analyzer:  # type: ignore
-        dataset = dataset.map(
-            analyzer,
-            remove_columns=["image"],
-            desc="Computing wavelets...",
-            **kwargs,
-        )
-    result_path.mkdir(parents=True, exist_ok=True)
-    config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
-
-    return dataset
 
 
 def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
@@ -153,6 +121,38 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path) -> np.ndarray | 
         sys.exit()
 
 
+def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
+    """Apply wavelet decomposition analysis to dataset images.\n
+    :param dataset: HuggingFace Dataset containing 'image' column with PIL images.
+    :param spec: Specification container with analysis configuration.
+    :return: Transformed dataset with 'features' column containing wavelet coefficients.\n
+    :raises KeyError: If dataset missing required 'image' column.
+    :raises RuntimeError: If wavelet analyzer fails to initialize.
+
+    .. note::
+        The preprocessing is memory-efficient and supports batched processing
+        when config.toml `batch_size` > 0.
+    """
+    kwargs = {}
+    if spec.opt.batch_size > 0:
+        kwargs["batched"] = True
+        kwargs["batch_size"] = spec.opt.batch_size
+
+    context = WaveletContext(spec)
+    with WaveletAnalyze(context) as analyzer:  # type: ignore
+        dataset = dataset.map(
+            analyzer,
+            remove_columns=["image"],
+            desc="Computing wavelets...",
+            **kwargs,
+        )
+    result_path.mkdir(parents=True, exist_ok=True)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+
+    return dataset
+
+
 def infer_origin(image_path: Path, model_version: Path) -> tuple:
     """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
     :param image_path: Path to image file or folder.
@@ -169,7 +169,7 @@ def infer_origin(image_path: Path, model_version: Path) -> tuple:
     features_matrix = prepare_dataset(features_dataset, spec)
     result = run_onnx(features_matrix, model_version) if spec.opt.load_onnx else run_native(features_matrix, model_version)
 
-    thresh = 0.62
+    thresh = 0.5
     predictions = (result > thresh).astype(int)
     # ground_truth = np.full(predictions.shape, true_label, dtype=int)
     # acc = float(np.mean(predictions == ground_truth))
@@ -179,7 +179,7 @@ def infer_origin(image_path: Path, model_version: Path) -> tuple:
     return result, predictions  # type: ignore[return-value]
 
 
-def metric_analysis(spec: Spec, file_or_folder_path: Path | None = None) -> None:
+def pretrain(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     """Calibration of computing wavelet energy features.\n
     :param file_or_folder_path: Additional datasets folder."""
 
@@ -214,10 +214,10 @@ def main() -> None:
     :raises ValueError: Missing image path.
     :raises NotImplementedError: Unsupported command passed."""
 
-    metrics_blurb = "Analyze performance of image preprocessing on the dataset at the provided path from CLI and config paths, default `assets/`."
-    train_blurb = "Train XGBoost model on wavelet features using the dataset in the provided path or `assets/`. The resulting model will be saved to disk."
-    dataset_blurb = "Genunie/Human-original dataset path"
+    pretrain_blurb = "Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default `assets/`."
+    train_blurb = "Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will be saved to disk."
     infer_blurb = "Infer whether an image at the provided path is synthetic or original."
+    dataset_blurb = "Genunie/Human-original image dataset path"
     infer_path_blurb = "Path to the image or directory containing images of unknown origin"
 
     spec = Spec()
@@ -237,10 +237,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
-    metrics_parser = subparsers.add_parser("metrics", help=metrics_blurb)
-    metrics_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
-    metrics_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
-    metrics_parser.add_argument("-a", "--ae", choices=ae_choices, default=spec.model_config.auto_vae[0], help=model_blurb)  # type: ignore
+    pretrain_parser = subparsers.add_parser("pretrain", help=pretrain_blurb)
+    pretrain_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
+    pretrain_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
+    pretrain_parser.add_argument("-a", "--ae", choices=ae_choices, default=spec.model_config.auto_vae[0], help=model_blurb)  # type: ignore
 
     train_parser = subparsers.add_parser("train", help=train_blurb)
     train_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
@@ -266,9 +266,9 @@ def main() -> None:
         return dataset_location
 
     match args.cmd:
-        case "metrics":
+        case "pretrain":
             dataset_location = build_call()
-            metric_analysis(file_or_folder_path=dataset_location, spec=spec)
+            pretrain(file_or_folder_path=dataset_location, spec=spec)
         case "train":
             dataset_location = build_call()
             train_model(file_or_folder_path=dataset_location, spec=spec)
