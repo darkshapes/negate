@@ -46,6 +46,7 @@ from negate import (
     result_path,
     save_metadata,
     save_models,
+    graph_train_variance,
 )
 from negate.save import save_to_onnx
 from negate.track import accuracy
@@ -122,7 +123,7 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path) -> np.ndarray | 
 
 
 def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet decomposition analysis to dataset images.\n
+    """Stage the image preprocessing for the dataset.\n
     :param dataset: HuggingFace Dataset containing 'image' column with PIL images.
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column containing wavelet coefficients.\n
@@ -146,20 +147,16 @@ def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
             desc="Computing wavelets...",
             **kwargs,
         )
-    result_path.mkdir(parents=True, exist_ok=True)
-    config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
-
     return dataset
 
 
-def infer_origin(image_path: Path, model_version: Path) -> tuple:
+def infer_origin(image_path: Path, model_version: Path, label: bool | None = None) -> tuple[np.ndarray, ...]:
     """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
     :param image_path: Path to image file or folder.
     :param vae_type: VAE model to use for feature extraction.
-    :return: Prediction array."""
+    :returns: Prediction arrays."""
 
-    print(f"""Checking path '{image_path}' with {model_version.stem}""")
+    print(f"""Checking path '{image_path}' using model date {model_version.stem}""")
 
     dataset: Dataset = generate_dataset(image_path)
     config_path = str(Path("results") / model_version.stem / "config.toml")
@@ -171,25 +168,39 @@ def infer_origin(image_path: Path, model_version: Path) -> tuple:
 
     thresh = 0.5
     predictions = (result > thresh).astype(int)
-    # ground_truth = np.full(predictions.shape, true_label, dtype=int)
-    # acc = float(np.mean(predictions == ground_truth))
-    # print(f"Accuracy: {acc:.2%}")
+    if label:
+        ground_truth = np.full(predictions.shape, label, dtype=int)
+        acc = float(np.mean(predictions == ground_truth))
+        print(f"Accuracy: {acc:.2%}")
     print(result)
     print(predictions)
     return result, predictions  # type: ignore[return-value]
 
 
+def end_processing(process_name: str) -> float:
+    """Backup configuration file and complete process timer\n
+    :param process_name: The type of process completing
+    :returns: Timecode of the elapsed computation time
+    """
+    timecode = timer_module.perf_counter() - start_ns
+    result_path.mkdir(parents=True, exist_ok=True)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+    print(f"{process_name} completed in {timecode}")
+    return timecode
+
+
 def pretrain(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     """Calibration of computing wavelet energy features.\n
-    :param file_or_folder_path: Additional datasets folder."""
+    :param file_or_folder_path: Additional datasets folder.
+    :returns: None"""
 
     print("Metrics selected.")
     dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
     print("Beginning preprocessing.")
     features_dataset = preprocessing(dataset, spec=spec)
-    timecode = timer_module.perf_counter() - start_ns
+    end_processing("Pretraining")
     chart_decompositions(features_dataset=features_dataset, spec=spec)
-    print(f"Metrics completed in {timecode}")
 
 
 def train_model(spec: Spec, file_or_folder_path: Path | None = None) -> None:
@@ -200,13 +211,13 @@ def train_model(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     features_dataset = preprocessing(dataset, spec=spec)
     print("Training decision tree.")
     train_result = grade(features_dataset, spec)
-    timecode = timer_module.perf_counter() - start_ns
-    print(f"Training completed in {timecode}")
+    timecode = end_processing("Training")
     save_metadata(train_result)
     save_models(train_result, compare=False)
     save_to_onnx(train_result)
     accuracy(train_result=train_result, timecode=timecode)
     chart_decompositions(features_dataset=features_dataset, spec=spec)
+    graph_train_variance(train_result=train_result, spec=spec)
 
 
 def main() -> None:
@@ -251,6 +262,9 @@ def main() -> None:
     infer_parser.add_argument("path", help=infer_path_blurb)
     infer_parser.add_argument("-m", "--model", choices=trained_model_list, default=trained_model_list[0])
 
+    label_grp = infer_parser.add_mutually_exclusive_group()
+    label_grp.add_argument("-s", "--synthetic", action="store_const", const=1, dest="label", help="Mark image as synthetic (label = 1) for evaluation.")
+    label_grp.add_argument("-g", "--genuine", action="store_const", const=0, dest="label", help="Mark image as genuine (label = 0) for evaluation.")
     args = parser.parse_args(argv[1:])
 
     def build_call():
@@ -278,7 +292,7 @@ def main() -> None:
 
             image_path: Path = Path(args.path)
             model_version = trained_model_folder / args.model
-            infer_origin(image_path=image_path, model_version=model_version)
+            infer_origin(image_path=image_path, model_version=model_version, label=args.label_grp or None)
         case _:
             raise NotImplementedError
 

@@ -4,7 +4,6 @@
 """Residual image processing with GPU acceleration"""
 
 import numpy as np
-from numpy.fft import fftfreq
 from PIL import Image
 from skimage.color import rgb2gray
 from skimage.feature import local_binary_pattern
@@ -68,21 +67,10 @@ class Residual:
         numeric_image = self.make_numeric(image)
 
         spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
-        normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
-        fft_2d = np.fft.fftn(numeric_image.astype(np.float32))
-        magnitude_spectrum = np.abs(fft_2d)
-        log_mag = np.log(magnitude_spectrum + 1e-10)
+        magnitude_spectrum = np.abs(spec_residual)
 
-        h, w = numeric_image.shape
-        center_h, center_w = h // 2, w // 2
-        spectral_centroid = float(np.sum(log_mag * fftfreq(h)[:, None] + log_mag.T * fftfreq(w)[None, :]) / (log_mag.sum() * 2 + 1e-10))
         return {
-            "spectral_centroid": float(spectral_centroid),
-            "high_freq_ratio": float((magnitude_spectrum[center_h:, center_w:] ** 2).sum() / (magnitude_spectrum**2).sum()),
-            "low_freq_energy": float((magnitude_spectrum[:center_h, :center_w] ** 2).sum()),
-            "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
             "max_magnitude": float(magnitude_spectrum.max()),
-            "mean_log_magnitude": float(log_mag.mean()),
         }
 
     def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:

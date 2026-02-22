@@ -4,7 +4,7 @@
 
 from negate.config import Spec, load_config_options
 from negate.datasets import build_datasets, generate_dataset, load_remote_dataset
-from negate.track import chart_decompositions, accuracy
+from negate.track import chart_decompositions, accuracy, graph_train_variance
 from negate.train import get_time, result_path, grade, TrainResult, prepare_dataset
 from negate.save import save_metadata, save_models, save_to_onnx
 from negate.feature_vit import VITExtract

@@ -1,5 +1,5 @@
 # Advanced Configuration and Paths for Negate CLI
-alpha = 0.3                # strength of perturbation Default 0.5)
+alpha = 0.4                # strength of perturbation Default 0.5)
 dim_factor = 6             # Multiplier for image rescale size Default 6
 batch_size = 0             # Feature extraction batch size, 0 disables batching default[0]
 dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
@@ -15,7 +15,7 @@ eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
 genuine_data = ["KarimSayed/cat-breed-fiass-index"]
 genuine_local = ["/Users/e6d64/Downloads/pd12_real", "assets", "/Users/e6d64/Downloads/real_train"]
 synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
-synthetic_local = ["/Users/e6d64/Downloads/phantomDiffusionS3FinalImages", "/Users/e6d64/Downloads/syn_train"]
+synthetic_local = ["/Users/e6d64/Downloads/syn_train"]
 
 [param]
 colsample_bytree = 0.8             # Column sample by tree
