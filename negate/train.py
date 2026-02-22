@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from datasets import Dataset
 from numpy.random import default_rng
@@ -95,6 +96,21 @@ class TrainResult:
     y_test: NDArray
 
 
+def prepare_dataset(features_dataset: Dataset, spec: Spec):
+    samples = features_dataset["results"]
+    all_dicts = [d for row in samples for d in row]
+
+    df = pd.json_normalize(all_dicts).fillna(0)
+
+    for col in df.columns:
+        if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():
+            df[col] = df[col].apply(lambda x: np.mean(x, dtype=spec.np_dtype) if isinstance(x, (list, np.ndarray)) else float(x))
+
+    feature_matrix = df.to_numpy(dtype=spec.np_dtype)
+    feature_matrix = np.where(np.isfinite(feature_matrix), feature_matrix, 0)
+    return feature_matrix
+
+
 def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
     """Train an XGBoost binary classifier on wavelet feature dataset.\n
     :param features_dataset: HuggingFace Dataset with 'features' (numpy array) and 'label' (int) columns.
@@ -107,9 +123,9 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         The function uses 80-20 train-test split with stratification to preserve
         class distribution. Early stopping triggers after 10 rounds without improvement.
     """
+    feature_matrix = prepare_dataset(features_dataset, spec)
 
-    feature_matrix = np.array([sample["features"] for sample in features_dataset]).astype(getattr(np, spec.opt.residual_dtype, np.float32))  # type: ignore
-    labels = np.array([sample["label"] for sample in features_dataset])  # type: ignore no overloads
+    labels = np.array(features_dataset["label"])
 
     rng = default_rng(1)
     random_state = lambda: int(np.round(rng.random() * spec.train_rounds.max_rnd))
@@ -133,7 +149,6 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
     training_parameters = asdict(spec.hyper_param)
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
-
     model = xgb.train(
         training_parameters,
         d_matrix_train,
@@ -142,7 +157,6 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         early_stopping_rounds=spec.train_rounds.early_stopping_rounds,
         evals_result=evaluation_result,
         verbose_eval=spec.train_rounds.verbose_eval,
-        scale_pos_weight=scale_pos_weight,
     )
 
     return TrainResult(

@@ -23,10 +23,14 @@ from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Union
 
 import numpy as np
-
+import onnx
+import onnxconverter_common
+import onnxmltools
 import torch
 import torch.onnx
 from mongoengine.fields import EmbeddedDocument, IntField, ListField, StringField
+from onnx import TensorProto
+from onnxoptimizer import optimize
 
 
 class ModelInputFormat(Enum):
@@ -79,9 +83,6 @@ class IOShapeDO(EmbeddedDocument):
 
 
 def type_to_data_type(tensor_type):
-    import torch
-    from onnx import TensorProto
-
     mapper = defaultdict(
         lambda: DataType.TYPE_INVALID,
         {
@@ -130,20 +131,14 @@ def type_to_data_type(tensor_type):
 
 
 def model_data_type_to_onnx(model_dtype):
-    try:
-        import onnxconverter_common
-        import onnxmltools
-    except (ImportError, ModuleNotFoundError, Exception):
-        raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
     mapper = {
         DataType.TYPE_INVALID: onnxconverter_common,
-        DataType.TYPE_BOOL: onnxmltools.convert.common.data_types.BooleanTensorType,
-        DataType.TYPE_INT32: onnxmltools.convert.common.data_types.Int32TensorType,
-        DataType.TYPE_INT64: onnxmltools.convert.common.data_types.Int64TensorType,
-        DataType.TYPE_FP32: onnxmltools.convert.common.data_types.FloatTensorType,
-        DataType.TYPE_FP64: onnxmltools.convert.common.data_types.DoubleTensorType,
-        DataType.TYPE_STRING: onnxmltools.convert.common.data_types.StringType,
+        DataType.TYPE_BOOL: onnxmltools.convert.common.data_types.BooleanTensorType,  # type: ignore
+        DataType.TYPE_INT32: onnxmltools.convert.common.data_types.Int32TensorType,  # type: ignore
+        DataType.TYPE_INT64: onnxmltools.convert.common.data_types.Int64TensorType,  # type: ignore
+        DataType.TYPE_FP32: onnxmltools.convert.common.data_types.FloatTensorType,  # type: ignore
+        DataType.TYPE_FP64: onnxmltools.convert.common.data_types.DoubleTensorType,  # type: ignore
+        DataType.TYPE_STRING: onnxmltools.convert.common.data_types.StringType,  # type: ignore
     }
     if isinstance(model_dtype, int):
         model_dtype = DataType(model_dtype)
@@ -182,8 +177,6 @@ def model_data_type_to_np(model_dtype):
 
 
 def model_data_type_to_torch(model_dtype):
-    import torch
-
     mapper = {
         DataType.TYPE_INVALID: None,
         DataType.TYPE_BOOL: torch.bool,
@@ -219,9 +212,6 @@ class IOShape:
 
     def __init__(self, shape: List[int], dtype: Union[type, int, str, DataType], name: str | None = None, format: ModelInputFormat = ModelInputFormat.FORMAT_NONE):
         """Initializer of input/output shape."""
-
-        import numpy as np
-        import torch
 
         # input / output name
         self.name = name
@@ -297,7 +287,12 @@ class IOShape:
     @staticmethod
     def from_io_shape_po(io_shape_po: IOShapeDO):
         """Create IO shape business object from IO shape plain object."""
-        io_shape_bo = IOShape(name=io_shape_po.name, shape=io_shape_po.shape, dtype=io_shape_po.dtype, format=ModelInputFormat(io_shape_po.format))
+        io_shape_bo = IOShape(
+            name=io_shape_po.name,  # type: ignore
+            shape=io_shape_po.shape,  # type: ignore
+            dtype=io_shape_po.dtype,  # type: ignore
+            format=ModelInputFormat(io_shape_po.format),
+        )
 
         return io_shape_bo
 
@@ -308,23 +303,12 @@ class IOShape:
 class ONNXConverter(object):
     """Convert model to ONNX format."""
 
-    try:
-        import onnx
-    except (ImportError, ModuleNotFoundError, Exception):
-        raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
     DEFAULT_OPSET = 10
     supported_framework = ["pytorch", "sklearn", "xgboost", "lightgbm"]
 
     class _Wrapper(object):
         @staticmethod
         def save(converter: Callable[..., "onnx.ModelProto"]):
-            try:
-                import onnx
-                import onnxmltools
-            except (ImportError, ModuleNotFoundError, Exception):
-                raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
             def wrap(*args, save_path: Path | None = None, optimize: bool = True, override: bool = False, **kwargs) -> "onnx.ModelProto":
                 onnx_model = None
                 save_path_with_ext = None
@@ -347,7 +331,7 @@ class ONNXConverter(object):
 
                 if save_path_with_ext:
                     # save to disk
-                    save_path.parent.mkdir(parents=True, exist_ok=True)
+                    save_path.parent.mkdir(parents=True, exist_ok=True)  # type: ignore
                     onnxmltools.utils.save_model(onnx_model, save_path_with_ext)
 
                 return onnx_model
@@ -365,11 +349,6 @@ class ONNXConverter(object):
         optimize: bool = True,
         override: bool = False,
     ):
-        try:
-            import onnx
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
         """Save a loaded model in ONNX.
             TODO: reuse inputs to pass model_input parameter later
 
@@ -417,11 +396,11 @@ class ONNXConverter(object):
         for output_ in outputs:
             output_names.append(output_.name)
         if model_input is None:
-            model_input = tuple(dummy_tensors)
+            model_input = tuple(dummy_tensors)  # type: ignore
         try:
             torch.onnx.export(
                 model,  # model being run
-                model_input,  # model input (or a tuple for multiple inputs)
+                model_input,  # model input (or a tuple for multiple inputs) #type: ignore
                 save_path_with_ext,  # where to save the model (can be a file or file-like object)
                 export_params=True,  # store the trained parameter weights inside the model file
                 opset_version=opset,  # the ONNX version to export the model to
@@ -446,17 +425,12 @@ class ONNXConverter(object):
             return False
 
     @staticmethod
-    @_Wrapper.save
+    @_Wrapper.save  # type: ignore
     def from_sklearn(
         model,
         inputs: Iterable[IOShape],
         opset: int = DEFAULT_OPSET,
     ):
-        try:
-            import onnxmltools
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
         initial_type = ONNXConverter.convert_initial_type(inputs)
         onnx_model = onnxmltools.convert_sklearn(model, initial_types=initial_type, target_opset=opset)
         print("sklearn to onnx converted successfully")
@@ -465,11 +439,6 @@ class ONNXConverter(object):
     @staticmethod
     @_Wrapper.save
     def from_xgboost(model, inputs: Iterable[IOShape], opset: int = DEFAULT_OPSET):
-        try:
-            import onnxmltools
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
         initial_type = ONNXConverter.convert_initial_type(inputs)
         onnx_model = onnxmltools.convert_xgboost(model, initial_types=initial_type, target_opset=opset)
         print("xgboost to onnx converted successfully")
@@ -478,11 +447,6 @@ class ONNXConverter(object):
     @staticmethod
     @_Wrapper.save
     def from_lightgbm(model, inputs: Iterable[IOShape], opset: int = DEFAULT_OPSET):
-        try:
-            import onnxmltools
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
         initial_type = ONNXConverter.convert_initial_type(inputs)
         onnx_model = onnxmltools.convert_lightgbm(model, initial_types=initial_type, target_opset=opset)
         print("lightgbm to onnx converted successfully")
@@ -509,13 +473,6 @@ class ONNXConverter(object):
     @staticmethod
     def optim_onnx(model: "onnx.ModelProto", verbose=False):
         """Optimize ONNX network"""
-        try:
-            import onnx
-            import onnxmltools
-            from onnxoptimizer import optimize
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency for onnx processing. Please install using 'negate[onnx]'")
-
         print("Begin Simplify ONNX Model ...")
         passes = [
             "eliminate_deadend",

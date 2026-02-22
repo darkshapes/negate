@@ -4,8 +4,14 @@
 import pickle
 
 import numpy as np
+import onnx
+from skl2onnx import convert_sklearn
+from skl2onnx.common.data_types import FloatTensorType
+from sklearn.decomposition import PCA
+from xgboost import Booster
 
-from negate import TrainResult
+from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
+from negate.train import TrainResult, generate_datestamp_path
 
 
 def save_metadata(train_result: TrainResult, file_name: str = "negate") -> str:
@@ -13,7 +19,6 @@ def save_metadata(train_result: TrainResult, file_name: str = "negate") -> str:
     :param train_result: Training output containing scale_pos_weight and seed.
     :param file_name: Base file name for the metadata file.
     :return: Path to the saved metadata file."""
-    from negate.train import generate_datestamp_path
 
     scale_pos_weight: float = train_result.scale_pos_weight  # type: ignore
     seed: int = train_result.seed
@@ -28,13 +33,7 @@ def save_models(train_result: TrainResult, compare: bool, file_name: str = "nega
     :param train_result: Training output containing model, PCA and metadata.
     :param file_name: Base name for the files written to the *models* folder.
     :return: None"""
-    from negate.train import generate_datestamp_path
 
-    try:
-        from sklearn.decomposition import PCA
-        from xgboost import Booster
-    except (ImportError, ModuleNotFoundError, Exception):
-        raise RuntimeError("missing dependencies for onnx. Please install it using 'negate[onnx]'")
     datestamp_path = generate_datestamp_path(file_name)
 
     model: Booster = train_result.model
@@ -56,15 +55,6 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     :param train_result: Training output containing the XGBoost model.
     :param file_name: Base name for the ONNX file."""
 
-    try:
-        import onnx
-        from skl2onnx import convert_sklearn
-        from skl2onnx.common.data_types import FloatTensorType
-    except (ImportError, ModuleNotFoundError, Exception):
-        raise RuntimeError("missing dependencies for onnx. Please install it using 'negate[onnx]'")
-    from negate.train import generate_datestamp_path
-    from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
-
     datestamp_path = generate_datestamp_path(file_name)
 
     model = train_result.model
@@ -73,7 +63,7 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
 
     input_shape = IOShape(  # XGBoost expects a 2‑D array [batch, features] at float32
         shape=[-1, num_features],
-        dtype=DataType.TYPE_FP32,
+        dtype=DataType.TYPE_FP16,
         name="input",
         format=ModelInputFormat.FORMAT_NONE,  # Used for TensorRT
     )
