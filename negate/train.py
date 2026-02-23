@@ -103,7 +103,7 @@ def prepare_dataset(features_dataset: Dataset, spec: Spec):
     df = pd.json_normalize(all_dicts).fillna(0)
 
     for col in df.columns:
-        if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():
+        if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():  # type: ignore Invalid series conditional
             df[col] = df[col].apply(lambda x: np.mean(x, dtype=spec.np_dtype) if isinstance(x, (list, np.ndarray)) else float(x))
 
     feature_matrix = df.to_numpy(dtype=spec.np_dtype)
@@ -141,12 +141,17 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
     pca: PCA = PCA(n_components=spec.train_rounds.n_components, random_state=seed)  # dimensionality .95
     X_train_pca = pca.fit_transform(X_train)
     X_test_pca = pca.transform(X_test)
-
+    print(
+        f"imbalance ratio: {np.sum(labels == 0) / np.sum(labels == 1):.2f} \
+        0: {np.sum(labels == 0)} samples ({np.sum(labels == 0) / len(labels) * 100:.1f}%) \
+        1: {np.sum(labels == 1)} samples ({np.sum(labels == 1) / len(labels) * 100:.1f}%)"
+    )
     scale_pos_weight = np.sum(y_train == 0) / np.sum(y_train == 1)
     d_matrix_train = xgb.DMatrix(X_train_pca, label=y_train)
     d_matrix_test = xgb.DMatrix(X_test_pca, label=y_test)
 
-    training_parameters = asdict(spec.hyper_param)
+    training_parameters = asdict(spec.hyper_param) | {"scale_pos_weight": scale_pos_weight, "seed": seed}
+
     evaluation_parameters = [(d_matrix_train, "train"), (d_matrix_test, "test")]
     evaluation_result = {}
     model = xgb.train(
@@ -169,6 +174,6 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         y_test=y_test,  # type: ignore
         labels=labels,
         feature_matrix=feature_matrix,
-        seed=spec.hyper_param.seed,
+        seed=seed,
         num_features=model.num_features(),
     )

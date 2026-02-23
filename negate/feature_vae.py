@@ -64,10 +64,8 @@ class VAEExtract:
         self.model, self.library = spec.vae or spec.model_config.auto_vae
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
-        self.kl_div = KLDivLoss(log_target=True)
+        self.kl_div = KLDivLoss(log_target=True, reduction="batchmean")
         self.bce_loss = BCELoss()
-        self.mse_loss = MSELoss()
-        self.l1_loss = L1Loss()
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
@@ -150,15 +148,13 @@ class VAEExtract:
             latents = self.vae.encode(tensors).latent_dist.sample()  # type: ignore
         reconstructed = self.vae.decode(latents).sample  # depends on API
 
-        l1_mean = self.l1_loss(reconstructed, tensors)
-        mse_mean = self.mse_loss(reconstructed, tensors)
         bce_mean = self.bce_loss(reconstructed, tensors)
 
         log_input = F.log_softmax(reconstructed, dim=1)  # batch, features
         log_target = F.log_softmax(tensors, dim=1)
         kl_mean = self.kl_div(log_input, log_target)
 
-        return {"bce_loss": float(bce_mean), "l1_mean": float(l1_mean), "mse_mean": float(mse_mean), "kl_loss": float(kl_mean)}
+        return {"bce_loss": float(bce_mean), "kl_loss": float(kl_mean)}
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""

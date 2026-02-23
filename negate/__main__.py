@@ -1,24 +1,14 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-"""
-Command-line interface entry point for the Negate package.
-
-This module provides the CLI parser and main execution logic for training
-and inference workflows. It handles argument parsing, dataset loading,
-preprocessing orchestration, and result saving.
-
-The CLI supports a 'predict' subcommand for running inference on image datasets.
-Results are automatically timestamped and saved to the results directory.
-
-Functions:
-    preprocessing: Apply wavelet analysis transformations to dataset.
-    multi_prediction: Main prediction workflow orchestrator.
-    main: CLI argument parser and command dispatcher.
+"""Command-line interface entry point for Negate package.\n
+Handles CLI parsing, dataset loading, preprocessing, and result saving.
+Supports 'predict' subcommand with automatic timestamping.
 """
 
+from dataclasses import asdict
 import argparse
-import datetime
+import json
 import pickle
 import re
 import shutil
@@ -41,6 +31,7 @@ from negate import (
     chart_decompositions,
     generate_dataset,
     grade,
+    graph_train_variance,
     load_config_options,
     prepare_dataset,
     result_path,
@@ -51,14 +42,13 @@ from negate.save import save_to_onnx
 from negate.track import accuracy
 
 start_ns = timer_module.perf_counter()
-process_time = lambda: print(str(datetime.timedelta(seconds=timer_module.process_time())), end="")
 
 
-def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
+def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
     """Run inference using XGBoost with PCA pre-processing.\n
-    :param features_dataset: Extracted features.\n
-    :param model_version: Model to use for the prediction\n
-    :return: Prediction array."""
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :return: Result array of predicted origins."""
 
     import xgboost as xgb
 
@@ -75,7 +65,7 @@ def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
 
     features_pca = pca.transform(features_dataset)
 
-    model = xgb.Booster()
+    model = xgb.Booster(params=parameters)
     model.load_model(model_file_path_named)
 
     result = model.predict(xgb.DMatrix(features_pca))
@@ -83,10 +73,11 @@ def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
     return result
 
 
-def run_onnx(features_dataset: np.ndarray, model_version: Path) -> np.ndarray | Any:
+def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
     """Run inference using ONNX Runtime with PCA pre-processing.\n
-    :param features_array: Feature array.\n
-    :return: Prediction array."""
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :return: Result array of predicted origins."""
 
     model_file_path_named = model_version / "negate.onnx"
     if not model_file_path_named.exists():
@@ -122,17 +113,11 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path) -> np.ndarray | 
 
 
 def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet decomposition analysis to dataset images.\n
-    :param dataset: HuggingFace Dataset containing 'image' column with PIL images.
+    """Apply wavelet analysis transformations to dataset.\n
+    :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column containing wavelet coefficients.\n
-    :raises KeyError: If dataset missing required 'image' column.
-    :raises RuntimeError: If wavelet analyzer fails to initialize.
+    :return: Transformed dataset with 'features' column."""
 
-    .. note::
-        The preprocessing is memory-efficient and supports batched processing
-        when config.toml `batch_size` > 0.
-    """
     kwargs = {}
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
@@ -146,53 +131,76 @@ def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
             desc="Computing wavelets...",
             **kwargs,
         )
-    result_path.mkdir(parents=True, exist_ok=True)
-    config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
-
     return dataset
 
 
-def infer_origin(image_path: Path, model_version: Path) -> tuple:
-    """Predict synthetic or original for given image. (0 = genuine, 1 = synthetic)\n
+def infer_origin(image_path: Path, model_version: Path, label: bool | None = None) -> tuple[np.ndarray, ...]:
+    """Predict synthetic or original for given image.\n
     :param image_path: Path to image file or folder.
-    :param vae_type: VAE model to use for feature extraction.
-    :return: Prediction array."""
+    :param model_version: Model version path.
+    :return: Prediction arrays (0=genuine, 1=synthetic)."""
 
-    print(f"""Checking path '{image_path}' with {model_version.stem}""")
+    print(f"""Checking path '{image_path}' using model date {model_version.stem}""")
 
     dataset: Dataset = generate_dataset(image_path)
-    config_path = str(Path("results") / model_version.stem / "config.toml")
+    results_path = Path("results") / model_version.stem
+    config_path = str(results_path / "config.toml")
     config_options = load_config_options(config_path)
     spec = Spec(*config_options)
+    results_file_path = str(results_path / f"results_{model_version.stem}.json")
+    with open(results_file_path) as result_metadata:
+        train_metadata = json.load(result_metadata)
+    spec.hyper_param.seed = train_metadata["seed"]
     features_dataset = preprocessing(dataset, spec)
     features_matrix = prepare_dataset(features_dataset, spec)
-    result = run_onnx(features_matrix, model_version) if spec.opt.load_onnx else run_native(features_matrix, model_version)
+
+    parameters = asdict(spec.hyper_param) | {"scale_pos_weight": train_metadata["scale_pos_weight"]}
+
+    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
 
     thresh = 0.5
     predictions = (result > thresh).astype(int)
-    # ground_truth = np.full(predictions.shape, true_label, dtype=int)
-    # acc = float(np.mean(predictions == ground_truth))
-    # print(f"Accuracy: {acc:.2%}")
+    if label is not None:
+        ground_truth = np.full(predictions.shape, label, dtype=int)
+        acc = float(np.mean(predictions == ground_truth))
+        print(f"Accuracy: {acc:.2%}")
     print(result)
     print(predictions)
     return result, predictions  # type: ignore[return-value]
 
 
+def end_processing(process_name: str) -> float:
+    """Backup config file and complete process timer.\n
+    :param process_name: The type of process completing.
+    :returns: Timecode of the elapsed computation time."""
+
+    timecode = timer_module.perf_counter() - start_ns
+    result_path.mkdir(parents=True, exist_ok=True)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+    print(f"{process_name} completed in {timecode}")
+    return timecode
+
+
 def pretrain(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     """Calibration of computing wavelet energy features.\n
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
     :param file_or_folder_path: Additional datasets folder."""
 
     print("Metrics selected.")
     dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
     print("Beginning preprocessing.")
     features_dataset = preprocessing(dataset, spec=spec)
-    timecode = timer_module.perf_counter() - start_ns
+    end_processing("Pretraining")
     chart_decompositions(features_dataset=features_dataset, spec=spec)
-    print(f"Metrics completed in {timecode}")
 
 
 def train_model(spec: Spec, file_or_folder_path: Path | None = None) -> None:
+    """Train XGBoost model on preprocessed image features.\n
+    :param spec: Specification container.
+    :param file_or_folder_path: Optional dataset path."""
+
     print("Training selected.")
 
     dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
@@ -200,18 +208,19 @@ def train_model(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     features_dataset = preprocessing(dataset, spec=spec)
     print("Training decision tree.")
     train_result = grade(features_dataset, spec)
-    timecode = timer_module.perf_counter() - start_ns
-    print(f"Training completed in {timecode}")
+    timecode = end_processing("Training")
     save_metadata(train_result)
     save_models(train_result, compare=False)
     save_to_onnx(train_result)
     accuracy(train_result=train_result, timecode=timecode)
     chart_decompositions(features_dataset=features_dataset, spec=spec)
+    graph_train_variance(train_result=train_result, spec=spec)
 
 
 def main() -> None:
-    """CLI entry point.\n
+    """CLI argument parser and command dispatcher.\n
     :raises ValueError: Missing image path.
+    :raises ValueError: Invalid VAE choice.
     :raises NotImplementedError: Unsupported command passed."""
 
     pretrain_blurb = "Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default `assets/`."
@@ -251,6 +260,9 @@ def main() -> None:
     infer_parser.add_argument("path", help=infer_path_blurb)
     infer_parser.add_argument("-m", "--model", choices=trained_model_list, default=trained_model_list[0])
 
+    label_grp = infer_parser.add_mutually_exclusive_group()
+    label_grp.add_argument("-s", "--synthetic", action="store_const", const=1, dest="label", help="Mark image as synthetic (label = 1) for evaluation.")
+    label_grp.add_argument("-g", "--genuine", action="store_const", const=0, dest="label", help="Mark image as genuine (label = 0) for evaluation.")
     args = parser.parse_args(argv[1:])
 
     def build_call():
@@ -278,7 +290,8 @@ def main() -> None:
 
             image_path: Path = Path(args.path)
             model_version = trained_model_folder / args.model
-            infer_origin(image_path=image_path, model_version=model_version)
+            print(args.label)
+            infer_origin(image_path=image_path, model_version=model_version, label=args.label)
         case _:
             raise NotImplementedError
 

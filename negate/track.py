@@ -21,6 +21,7 @@ from negate.plot import (
     result_path,
     vae_loss_keys,
     wavelet_keys,
+    graph_train_variance,
 )
 from negate.train import TrainResult, timestamp
 
