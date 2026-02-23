@@ -1,5 +1,5 @@
 # Advanced Configuration and Paths for Negate CLI
-alpha = 0.1               # strength of perturbation Default 0.5)
+alpha = 0.2               # strength of perturbation Default 0.5)
 dim_factor = 2            # Multiplier for image rescale size Default 6
 dtype = "float16"         # decimal precision ("float64", "float32","float16", lower = <10-15% speed increase, less mem, possible accuracy hit)
 load_onnx = false         # Use trained ONNX for inference : True → ONNX, False → native XGBoost
