@@ -339,31 +339,37 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
     ax_orig.set_title("Original Data (First Two Features)")
     # ax_orig.colorbar(label="Prediction")
 
-    ax_pca.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")  # 5. PCA transformed scatter
-    ax_pca.set_xlabel("Principal Component 1")
-    ax_pca.set_ylabel("Principal Component 2")
+    if X_train_pca.shape[1] < 2:
+        ax_pca.text(0.5, 0.5, f"Insufficient PCA components\n(only {X_train_pca.shape[1]} found)", ha="center", va="center", transform=ax_pca.transAxes)
+        ax_pca.set_xlabel("Principal Component 1")
+        ax_pca.set_ylabel("(none)")
+    else:
+        ax_pca.scatter(X_train_pca[:, 0], X_train_pca[:, 1], c=y_plot, cmap="coolwarm", edgecolor="k")  # 5. PCA transformed scatter
+        ax_pca.set_xlabel("Principal Component 1")
+        ax_pca.set_ylabel("Principal Component 2")
+
     ax_pca.set_title("PCA Transformed Data")
     # ax_pca.colorbar(label="Prediction")
 
-    corr = np.corrcoef(X_train_pca, rowvar=False)  # 6. Correlation heatmap
-    upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
-    lower_triangle = corr[np.tril_indices_from(corr, k=-1)]
-    vmin = lower_triangle.min()
-    vmax = lower_triangle.max()
-    cmap = sns.diverging_palette(20, 230, as_cmap=True)
-    sns.heatmap(
-        corr,
-        mask=upper_triangle_mask,
-        cmap=cmap,
-        vmin=vmin,
-        vmax=vmax,
-        center=0,
-        square=True,
-        linewidths=0.5,
-        cbar_kws={"shrink": 0.5},
-        ax=ax_heat,
-    )
-    ax_heat.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
+    # corr = np.corrcoef(X_train_pca, rowvar=False)  # 6. Correlation heatmap
+    # upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
+    # lower_triangle = corr[np.tril_indices_from(corr, k=-1)]
+    # vmin = lower_triangle.min()
+    # vmax = lower_triangle.max()
+    # cmap = sns.diverging_palette(20, 230, as_cmap=True)
+    # sns.heatmap(
+    #     corr,
+    #     mask=upper_triangle_mask,
+    #     cmap=cmap,
+    #     vmin=vmin,
+    #     vmax=vmax,
+    #     center=0,
+    #     square=True,
+    #     linewidths=0.5,
+    #     cbar_kws={"shrink": 0.5},
+    #     ax=ax_heat,
+    # )
+    # ax_heat.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
 
     plt.tight_layout(pad=0.5)
     combined_name = spec.vae[0] if isinstance(spec.vae, list) else spec.vae

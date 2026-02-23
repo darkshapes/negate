@@ -217,6 +217,31 @@ def train_model(spec: Spec, file_or_folder_path: Path | None = None) -> None:
     graph_train_variance(train_result=train_result, spec=spec)
 
 
+def training_loop(dataset_location):
+    print("looping")
+    from negate.train import get_time
+    from negate.config import NegateConfig
+    import tomllib
+    import os
+
+    factor = 2
+    while factor < 10:
+        config_path = Path(__file__).parent.parent / "config" / "config.toml"
+        with open(config_path, "rb") as config_file:
+            data = tomllib.load(config_file)
+        for label in ["model", "vae", "param", "datasets", "library", "rounds", "alpha", "dim_factor"]:
+            data.pop(label)
+        for index in range(0, 9):
+            alpha = float(index / 10)
+            config_replacement = NegateConfig(alpha=alpha, dim_factor=factor, **data)
+            config_options = load_config_options()
+            spec = Spec(config_replacement, *config_options[1:])
+            loop_result_path = Path(__file__).parent.parent / "results" / get_time()
+            train_model(file_or_folder_path=dataset_location, spec=spec)
+            os.rename(result_path, loop_result_path)
+            factor += 1
+
+
 def main() -> None:
     """CLI argument parser and command dispatcher.\n
     :raises ValueError: Missing image path.
@@ -255,6 +280,7 @@ def main() -> None:
     train_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
     train_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
     train_parser.add_argument("-a", "--ae", choices=ae_choices, default=spec.model_config.auto_vae[0], help=model_blurb)  # type: ignore
+    train_parser.add_argument("-l", "--loop", action="store_true", help="Loop training iterations across rescale and alpha sizes")
 
     infer_parser = subparsers.add_parser("infer", help=infer_blurb)
     infer_parser.add_argument("path", help=infer_path_blurb)
@@ -266,6 +292,7 @@ def main() -> None:
     args = parser.parse_args(argv[1:])
 
     def build_call():
+        """Prepare CLI command input for function call"""
         if args.path:
             dataset_location: Path | None = Path(args.path)
         else:
@@ -283,14 +310,16 @@ def main() -> None:
             pretrain(file_or_folder_path=dataset_location, spec=spec)
         case "train":
             dataset_location = build_call()
-            train_model(file_or_folder_path=dataset_location, spec=spec)
+            if args.loop is True:
+                training_loop(dataset_location)
+            else:
+                train_model(file_or_folder_path=dataset_location, spec=spec)
         case "infer":
             if args.path is None:
                 raise ValueError("Check requires an image path.")
 
             image_path: Path = Path(args.path)
             model_version = trained_model_folder / args.model
-            print(args.label)
             infer_origin(image_path=image_path, model_version=model_version, label=args.label)
         case _:
             raise NotImplementedError
