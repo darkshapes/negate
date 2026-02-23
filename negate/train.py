@@ -174,6 +174,6 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         y_test=y_test,  # type: ignore
         labels=labels,
         feature_matrix=feature_matrix,
-        seed=spec.hyper_param.seed,
+        seed=seed,
         num_features=model.num_features(),
     )

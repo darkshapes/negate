@@ -6,7 +6,9 @@ Handles CLI parsing, dataset loading, preprocessing, and result saving.
 Supports 'predict' subcommand with automatic timestamping.
 """
 
+from dataclasses import asdict
 import argparse
+import json
 import pickle
 import re
 import shutil
@@ -29,12 +31,12 @@ from negate import (
     chart_decompositions,
     generate_dataset,
     grade,
+    graph_train_variance,
     load_config_options,
     prepare_dataset,
     result_path,
     save_metadata,
     save_models,
-    graph_train_variance,
 )
 from negate.save import save_to_onnx
 from negate.track import accuracy
@@ -42,7 +44,7 @@ from negate.track import accuracy
 start_ns = timer_module.perf_counter()
 
 
-def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
+def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
     """Run inference using XGBoost with PCA pre-processing.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
@@ -63,7 +65,7 @@ def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
 
     features_pca = pca.transform(features_dataset)
 
-    model = xgb.Booster()
+    model = xgb.Booster(params=parameters)
     model.load_model(model_file_path_named)
 
     result = model.predict(xgb.DMatrix(features_pca))
@@ -71,7 +73,7 @@ def run_native(features_dataset: np.ndarray, model_version: Path) -> np.ndarray:
     return result
 
 
-def run_onnx(features_dataset: np.ndarray, model_version: Path) -> np.ndarray | Any:
+def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
     """Run inference using ONNX Runtime with PCA pre-processing.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
@@ -141,12 +143,20 @@ def infer_origin(image_path: Path, model_version: Path, label: bool | None = Non
     print(f"""Checking path '{image_path}' using model date {model_version.stem}""")
 
     dataset: Dataset = generate_dataset(image_path)
-    config_path = str(Path("results") / model_version.stem / "config.toml")
+    results_path = Path("results") / model_version.stem
+    config_path = str(results_path / "config.toml")
     config_options = load_config_options(config_path)
     spec = Spec(*config_options)
+    results_file_path = str(results_path / f"results_{model_version.stem}.json")
+    with open(results_file_path) as result_metadata:
+        train_metadata = json.load(result_metadata)
+    spec.hyper_param.seed = train_metadata["seed"]
     features_dataset = preprocessing(dataset, spec)
     features_matrix = prepare_dataset(features_dataset, spec)
-    result = run_onnx(features_matrix, model_version) if spec.opt.load_onnx else run_native(features_matrix, model_version)
+
+    parameters = asdict(spec.hyper_param) | {"scale_pos_weight": train_metadata["scale_pos_weight"]}
+
+    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
 
     thresh = 0.5
     predictions = (result > thresh).astype(int)
