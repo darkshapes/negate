@@ -313,7 +313,7 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
     ax_conf.set_yticks(np.arange(cm.shape[0]))
     ax_conf.set_xticklabels(["Real", "Synthetic"])
     ax_conf.set_yticklabels(["Real", "Synthetic"])
-    plt.step(ax_conf.get_xticklabels(), ax_conf.get_yticklabels(), rotation=45, ha="right")
+    plt.setp(ax_conf.get_xticklabels(), rotation=45, ha="right")
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
             ax_conf.text(j, i, cm[i, j], ha="center", va="center", color="black")

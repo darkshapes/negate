@@ -9,7 +9,6 @@ from datasets import Dataset
 from scipy.stats import iqr
 from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
-from negate import train
 from negate.config import Spec
 from negate.plot import (
     graph_cohen,

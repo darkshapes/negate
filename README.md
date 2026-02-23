@@ -11,7 +11,7 @@ license_name: MPL-2.0 + Commons Clause 1.0
 
 # negate <br><sub> entrypoint synthetic image classifier</sub>
 
-A CLI tool and Python library for image processing and analysis of feature extraction to determine origin, whether synthetic/reconstructed or genuine.
+A CLI tool and Python library for ongoing research of origin prediction tasks using image processing and feature extraction.
 
 [![negate pytest](https://github.com/darkshapes/negate/actions/workflows/negate.yml/badge.svg?branch=main)](https://github.com/darkshapes/negate/actions/workflows/negate.yml)<br>
 [<img src="https://img.shields.io/discord/1266757128249675867?color=5865F2">](https://discord.gg/VVn9Ku74Dk)<br>
@@ -22,7 +22,9 @@ A CLI tool and Python library for image processing and analysis of feature extra
 
 <div align="center">
 
-<img src="results/visualization_20260209_101743.svg" style="width:50%; max-width:500px;" alt="Visualization of model results for the DinoViTL Model"></div>
+<img src="results/tail_plot.png" style="width:50%; max-width:500px;" alt="Visualization of Fourier Image Residual variance for the DinoViTL Model">
+
+<img src="results/vae_plot.png" style="width:50%; max-width:500px;" alt="Visualization of VAE mean loss results for the Flux Klein model"></div>
 
 Negate is a modular system of image processing and feature extraction pipelines aimed towards critical analysis of effective techniques that can differentiate synthetic and human-origin works. Techniques include spectral residual analysis, laplacian residual analysis, random resize crop, local binary pattern, haar wavelet perturbation, and measuring l1 and mse loss. We also study the efficacy of a gradient-boosted decision tree and PCA trained to distinguish between images of synthetic and human origin.
 
@@ -151,6 +153,10 @@ options:
 ```
 
 ## Graph Results
+
+<div align="center">
+
+<img src="results/20260222_191936/residual_kde_plot_20260222_191936.png" style="width:50%; max-width:500px;" alt="Visualization of Residual Features of images"></div>
 
 ## Related Research:
 

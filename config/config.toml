@@ -1,21 +1,16 @@
 # Advanced Configuration and Paths for Negate CLI
-alpha = 0.4                # strength of perturbation Default 0.5)
-dim_factor = 6             # Multiplier for image rescale size Default 6
-batch_size = 0             # Feature extraction batch size, 0 disables batching default[0]
-dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
-dtype = "float16"          # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
-residual_dtype = "float32" # decimal precision for numpy processing
-load_onnx = false          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
-magnitude_sampling = true  # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
-feat_ext_path = ""         # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
-top_k = 1                  # Highest percent threshold of patch difference to keep (Not yet implemented)
+alpha = 0.2               # strength of perturbation Default 0.5)
+dim_factor = 6            # Multiplier for image rescale size Default 6
+dtype = "float16"         # decimal precision ("float64", "float32","float16", lower = <10-15% speed increase, less mem, possible accuracy hit)
+load_onnx = false         # Use trained ONNX for inference : True → ONNX, False → native XGBoost
+magnitude_sampling = true # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
+batch_size = 0            # Feature extraction batch size, 0 disables batching default[0]
+top_k = 1                 # Highest percent threshold of patch difference to keep (Not yet implemented)
 
-[datasets]
-eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data = ["KarimSayed/cat-breed-fiass-index"]
-genuine_local = ["/Users/e6d64/Downloads/pd12_real", "assets", "/Users/e6d64/Downloads/real_train"]
-synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
-synthetic_local = ["/Users/e6d64/Downloads/syn_train"]
+# less likely to be changed
+dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
+residual_dtype = "float32" # decimal precision for numpy processing
+feat_ext_path = ""         # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
 
 [param]
 colsample_bytree = 0.8             # Column sample by tree
@@ -34,6 +29,13 @@ n_components = 0.95         # Number of components for dimensionality reduction
 num_boost_round = 200       # Number of boosting rounds
 test_size = 0.2             # 80/20 training split default
 verbose_eval = 20
+
+[datasets]
+eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
+genuine_data = ["KarimSayed/cat-breed-fiass-index"]
+genuine_local = ["/Users/e6d64/Downloads/pd12_real", "assets", "/Users/e6d64/Downloads/real_train"]
+synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
+synthetic_local = ["/Users/e6d64/Downloads/syn_train"]
 
 [model.library] # priority from left to right
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]
