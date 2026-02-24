@@ -1,0 +1,876 @@
+[
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": 0.8733925819,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    286590035990,
+                    573180071980
+                ]
+            },
+            {
+                "bce_loss": -46.5625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 1.9601438046,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    290723717869,
+                    581447435738
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 2822.0,
+                "max_warp": 0.9775390625,
+                "min_base": 7566.3333333333,
+                "min_warp": 0.9780273438,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.4350802898,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    272935370775,
+                    545870741551
+                ]
+            },
+            {
+                "bce_loss": -145.25,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.4462438822,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    312913010525,
+                    625826021050
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 17.3333333333,
+                "max_warp": 1.0,
+                "min_base": 10698.0,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": 0.9275773764,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    316383525347,
+                    632767050694
+                ]
+            },
+            {
+                "bce_loss": -38.1875,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 2.258374691,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    442938167157,
+                    885876334315
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 278.6666666667,
+                "max_warp": 0.9951171875,
+                "min_base": 4212.0,
+                "min_warp": 0.9951171875,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.5733915567,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    279167791040,
+                    558335582081
+                ]
+            },
+            {
+                "bce_loss": -101.5625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.6430933475,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    274245199519,
+                    548490399038
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 328.6666666667,
+                "max_warp": 0.9956054688,
+                "min_base": 2716.6666666667,
+                "min_warp": 0.9956054688,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.3475310802,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    343343291057,
+                    686686582115
+                ]
+            },
+            {
+                "bce_loss": -189.75,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -2.0163931847,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    274483781556,
+                    548967563113
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 12.0,
+                "max_warp": 1.0,
+                "min_base": 6156.0,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.779989481,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    291754423098,
+                    583508846196
+                ]
+            },
+            {
+                "bce_loss": -104.75,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.7648599148,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    401611603286,
+                    803223206573
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 49.3333333333,
+                "max_warp": 0.9873046875,
+                "min_base": 3414.0,
+                "min_warp": 0.9873046875,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.6248517036,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    348290254570,
+                    696580509140
+                ]
+            },
+            {
+                "bce_loss": -176.625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -2.0359709263,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    549764169727,
+                    1099528339455
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 6.6666666667,
+                "max_warp": 1.0,
+                "min_base": 1060.3333333333,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.6631708145,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    277851974616,
+                    555703949233
+                ]
+            },
+            {
+                "bce_loss": -94.5625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.2204840183,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    271453224120,
+                    542906448241
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 401.3333333333,
+                "max_warp": 0.9951171875,
+                "min_base": 4286.0,
+                "min_warp": 0.9951171875,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.8005650043,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    319328614961,
+                    638657229922
+                ]
+            },
+            {
+                "bce_loss": -193.75,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -2.0359709263,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    549764169727,
+                    1099528339455
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 6.6666666667,
+                "max_warp": 1.0,
+                "min_base": 1060.3333333333,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": 1.0712519884,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    280997057840,
+                    561994115680
+                ]
+            },
+            {
+                "bce_loss": -61.3125,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 2.0176327229,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    297553064974,
+                    595106129949
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 1290.3333333333,
+                "max_warp": 0.9438476562,
+                "min_base": 6619.0,
+                "min_warp": 0.9438476562,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": 0.9137415886,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    280924041956,
+                    561848083912
+                ]
+            },
+            {
+                "bce_loss": -7.734375,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 1.2660806179,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    275219076748,
+                    550438153496
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 5267.6666666667,
+                "max_warp": 0.92578125,
+                "min_base": 7970.3333333333,
+                "min_warp": 0.92578125,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.9837740064,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    291182094742,
+                    582364189484
+                ]
+            },
+            {
+                "bce_loss": -122.3125,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.942163229,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    351457076366,
+                    702914152733
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 9.6666666667,
+                "max_warp": 1.0,
+                "min_base": 8880.6666666667,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.638774991,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    286419319973,
+                    572838639947
+                ]
+            },
+            {
+                "bce_loss": -80.625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.0532611609,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    285086988718,
+                    570173977437
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 155.3333333333,
+                "max_warp": 0.98828125,
+                "min_base": 10439.3333333333,
+                "min_warp": 0.98828125,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.987621665,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    278924128823,
+                    557848257646
+                ]
+            },
+            {
+                "bce_loss": -116.25,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.6765788794,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    289190061666,
+                    578380123333
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 7.6666666667,
+                "max_warp": 0.9995117188,
+                "min_base": 3672.3333333333,
+                "min_warp": 0.9995117188,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.6552888751,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    285897772742,
+                    571795545484
+                ]
+            },
+            {
+                "bce_loss": -81.5625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 1.5690791607,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    282111411731,
+                    564222823462
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 4539.0,
+                "max_warp": 0.9326171875,
+                "min_base": 3171.3333333333,
+                "min_warp": 0.9326171875,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.1636545658,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    277152567897,
+                    554305135795
+                ]
+            },
+            {
+                "bce_loss": -142.5,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.813356638,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    325712948854,
+                    651425897708
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 29.0,
+                "max_warp": 0.9970703125,
+                "min_base": 6870.6666666667,
+                "min_warp": 0.9970703125,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": 1.9977642298,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    454792627167,
+                    909585254334
+                ]
+            },
+            {
+                "bce_loss": -59.15625,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": 2.3877398968,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    544639878707,
+                    1089279757415
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 19.6666666667,
+                "max_warp": 1.0,
+                "min_base": 7215.0,
+                "min_warp": 1.0,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.0369019508,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    286276595558,
+                    572553191117
+                ]
+            },
+            {
+                "bce_loss": -135.125,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.5412977934,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    321569257027,
+                    643138514055
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 34.3333333333,
+                "max_warp": 0.9995117188,
+                "min_base": 4293.3333333333,
+                "min_warp": 0.9995117188,
+                "sobel": null
+            }
+        ]
+    },
+    {
+        "results": [
+            {
+                "bce_loss": null,
+                "image_mean_ff": -0.6833384037,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    278110472340,
+                    556220944680
+                ]
+            },
+            {
+                "bce_loss": -79.75,
+                "image_mean_ff": null,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": null
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": -1.2628161907,
+                "max_base": null,
+                "max_warp": null,
+                "min_base": null,
+                "min_warp": null,
+                "sobel": [
+                    282286476102,
+                    564572952205
+                ]
+            },
+            {
+                "bce_loss": null,
+                "image_mean_ff": null,
+                "max_base": 42.6666666667,
+                "max_warp": 0.9956054688,
+                "min_base": 11260.0,
+                "min_warp": 0.9956054688,
+                "sobel": null
+            }
+        ]
+    }
+]

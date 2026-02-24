@@ -83,12 +83,12 @@ class WaveletAnalyze(ContextManager):
         print("Please wait...")
 
     @torch.inference_mode()
-    def __call__(self, dataset: Dataset, sim_extrema=False) -> dict[str, Any]:
+    def __call__(self, dataset: Dataset) -> dict[str, Any]:
         """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
-        :returns: A tuple containing"""
+        :returns: A dict of processed fourier residual, wavelet and rrc data"""
 
         results: list[dict[str, Any]] = []
 
@@ -96,28 +96,7 @@ class WaveletAnalyze(ContextManager):
         rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
 
         for idx, img in enumerate(rescaled):
-            patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            fourier_max = {}
-            if self.magnitude_sampling:
-                max_magnitudes: list = []
-                discrepancy: dict[str, float | list[float]] = {}
-
-                for patch in patched:
-                    discrepancy = self.residual.fourier_discrepancy(patch)
-                    max_magnitudes.append(discrepancy["max_magnitude"])
-
-                if not max_magnitudes:
-                    continue
-
-                max_idx = int(np.argmax(max_magnitudes))
-                selected = patched[[max_idx]]
-                fourier_max = {
-                    "selected_patch_idx": float(max_idx),
-                    "max_fourier_magnitude": float(max_magnitudes[max_idx]),
-                }
-            else:
-                selected = patched
-
+            selected, fourier_max = self.select_patch(img, selected_only=False)
             low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
             perturbed_selected = selected - self.alpha * perturbed_high_freq
@@ -134,6 +113,28 @@ class WaveletAnalyze(ContextManager):
             results.append(fourier_max | residuals | sim_extrema | latent_drift | perturbed_drift)
 
         return {"results": results}
+
+    def select_patch(self, img: Tensor, selected_only: bool = True) -> Tensor | tuple[Tensor, dict[str, float]]:
+        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
+        if self.magnitude_sampling:
+            max_magnitudes: list = []
+            discrepancy: dict[str, float | list[float]] = {}
+
+            for patch in patched:
+                discrepancy = self.residual.fourier_discrepancy(patch)
+                max_magnitudes.append(discrepancy["max_magnitude"])
+
+            max_idx = int(np.argmax(max_magnitudes))
+            selected = patched[[max_idx]]
+            if not selected_only:
+                fourier_max = {
+                    "selected_patch_idx": float(max_idx),
+                    "max_fourier_magnitude": float(max_magnitudes[max_idx]),
+                }
+                return selected, fourier_max
+        else:
+            selected = patched
+        return selected
 
     @torch.inference_mode()
     def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, float]:
@@ -178,6 +179,23 @@ class WaveletAnalyze(ContextManager):
             "min_base": min_base_val,
             "max_base": max_base_val,
         }
+
+    @torch.inference_mode()
+    def forward(self, dataset: Dataset) -> dict[str, Any]:
+        """Run minimal comparison of defining features.\n
+        :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
+        :returns: A dict of processed fourier residual, wavelet and rrc data"""
+
+        results: list[dict[str, Any]] = []
+
+        for scale in [2, 3, 9]:
+            self.dim_rescale = scale * self.dim_patch[0]
+            batch_results = self.__call__(dataset)["results"]
+            for result in batch_results:
+                result["scale"] = scale
+            results.extend(batch_results)
+
+        return {"results": results}
 
     def cleanup(self) -> None:
         """Free resources once discarded."""

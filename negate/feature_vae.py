@@ -160,6 +160,16 @@ class VAEExtract:
 
         return {"bce_loss": float(bce_mean), "l1_mean": float(l1_mean), "mse_mean": float(mse_mean), "kl_loss": float(kl_mean)}
 
+    @torch.inference_mode()
+    def forward(self, tensors: Tensor) -> dict[str, float]:
+        if "AutoencoderDC" in self.library:
+            latents = self.vae.encode(tensors).latent
+        else:
+            latents = self.vae.encode(tensors).latent_dist.sample()  # type: ignore
+        reconstructed = self.vae.decode(latents).sample  # depends on API
+        bce_mean = self.bce_loss(reconstructed, tensors)
+        return {"bce_loss": float(bce_mean)}
+
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
 

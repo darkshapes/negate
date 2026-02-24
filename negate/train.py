@@ -123,6 +123,11 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         The function uses 80-20 train-test split with stratification to preserve
         class distribution. Early stopping triggers after 10 rounds without improvement.
     """
+
+    feature_matrix = prepare_dataset(features_dataset, spec)
+
+    labels = np.array(features_dataset["label"])
+    labels = np.repeat(labels, 3)  # adjust multiplier based on your data structure
     feature_matrix = prepare_dataset(features_dataset, spec)
 
     labels = np.array(features_dataset["label"])

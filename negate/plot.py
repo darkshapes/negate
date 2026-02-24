@@ -134,6 +134,7 @@ def graph_tail_separations(spec: Spec, scores_dataframe: pd.DataFrame) -> None:
     plt.tight_layout()
     tail_separation_plot = str(result_path / f"tail_separation_plot_{timestamp}.png")
     plt.savefig(tail_separation_plot)
+    plt.close()
 
 
 def graph_wavelet(spec: Spec, wavelet_dataframe: pd.DataFrame) -> None:
@@ -159,6 +160,7 @@ def graph_wavelet(spec: Spec, wavelet_dataframe: pd.DataFrame) -> None:
     plt.suptitle(f"Wavelet Decomposition Comparison - {spec.model}")
     sensitivity_plot = str(result_path / f"sensitivity_plot_{timestamp}.png")
     plt.savefig(sensitivity_plot)
+    plt.close()
 
 
 def graph_residual(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
@@ -191,6 +193,7 @@ def graph_residual(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
 
     residual_plot = str(result_path / f"residual_plot_{timestamp}.png")
     plt.savefig(residual_plot)
+    plt.close()
 
 
 def graph_kde(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
@@ -220,6 +223,7 @@ def graph_kde(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
     plt.tight_layout()
     kde_plot = str(result_path / f"residual_kde_plot_{timestamp}.png")
     plt.savefig(kde_plot)
+    plt.close()
 
 
 def graph_cohen(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
@@ -249,6 +253,7 @@ def graph_cohen(spec: Spec, residual_dataframe: pd.DataFrame) -> None:
     plt.title(f"Class Separation (Cohen's d) - {spec.model}", fontsize=11)
     effect_size_plot = str(result_path / f"effect_size_heatmap_{timestamp}.png")
     plt.savefig(effect_size_plot)
+    plt.close()
 
 
 def graph_vae_loss(spec: Spec, vae_dataframe: pd.DataFrame) -> None:
@@ -279,6 +284,7 @@ def graph_vae_loss(spec: Spec, vae_dataframe: pd.DataFrame) -> None:
     plt.suptitle(f"VAE Loss Comparison - {vae_name}")
     vae_plot = str(result_path / f"vae_plot{timestamp}.png")
     plt.savefig(vae_plot)
+    plt.close()
 
 
 def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
@@ -376,3 +382,4 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
     plt.suptitle(f"Training Variance - {combined_name} {spec.model}")
     combined_plots = str(result_path / f"combined_plots{timestamp}.png")
     plt.savefig(combined_plots)
+    plt.close()

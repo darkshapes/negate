@@ -22,7 +22,7 @@ class Residual:
         :param spec: Configuration specification object.
         return: None."""
 
-        self.residual_dtype = getattr(np, spec.opt.residual_dtype, np.float32)
+        self.residual_dtype = getattr(np, spec.opt.residual_dtype, np.float64)
         self.top_k = spec.opt.top_k
         self.device = spec.device
         self.dim_patch = spec.opt.dim_patch
@@ -60,6 +60,15 @@ class Residual:
             **{f"{label}_tc": (int(np.mean(num)), int(np.sum(num))) for label, num in tc_mean.items()},
         }
 
+    def forward(self, image: Tensor) -> dict[str, float | tuple[int, ...]]:
+        numeric_image = self.make_numeric(image)
+        forward_result: dict[str, float | tuple[int, ...]] = {"image_mean_ff": float(numeric_image.mean())}
+        sobel_residual = self.sobel_hv_residual(numeric_image)
+        local_pattern = self.find_local_pattern({"sobel": sobel_residual})
+        for key, value in local_pattern.items():
+            forward_result.setdefault(key, (int(np.mean(value)), int(np.sum(value))))
+        return forward_result
+
     def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float | list[float]]:
         """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
         :param image: Input numpy array.
@@ -69,7 +78,7 @@ class Residual:
 
         spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
         normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
-        fft_2d = np.fft.fftn(numeric_image.astype(np.float32))
+        fft_2d = np.fft.fftn(numeric_image.astype(self.residual_dtype))
         magnitude_spectrum = np.abs(fft_2d)
         log_mag = np.log(magnitude_spectrum + 1e-10)
 

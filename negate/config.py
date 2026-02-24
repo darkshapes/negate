@@ -189,7 +189,7 @@ class Chip:
     def __init__(self) -> None:
         self._device: torch.device | None = None
         self._dtype: torch.dtype = torch.float16
-        self._np_dtype: np.typing.DTypeLike = np.float16
+        self._np_dtype: np.typing.DTypeLike = np.float64
         self.dtype_name: str = "float16"
 
     @property
@@ -214,7 +214,7 @@ class Chip:
             else:
                 self._device_name = "cpu"
                 self._dtype = torch.float32
-                self._np_dtype = np.float32
+                self._np_dtype = np.float64
 
         self._device = torch.device(self._device_name)
         return self._device
@@ -242,7 +242,7 @@ class Chip:
             raise NotImplementedError("bfloat16 is not supported")
         self.dtype_name: str = value
         self._dtype = getattr(torch, value, torch.float32)
-        self._np_dtype = getattr(np, value, np.float32)
+        self._np_dtype = getattr(np, value, np.float64)
         return self._dtype
 
     @np_dtype.setter

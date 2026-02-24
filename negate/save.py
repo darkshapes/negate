@@ -5,13 +5,26 @@ import pickle
 
 import numpy as np
 import onnx
+from datasets import Dataset
 from skl2onnx import convert_sklearn
 from skl2onnx.common.data_types import FloatTensorType
 from sklearn.decomposition import PCA
 from xgboost import Booster
 
 from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
-from negate.train import TrainResult, generate_datestamp_path
+from negate.train import TrainResult, generate_datestamp_path, result_path
+
+
+def save_features(features_dataset: Dataset) -> str:
+    """\nPersist features dataset to JSON file.\n
+    :param features_dataset: Dataset instance to serialize.
+    :return: Absolute path to saved JSON file.
+    """
+
+    json_path = str(result_path / f"features_{result_path.stem}.json")
+    features_dataset.to_pandas()
+    features_dataset.to_json(path_or_buf=json_path)
+    return json_path
 
 
 def save_metadata(train_result: TrainResult, file_name: str = "negate") -> str:

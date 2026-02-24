@@ -6,8 +6,9 @@ from negate.config import Spec, load_config_options
 from negate.datasets import build_datasets, generate_dataset, load_remote_dataset
 from negate.track import chart_decompositions, accuracy, graph_train_variance
 from negate.train import get_time, result_path, grade, TrainResult, prepare_dataset
-from negate.save import save_metadata, save_models, save_to_onnx
+from negate.save import save_metadata, save_models, save_to_onnx, save_features
 from negate.feature_vit import VITExtract
 from negate.feature_vae import VAEExtract
 from negate.wavelet import WaveletAnalyze, WaveletContext
 from negate.residuals import Residual
+from negate.heuristics import classify_gnf_or_syn
