@@ -11,7 +11,7 @@ from skimage.feature import local_binary_pattern
 from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v
 from torch import Tensor
 
-from negate.config import Spec
+from negate.io.config import Spec
 
 
 class Residual:
@@ -92,6 +92,7 @@ class Residual:
             "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
             "max_magnitude": float(magnitude_spectrum.max()),
             "mean_log_magnitude": float(log_mag.mean()),
+            "mag_spectrum": float(log_mag),
         }
 
     def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:

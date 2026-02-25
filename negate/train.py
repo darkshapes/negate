@@ -31,7 +31,7 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from xgboost import Booster
 
-from negate.config import Spec
+from negate.io.config import Spec
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
@@ -127,10 +127,8 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
     feature_matrix = prepare_dataset(features_dataset, spec)
 
     labels = np.array(features_dataset["label"])
-    labels = np.repeat(labels, 3)  # adjust multiplier based on your data structure
+    # labels = np.repeat(labels, 3)  # adjust multiplier based on your data structure
     feature_matrix = prepare_dataset(features_dataset, spec)
-
-    labels = np.array(features_dataset["label"])
 
     rng = default_rng(1)
     random_state = lambda: int(np.round(rng.random() * spec.train_rounds.max_rnd))

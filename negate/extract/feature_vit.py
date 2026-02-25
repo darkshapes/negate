@@ -6,7 +6,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from negate.config import Spec
+from negate.io.config import Spec
 
 
 class VITExtract:
@@ -28,11 +28,11 @@ class VITExtract:
 
     def __init__(self, spec: Spec) -> None:
         """Initialize analyzer with configuration.\n"""
-        print("Initializing VIT...")
 
         self.model_name = spec.model
         self.dtype = spec.dtype
         self.device = spec.device
+        print(f"Initializing VIT on {spec.device}")
         self.cast_move = spec.apply
         self.library = spec.model_config.library_for_model(self.model_name)
         self._set_models()

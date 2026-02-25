@@ -9,7 +9,7 @@ from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 from tqdm import tqdm
 
-from negate.config import Spec
+from negate.io.config import Spec
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
@@ -78,32 +78,43 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
     return dataset
 
 
-def build_datasets(spec: Spec, genuine_folder: Path | None = None) -> Dataset:
+def build_datasets(
+    spec: Spec,
+    genuine_path: Path | None = None,
+    synthetic_path: Path | None = None,
+) -> Dataset:
     """Builds synthetic and genuine datasets.\n
     :param input_folder: Path to folder containing data. (optional)
     :return: Dataset containing synthetic and genuine images."""
 
-    synthetic_input_folder = Path(".datasets")
+    synthetic_input_folder = Path(__file__).parent.parent / ".datasets"
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
+
+    spec.data.synthetic_local.append(str(synthetic_path))
+    spec.data.genuine_local.append(str(genuine_path))
     print(f"Using images from {spec.data}")
 
     if spec.data.synthetic_data is not None:
         for data_repo in spec.data.synthetic_data:
-            synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
+            if data_repo is not None:
+                synthetic_repos.append(load_remote_dataset(data_repo, synthetic_input_folder, label=1))
     if spec.data.synthetic_local is not None:
         for data_folder in spec.data.synthetic_local:
-            synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
+            if data_folder is not None:
+                synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
-    genuine_input_folder = genuine_folder or Path("assets")
+    genuine_input_folder = Path(__file__).parent.parent / "assets"
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
     if spec.data.genuine_data is not None:
         for data_repo in spec.data.genuine_data:
-            genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
+            if data_repo is not None:
+                genuine_repos.append(load_remote_dataset(data_repo, genuine_input_folder, label=0))
     if spec.data.genuine_local is not None:
         for data_folder in spec.data.genuine_local:
-            genuine_repos.append(generate_dataset(Path(data_folder), label=0))
+            if data_folder is not None:
+                genuine_repos.append(generate_dataset(Path(data_folder), label=0))
 
     dataset = concatenate_datasets([*genuine_repos, *synthetic_repos])
     return dataset

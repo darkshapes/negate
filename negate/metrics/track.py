@@ -9,8 +9,8 @@ from datasets import Dataset
 from scipy.stats import iqr
 from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
-from negate.config import Spec
-from negate.plot import (
+from negate.io.config import Spec
+from negate.metrics.plot import (
     graph_cohen,
     graph_kde,
     graph_residual,
@@ -134,14 +134,10 @@ def chart_decompositions(features_dataset: Dataset, spec: Spec) -> None:
     data_frame = features_dataset.to_pandas()
     expanded_frame = data_frame.explode("results").reset_index(drop=True)  # type: ignore explode
 
-    for key in wavelet_keys:
-        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
-
-    for key in residual_keys:
-        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
-
-    for key in vae_loss_keys:
-        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
+    total_keys = wavelet_keys + residual_keys + vae_loss_keys
+    for key in total_keys:
+        if key in expanded_frame:
+            expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
 
     scores_dataframe = compute_tail_separation(expanded_frame, residual_keys)
     graph_tail_separations(spec, scores_dataframe=scores_dataframe)
@@ -151,3 +147,17 @@ def chart_decompositions(features_dataset: Dataset, spec: Spec) -> None:
     graph_cohen(spec, residual_dataframe=expanded_frame)
     graph_vae_loss(spec, vae_dataframe=expanded_frame)
     print(f"[TRACK] Saved plots to {result_path}")
+
+
+def run_feature_statistics(features_dataset: Dataset, spec: Spec):
+    from negate.io.save import save_features
+
+    json_path = save_features(features_dataset)
+    if any(wavelet_keys) in features_dataset["results"][0]:
+        chart_decompositions(features_dataset=features_dataset, spec=spec)
+    return json_path
+
+
+def run_training_statistics(train_result: TrainResult, timecode: float, spec: Spec):
+    accuracy(train_result=train_result, timecode=timecode)
+    graph_train_variance(train_result=train_result, spec=spec)

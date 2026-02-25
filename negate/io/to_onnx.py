@@ -475,15 +475,15 @@ class ONNXConverter(object):
     def optim_onnx(model: "onnx.ModelProto", verbose=False):
         """Optimize ONNX network"""
         print("Begin Simplify ONNX Model ...")
-        # passes = [
-        #     "eliminate_deadend",
-        #     "eliminate_identity",
-        #     "extract_constant_to_initializer",
-        #     "eliminate_unused_initializer",
-        #     "fuse_add_bias_into_conv",
-        #     "fuse_bn_into_conv",
-        #     "fuse_matmul_add_bias_into_gemm",
-        # ]
+        passes = [
+            "eliminate_deadend",
+            "eliminate_identity",
+            "extract_constant_to_initializer",
+            "eliminate_unused_initializer",
+            "fuse_add_bias_into_conv",
+            "fuse_bn_into_conv",
+            "fuse_matmul_add_bias_into_gemm",
+        ]
         passes = []
         model = optimize(model, passes=passes)
 

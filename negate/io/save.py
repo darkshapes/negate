@@ -2,6 +2,9 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import pickle
+import shutil
+import time as timer_module
+from pathlib import Path
 
 import numpy as np
 import onnx
@@ -11,7 +14,7 @@ from skl2onnx.common.data_types import FloatTensorType
 from sklearn.decomposition import PCA
 from xgboost import Booster
 
-from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
+from negate.io.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
 from negate.train import TrainResult, generate_datestamp_path, result_path
 
 
@@ -93,3 +96,22 @@ def save_to_onnx(train_result: TrainResult, file_name: str = "negate"):
     metadata_file_name = save_metadata(train_result)
 
     print(f"Models saved to disk. {pca_file_name} {negate_onnx_file_name} {metadata_file_name}")
+
+
+def end_processing(process_name: str, start_ns: float) -> float:
+    """Backup config file and complete process timer.\n
+    :param process_name: The type of process completing.
+    :returns: Timecode of the elapsed computation time."""
+
+    timecode = timer_module.perf_counter() - start_ns
+    result_path.mkdir(parents=True, exist_ok=True)
+    config_name = "config.toml"
+    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+    print(f"{process_name} completed in {timecode}")
+    return timecode
+
+
+def save_train_result(train_result: TrainResult):
+    save_metadata(train_result)
+    save_models(train_result, compare=False)
+    save_to_onnx(train_result)

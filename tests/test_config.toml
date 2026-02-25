@@ -1,37 +1,32 @@
 # Advanced Configuration and Paths for Negate CLI
 
 feat_ext_path = ""         # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
-batch_size = 0             # Feature extraction batch size, 0 disables batching default[0]
-dim_factor = 6             # Multiplier for image rescale size Default 6
+batch_size = 666           # Feature extraction batch size, 0 disables batching default[0]
+dim_factor = 666           # Multiplier for image rescale size Default 6
 dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
-alpha = 0.4                # strength of perturbation Default 0.3)
-dtype = "float16"          # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
+alpha = 0.666              # strength of perturbation Default 0.3)
+dtype = "float666"         # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
 load_onnx = false          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = false # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
-euclidean = false          # Substitute Cosine Similarity for Squared Euclidean Distance, (default false)
-cache_features = false     # Cache features
+residual_dtype = "float64" # decimal precision for numpy processing
+top_k = 1                  # Highest percent threshold of patch difference to keep (Not yet implemented)
+
+[vae.library]
+sana_fp16 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]          # dc_ae 'accuracy': 0.8235294117647058,
+flux2_fp16 = ["tonera/FLUX.2-klein-9B-Int8-TorchAo", "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"] # f2 klein 'accuracy': 0.9215686274509803,
+flux1_fp16 = ["Freepik/F-Lite-Texture", "autoencoders.autoencoder_kl.AutoencoderKL"]                         # flite 'accuracy': 0.9509803921568627,
+sana_fp32 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]
+flux2_fp32 = ["black-forest-labs/FLUX.2-dev", "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"]        # f2 dev 'accuracy': 0.9313725490196079,
+flux1_fp32 = ["Tongyi-MAI/Z-Image", "autoencoders.autoencoder_kl.AutoencoderKL"]                             # zimage 'accuracy': 0.9411764705882353,
+mitsua_fp16 = ["exdysa/mitsua-vae-SAFETENSORS", "autoencoders.autoencoder_kl.AutoencoderKL"]                 # mitsua 'accuracy': 0.9509803921568627,
+none = ["", ""]
 
 [datasets]
-eval_data = []
-genuine_data = []
-genuine_local = []
-synthetic_data = []
-synthetic_local = []
-
-[train]
-scale_pos_weight = ""              # Scale positive weight
-seed = 0                           # Random seed
-colsample_bytree = 0.8             # Column sample by tree
-early_stopping_rounds = 10         # Early stopping rounds
-export_model_path = "model"        # Path to save the model at
-learning_rate = 0.1                # Learning rate
-max_depth = 4                      # Maximum depth
-n_components = 0.95                # Number of components for dimensionality reduction
-num_boost_round = 200              # Number of boosting rounds
-objective = "binary:logistic"      # Objective function
-subsample = 0.8                    # Subsample ratio
-top_k = 3                          # Highest percent threshold of patch difference to keep
-eval_metric = ["logloss", "aucpr"] # Evaluation metrics
+eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
+genuine_data = ["KarimSayed/cat-breed-fiass-index"]
+genuine_local = ["/Users/e6d64/Downloads/pd12_real", "assets", "/Users/e6d64/Downloads/real_train"]
+synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"] # Kate-03/Qwen-image-generations
+synthetic_local = ["/Users/e6d64/Downloads/syn_train"]
 
 [model.library] # priority from left to right
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]
@@ -40,3 +35,21 @@ openclip = ["hf-hub:timm/MobileCLIP2-S4-OpenCLIP"]
 
 [library]
 default = "timm"
+
+[param]
+colsample_bytree = 0.8             # Column sample by tree
+eval_metric = ["logloss", "aucpr"] # Evaluation metrics
+learning_rate = 0.1                # Learning rate
+max_depth = 4                      # Maximum depth
+objective = "binary:logistic"      # Objective function
+seed = 0                           # Random seed, or set manually > 0
+subsample = 0.8                    # Subsample ratio
+
+[rounds]
+early_stopping_rounds = 10  # Early stopping rounds
+export_model_path = "model" # Path to save the model at
+max_rnd = 0xFFFFFFFF        # max rnd seed
+n_components = 0.95         # Number of components for dimensionality reduction
+num_boost_round = 200       # Number of boosting rounds
+test_size = 0.2             # 80/20 training split default
+verbose_eval = 20
