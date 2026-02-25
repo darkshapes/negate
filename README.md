@@ -84,16 +84,15 @@ Basic Syntax:
 ### Command List
 
 ```bash
-usage: negate [-h] {pretrain,train,infer} ...
+usage: negate [-h] {pretrain,train,measure,infer} ...
 
 Negate CLI
 
 positional arguments:
-  {pretrain,train,infer}
-    pretrain            Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default
-                        `assets/`.
-    train               Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will
-                        be saved to disk.
+  {pretrain,train,measure,infer}
+    pretrain            Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default `assets/`.
+    train               Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will be saved to disk.
+    measure             Measure defining features of synthetic or genuine images at the provided path.
     infer               Infer whether an image at the provided path is synthetic or original.
 
 options:
@@ -139,7 +138,7 @@ options:
                         Model to use. Default :timm/vit_base_patch16_dinov3.lvd1689m
 ```
 
-Infer the origin of an image or folder of images:
+Infer the origin of an image or folder of images using a model:
 
 ```
 usage: negate infer [-h] [-m {20260221_182340,20260219_221715}] path
@@ -152,11 +151,25 @@ options:
   -m, --model {20260221_182340,20260219_221715}
 ```
 
+Predict the origin of an image or folder of images using numeric thresholds:
+
+```
+usage: negate measure [-h] [-s | -g] path
+
+positional arguments:
+  path             Path to the image or directory containing images of unknown origin
+
+options:
+  -h, --help       show this help message and exit
+  -s, --synthetic  Mark image as synthetic (label = 1) for evaluation.
+  -g, --genuine    Mark image as genuine (label = 0) for evaluation.
+```
+
 ## Graph Results
 
 <div align="center">
 
-<img src="results/20260222_191936/residual_kde_plot_20260222_191936.png" style="width:50%; max-width:500px;" alt="Visualization of Residual Features of images"></div>
+<img src="results/kde_plot.png" style="width:50%; max-width:500px;" alt="Visualization of Residual Features of images"></div>
 
 ## Related Research:
 

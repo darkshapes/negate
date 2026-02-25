@@ -20,6 +20,7 @@ from negate.feature_vae import VAEExtract
 from negate.feature_vit import VITExtract
 from negate.residuals import Residual
 from negate.scaling import patchify_image, tensor_rescale
+from negate.save import save_features
 
 """Haar Wavelet processing"""
 
@@ -75,7 +76,7 @@ class WaveletAnalyze(ContextManager):
         self.alpha = spec.opt.alpha
         dim_patch = spec.opt.dim_patch
         self.dim_patch = (dim_patch, dim_patch)
-        self.dim_rescale = spec.opt.dim_factor * dim_patch
+        self.dim_factor = spec.opt.dim_factor
         print("Initializing device...")
         self.device = spec.device
         self.np_dtype = spec.np_dtype
@@ -83,57 +84,63 @@ class WaveletAnalyze(ContextManager):
         print("Please wait...")
 
     @torch.inference_mode()
-    def __call__(self, dataset: Dataset, sim_extrema=False) -> dict[str, Any]:
+    def __call__(self, dataset: Dataset) -> dict[str, Any]:
         """Forward passes any resolution images and exports their normal and perturbed feature similarity.\n
         The batch size of the tensors in the `x` list should be equal to 1, i.e. each
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
-        :returns: A tuple containing"""
+        :returns: A dict of processed fourier residual, wavelet and rrc data"""
+
+        images = dataset["image"]
+
+        dim_factors = self.dim_factor if isinstance(self.dim_factor, (list, tuple)) else [self.dim_factor]
 
         results: list[dict[str, Any]] = []
 
-        images = dataset["image"]
-        rescaled = tensor_rescale(images, self.dim_rescale, **self.cast_move)
+        # for factor in dim_factors:
+        scale = dim_factors[0] * self.dim_patch[0]
+        rescaled = tensor_rescale(images, scale, **self.cast_move)
 
-        for idx, img in enumerate(rescaled):
+        for img in rescaled:
+            vae_results = {}
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            fourier_max = {}
-            if self.magnitude_sampling:
-                max_magnitudes: list = []
-                discrepancy: dict[str, float | list[float]] = {}
-
-                for patch in patched:
-                    discrepancy = self.residual.fourier_discrepancy(patch)
-                    max_magnitudes.append(discrepancy["max_magnitude"])
-
-                if not max_magnitudes:
-                    continue
-
-                max_idx = int(np.argmax(max_magnitudes))
-                selected = patched[[max_idx]]
-                fourier_max = {
-                    "selected_patch_idx": float(max_idx),
-                    "max_fourier_magnitude": float(max_magnitudes[max_idx]),
-                }
-            else:
-                selected = patched
+            selected, fourier_max = self.select_patch(patched)
 
             low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
             perturbed_selected = selected - self.alpha * perturbed_high_freq
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
+
             residuals = self.residual(selected)
+
+            sim_extrema = self.shape_extrema(base_features, warp_features, selected.shape[0])
+
             if self.vae.model is not None:
                 latent_drift = self.vae.latent_drift(selected)
                 perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
-            else:
-                latent_drift = {}
-                perturbed_drift = {}
-            sim_extrema = self.shape_extrema(base_features, warp_features, selected.shape[0])
-            results.append(fourier_max | residuals | sim_extrema | latent_drift | perturbed_drift)
+                vae_results = latent_drift | perturbed_drift
+
+            results.append({"scale": scale} | fourier_max | sim_extrema | residuals | vae_results)
 
         return {"results": results}
+
+    @torch.inference_mode()
+    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor]]:
+        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
+        max_magnitudes: list = []
+        discrepancy: dict[str, float | list[float]] = {}
+
+        for patch in patched:  # TODO: add top_k logic here
+            discrepancy = self.residual.fourier_discrepancy(patch)
+            max_magnitudes.append(discrepancy["max_magnitude"])
+
+        max_idx = int(np.argmax(max_magnitudes))
+        selected: Tensor = patched[[max_idx]]
+        return selected, {
+            "selected_patch_idx": float(max_idx),
+            "max_fourier_magnitude": float(max_magnitudes[max_idx]),
+        }
 
     @torch.inference_mode()
     def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, float]:
@@ -195,3 +202,26 @@ class WaveletAnalyze(ContextManager):
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "extract"):
             self.cleanup()
+
+
+def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
+    """Apply wavelet analysis transformations to dataset.\n
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :return: Transformed dataset with 'features' column."""
+    print("Beginning preprocessing.")
+    kwargs = {}
+    if spec.opt.batch_size > 0:
+        kwargs["batched"] = True
+        kwargs["batch_size"] = spec.opt.batch_size
+
+    context = WaveletContext(spec)
+    with WaveletAnalyze(context) as analyzer:  # type: ignore
+        dataset = dataset.map(
+            analyzer,
+            remove_columns=["image"],
+            desc="Computing wavelets...",
+            **kwargs,
+        )
+    save_features(dataset)
+    return dataset

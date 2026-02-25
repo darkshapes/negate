@@ -22,10 +22,15 @@ import gc
 import os
 
 import torch
+import torchvision.transforms as T
+from datasets import Dataset
 from torch import Tensor
-from torch.nn import KLDivLoss, BCELoss, MSELoss, L1Loss
+from torch.nn import BCELoss, KLDivLoss, L1Loss, MSELoss
 from torch.nn import functional as F
+
 from negate.config import Spec
+from negate.save import save_features
+from negate.scaling import crop_select
 
 
 class VAEExtract:
@@ -55,7 +60,7 @@ class VAEExtract:
         :raises RuntimeError: If diffusers package is not installed.
         :raises ImportError: If required VAE library cannot be imported.
         """
-        print("Initializing VAE...")
+        print(f"Initializing VAE on {spec.device}...")
 
         self.spec = spec
 
@@ -68,6 +73,13 @@ class VAEExtract:
         self.bce_loss = BCELoss()
         self.mse_loss = MSELoss()
         self.l1_loss = L1Loss()
+        self.transform: T.Compose = T.Compose(
+            [
+                T.CenterCrop((512, 512)),
+                T.ToTensor(),
+                T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ]
+        )
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
@@ -160,15 +172,42 @@ class VAEExtract:
 
         return {"bce_loss": float(bce_mean), "l1_mean": float(l1_mean), "mse_mean": float(mse_mean), "kl_loss": float(kl_mean)}
 
+    @torch.inference_mode()
+    def forward(self, dataset: Dataset) -> dict[str, list]:
+        """Extract VAE features from a batch of images.
+        :param dataset: HuggingFace Dataset with 'image' column.
+        :return: Dictionary with 'features' list."""
+        assert self.vae is not None
+        features_list = []
+        patch_stack = []
+
+        for image in dataset["image"]:
+            patches = crop_select(image, size=768, top_k=1)
+            for patch in patches:
+                patch_image = patch.convert("RGB")
+                patch_tensor = self.transform(patch_image)
+                patch_stack.append(patch_tensor)
+            color_tensor = self.transform(image)
+            batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
+
+            if "AutoencoderDC" in self.library:
+                latents = self.vae.encode(batch_tensor).latent
+            else:
+                latents = self.vae.encode(batch_tensor).latent_dist.sample()  # type: ignore
+            mean_latent = latents.mean(dim=0).cpu().float().numpy()
+            feature_vec = mean_latent.flatten()
+            features_list.append(feature_vec)
+        return {"results": features_list}
+
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
 
-        if self.device != "cpu":
-            gpu: torch.device = self.device
-            gpu.empty_cache()  # type: ignore
-            del gpu
-        del self.vae
+        device_name = self.device.type
         del self.device
+        if device_name != "cpu":
+            self.gpu = getattr(torch, device_name)
+            self.gpu.empty_cache()  # type: ignore
+        del self.vae
         gc.collect()
 
     def __enter__(self) -> VAEExtract:
@@ -177,3 +216,25 @@ class VAEExtract:
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "vae"):
             self.cleanup()
+
+
+def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
+    """Apply wavelet analysis transformations to dataset.\n
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :return: Transformed dataset with 'features' column."""
+    print("Beginning preprocessing.")
+    kwargs = {}
+    if spec.opt.batch_size > 0:
+        kwargs["batched"] = True
+        kwargs["batch_size"] = spec.opt.batch_size
+
+    with VAEExtract(spec) as extractor:  # type: ignore
+        dataset = dataset.map(
+            extractor.forward,
+            remove_columns=["image"],
+            desc="Computing wavelets...",
+            **kwargs,
+        )
+    save_features(dataset)
+    return dataset
