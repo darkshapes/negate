@@ -75,7 +75,7 @@ class NegateConfig(NamedTuple):
 
     alpha: float
     batch_size: int
-    dim_factor: list[int]
+    dim_factor: int
     dim_patch: int
     dtype: str
     feat_ext_path: str

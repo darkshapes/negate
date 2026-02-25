@@ -1,5 +1,5 @@
 # Advanced Configuration and Paths for Negate CLI
-dim_factor = [3]          # Multiplier for image rescale size Default 3
+dim_factor = 3            # Multiplier for image rescale size Default 3
 dtype = "float16"         # decimal precision ("float64", "float32","float16", lower = <10-15% speed increase, less mem, possible accuracy hit)
 alpha = 0.5               # strength of perturbation Default 0.5)
 load_onnx = true          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
@@ -14,9 +14,9 @@ feat_ext_path = ""         # Path to save the model in or null for default: [$HO
 
 [datasets]
 eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data = []                                            # "KarimSayed/cat-breed-fiass-index"]
+genuine_data = ["KarimSayed/cat-breed-fiass-index"]
 genuine_local = []
-synthetic_data = []                                          #"exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k", "Kate-03/Qwen-image-generations"]
+synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k", "Kate-03/Qwen-image-generations"]
 synthetic_local = []
 
 [vae.library]
@@ -28,13 +28,6 @@ flux2_fp32 = ["black-forest-labs/FLUX.2-dev", "autoencoders.autoencoder_kl_flux2
 flux1_fp32 = ["Tongyi-MAI/Z-Image", "autoencoders.autoencoder_kl.AutoencoderKL"]                             # zimage 'accuracy': 0.9411764705882353,
 mitsua_fp16 = ["exdysa/mitsua-vae-SAFETENSORS", "autoencoders.autoencoder_kl.AutoencoderKL"]                 # mitsua 'accuracy': 0.9509803921568627,
 none = ["", ""]
-
-[datasets]
-eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data = ["KarimSayed/cat-breed-fiass-index"]
-genuine_local = []
-synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k", "Kate-03/Qwen-image-generations"]
-synthetic_local = []
 
 [model.library] # priority from left to right
 timm = ["timm/vit_base_patch16_dinov3.lvd1689m"]

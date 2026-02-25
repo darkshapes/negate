@@ -124,18 +124,18 @@ class WaveletAnalyze(ContextManager):
         return {"results": results}
 
     @torch.inference_mode()
-    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor | list[dict[str, list[float]]]]]:
+    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor | list[float]]]:
         patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x
 
         max_magnitudes: list = []
         metrics: list = []
-        discrepancy: dict[str, float | list[float]] = {}
-        chosen: list[dict[str, list[float]]] = []
+        discrepancy: dict[str, float] = {}
+        chosen = []
 
         for patch in patched:  # TODO: add top_k logic here
-            discrepancy = self.residual.fourier_discrepancy(patch)
+            discrepancy, spectrum = self.residual.fourier_discrepancy(patch)
             max_magnitudes.append(discrepancy["max_magnitude"])
-            metrics.extend(discrepancy["mag_spectrum"])
+            metrics.extend(spectrum)
         metrics.sort(key=lambda x: x[0], reverse=True)
         chosen.extend([p for _, p in metrics[: self.top_k]])
         chosen.extend([p for _, p in metrics[-self.top_k :]])

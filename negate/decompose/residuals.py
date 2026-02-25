@@ -69,7 +69,7 @@ class Residual:
             forward_result.setdefault(key, (int(np.mean(value)), int(np.sum(value))))
         return forward_result
 
-    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float | list[float] | np.ndarray]:
+    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> tuple[dict[str, float], list[float]]:
         """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
         :param image: Input numpy array.
         :returns: Dictionary with magnitude-based discrimination metrics."""
@@ -79,8 +79,8 @@ class Residual:
         spec_residual = self.spectral_residual(numeric_image)  # Spectral residual preserves spatial frequency information
         normalized_spec = (spec_residual - spec_residual.min()) / (spec_residual.max() - spec_residual.min() + 1e-10)
         fft_2d = np.fft.fftn(numeric_image.astype(self.residual_dtype))
-        magnitude_spectrum = np.abs(fft_2d)
-        log_mag = np.log(magnitude_spectrum + 1e-10)
+        magnitude_spectrum: np.ndarray = np.abs(fft_2d)
+        log_mag: np.ndarray = np.log(magnitude_spectrum + 1e-10)
 
         h, w = numeric_image.shape
         center_h, center_w = h // 2, w // 2
@@ -92,8 +92,7 @@ class Residual:
             "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
             "max_magnitude": float(magnitude_spectrum.max()),
             "mean_log_magnitude": float(log_mag.mean()),
-            "mag_spectrum": float(log_mag),
-        }
+        }, [float(log_mag)]
 
     def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:
         """Convert a PIL Image or tensor to a 2-D grayscale numpy array.\n

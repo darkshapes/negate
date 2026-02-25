@@ -129,7 +129,6 @@ def pretrain(image_ds: Dataset, spec: Spec) -> Dataset:
     """
     features_ds = wavelet_preprocessing(image_ds, spec=spec)
     end_processing("Pretraining", start_ns)
-    json_path = save_features(features_ds)
     run_feature_statistics(features_ds, spec)
     return features_ds
 
