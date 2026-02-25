@@ -8,255 +8,138 @@ Supports 'predict' subcommand with automatic timestamping.
 
 import argparse
 import json
-import pickle
+import os
 import re
-import shutil
 import time as timer_module
-from dataclasses import asdict
+import tomllib
 from pathlib import Path
 from sys import argv
 from typing import Any
 
-import numpy as np
-import onnxruntime as ort
 import pandas as pd
 from datasets import Dataset
-from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
-from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
 
 from negate import (
     Spec,
-    WaveletAnalyze,
-    WaveletContext,
     build_datasets,
-    chart_decompositions,
+    classify_gnf_or_syn,
+    end_processing,
     generate_dataset,
     grade,
-    graph_train_variance,
+    infer_origin,
     load_config_options,
-    prepare_dataset,
+    preprocessing,
     result_path,
-    save_features,
-    save_metadata,
-    save_models,
+    run_feature_statistics,
+    run_training_statistics,
+    save_train_result,
 )
-from negate.save import save_to_onnx
-from negate.track import accuracy
+from negate.config import NegateConfig
+from negate.train import get_time
 
 start_ns = timer_module.perf_counter()
 
 
-def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
-    """Run inference using XGBoost with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
-
-    import xgboost as xgb
-
-    model_file_path_named = model_version / "negate.ubj"
-
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
-
-    pca_file_path_named = model_version / "negate_pca.pkl"
-    with open(pca_file_path_named, "rb") as pca_file:
-        pca = pickle.load(pca_file)
-
-    features_pca = pca.transform(features_dataset)
-
-    model = xgb.Booster(params=parameters)
-    model.load_model(model_file_path_named)
-
-    result = model.predict(xgb.DMatrix(features_pca))
-    return result
-
-
-def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
-    """Run inference using ONNX Runtime with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
-
-    model_file_path_named = model_version / "negate.onnx"
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
-
-    pca_file_path_named = model_version / "negate_pca.onnx"
-    session_pca = ort.InferenceSession(pca_file_path_named)
-    input_name_pca = session_pca.get_inputs()[0].name
-    features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
-
-    # # input_name = ort.get_available_providers()[0]
-    # pca_file_path_named = model_version / "negate_pca.pkl"
-    # with open(pca_file_path_named, "rb") as pca_file:
-    #     pca = pickle.load(pca_file)
-
-    # features_pca = pca.transform(features_dataset)
-    features_model = features_pca.astype(np.float32)  # type: ignore
-
-    session = ort.InferenceSession(model_file_path_named)
-    print(f"Model '{model_file_path_named}' loaded.")
-    input_name = session.get_inputs()[0].name
-    try:
-        result = session.run(None, {input_name: features_model})[0]  # type: ignore
-        print(result)
-        return result
-    except (InvalidArgument, ONNXRuntimeError) as error_log:
-        import sys
-
-        print(error_log)
-        sys.exit()
-
-
-def preprocessing(dataset: Dataset, spec: Spec, forward: bool = False) -> Dataset:
-    """Apply wavelet analysis transformations to dataset.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column."""
-
-    kwargs = {}
-    if spec.opt.batch_size > 0:
-        kwargs["batched"] = True
-        kwargs["batch_size"] = spec.opt.batch_size
-
-    context = WaveletContext(spec)
-    with WaveletAnalyze(context) as analyzer:  # type: ignore
-        if forward:
-            dataset = dataset.map(
-                analyzer.forward,
-                remove_columns=["image"],
-                desc="Computing wavelets...",
-                **kwargs,
-            )
-        else:
-            dataset = dataset.map(
-                analyzer,
-                remove_columns=["image"],
-                desc="Computing wavelets...",
-                **kwargs,
-            )
-    save_features(dataset)
-    return dataset
-
-
-def measure_origin(image_path: Path, label: bool | None = None) -> None:
-    """\nMeasure model performance on a single image.\n
-    :param image_path: Path to input image.
-    :param label: Optional ground truth label.
+def build_train_call(args: argparse.Namespace, path_result: Path, spec: Spec) -> Dataset:
+    """Prepare CLI command input for function call.\n
+    :param args: Parsed command-line arguments.
+    :param path_result: Directory containing training outputs.
+    :param spec: Model specification container.
+    :returns: A dataset of raw images or precalculated features
     """
-    from negate import classify_gnf_or_syn
+    kwargs = {}
+    if args.features is not None:
+        file_feat = str(path_result / args.features / f"features_{args.features}.json")
+        with open(file_feat) as handle:
+            features = json.load(handle)
+        features_df = pd.DataFrame.from_dict(features)
+        features_dataset: Dataset = Dataset.from_pandas(features_df)
+    else:
+        kwargs["genuine_path"] = args.path
+        if args.syn is not None:
+            kwargs["synthetic_path"] = Path(args.syn)
+        spec.model = args.model
+        try:
+            spec.vae = next(iter(x for x in spec.model_config.list_vae if args.ae in x))
+        except StopIteration:
+            raise ValueError(f"Invalid VAE choice: {args.ae}")
+        kwargs["spec"] = spec
+        origin_ds: Dataset = build_datasets(**kwargs)
+        features_dataset = pretrain(origin_ds, spec)
+    return features_dataset
 
-    dataset: Dataset = generate_dataset(image_path)
-    spec = Spec()
-    features_dataset = preprocessing(dataset, spec=spec, forward=True)
-    json_path = save_features(features_dataset)
-    probabilities = classify_gnf_or_syn(json_path)
-    print(features_dataset.description)
-    print(probabilities)
 
+def load_spec(model_version: Path = Path("config")) -> Spec:
+    """Load model specification and training metadata.\n
+    :param ver_model: Version folder path containing config and results.
+    :returns: Updated specification and additional metadata
+    """
 
-def infer_origin(image_path: Path, model_version: Path, label: bool | None = None) -> tuple[np.ndarray, ...]:
-    """Predict synthetic or original for given image.\n
-    :param image_path: Path to image file or folder.
-    :param model_version: Model version path.
-    :return: Prediction arrays (0=genuine, 1=synthetic)."""
-
-    print(f"""Checking path '{image_path}' using model date {model_version.stem}""")
-
-    dataset: Dataset = generate_dataset(image_path)
-    results_path = Path("results") / model_version.stem
-    config_path = str(results_path / "config.toml")
-    config_options = load_config_options(config_path)
+    if str(model_version) != "config":
+        path_result = Path("results") / model_version.stem
+    else:
+        path_result = model_version
+    path_config = str(path_result / "config.toml")
+    config_options = load_config_options(path_config)  # load a different config
     spec = Spec(*config_options)
-    results_file_path = str(results_path / f"results_{model_version.stem}.json")
-    with open(results_file_path) as result_metadata:
-        train_metadata = json.load(result_metadata)
-    spec.hyper_param.seed = train_metadata["seed"]
-    features_dataset = preprocessing(dataset, spec)
-    features_matrix = prepare_dataset(features_dataset, spec)
-
-    parameters = asdict(spec.hyper_param) | {"scale_pos_weight": train_metadata["scale_pos_weight"]}
-
-    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
-
-    thresh = 0.5
-    predictions = (result > thresh).astype(int)
-    if label is not None:
-        ground_truth = np.full(predictions.shape, label, dtype=int)
-        acc = float(np.mean(predictions == ground_truth))
-        print(f"Accuracy: {acc:.2%}")
-    print(result)
-    print(predictions)
-    return result, predictions  # type: ignore[return-value]
+    return spec
 
 
-def end_processing(process_name: str) -> float:
-    """Backup config file and complete process timer.\n
-    :param process_name: The type of process completing.
-    :returns: Timecode of the elapsed computation time."""
-
-    timecode = timer_module.perf_counter() - start_ns
-    result_path.mkdir(parents=True, exist_ok=True)
-    config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
-    print(f"{process_name} completed in {timecode}")
-    return timecode
+def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # unpack metadata, change individual options
+    path_conf = Path(__file__).parent.parent
+    if str(model_version) != "config":
+        path_result = str(path_conf / "results" / model_version.stem / "config.toml")
+    else:
+        path_result = str(path_conf / model_version / "config.toml")
+    with open(path_result, "rb") as handle:
+        metadata = tomllib.load(handle)
+    return metadata
 
 
-def pretrain(spec: Spec, file_or_folder_path: Path | None = None) -> None:
+def load_metadata(model_version: Path) -> dict[str, Any]:
+    path_result = Path(__file__).parent.parent / "results" / model_version / f"results_{model_version}.json"
+    with open(path_result, "rb") as handle:
+        metadata = tomllib.load(handle)
+    return metadata
+
+
+def adjust_spec(metadata: dict[str, Any], start: int | float, hyper_param: str | None = None, param_value: int | float | None = None) -> Spec:
+    for label in ["model", "vae", "param", "datasets", "library", "rounds", hyper_param]:
+        metadata.pop(label)
+    config_replacement = NegateConfig(**{str(hyper_param): param_value}, **metadata)
+    config_options = load_config_options()
+    spec = Spec(config_replacement, *config_options[1:])
+
+    return spec
+
+
+def pretrain(image_ds: Dataset, spec: Spec) -> Dataset:
     """Calibration of computing wavelet energy features.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
+    :param ds_orig: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
-    :param file_or_folder_path: Additional datasets folder."""
-
-    print("Metrics selected.")
-    dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
-    print("Beginning preprocessing.")
-    features_dataset = preprocessing(dataset, spec=spec)
-    end_processing("Pretraining")
-    chart_decompositions(features_dataset=features_dataset, spec=spec)
+    :returns: Dataset of extracted image features
+    """
+    features_ds = preprocessing(image_ds, spec=spec)
+    end_processing("Pretraining", start_ns)
+    run_feature_statistics(features_ds, spec)
+    return features_ds
 
 
-def train_model(spec: Spec, file_or_folder_path: Path | None = None, features: Dataset | None = None) -> None:
+def train_model(spec: Spec, features_ds: Dataset) -> None:
     """Train XGBoost model on preprocessed image features.\n
     :param spec: Specification container.
-    :param file_or_folder_path: Optional dataset path."""
-
-    print("Training selected.")
-
-    if features is None:
-        dataset: Dataset = build_datasets(genuine_folder=file_or_folder_path, spec=spec)
-        print("Beginning preprocessing.")
-        features_dataset = preprocessing(dataset, spec=spec, forward=True)
-        print("Training decision tree.")
-    else:
-        features_dataset = features
-    train_result = grade(features_dataset, spec)
-    timecode = end_processing("Training")
-    save_metadata(train_result)
-    save_models(train_result, compare=False)
-    save_to_onnx(train_result)
-
-    accuracy(train_result=train_result, timecode=timecode)
-    chart_decompositions(features_dataset=features_dataset, spec=spec)
-    graph_train_variance(train_result=train_result, spec=spec)
+    """
+    train_result = grade(features_ds, spec)
+    timecode = end_processing("Training", start_ns)
+    save_train_result(train_result)
+    run_training_statistics(train_result=train_result, timecode=timecode, spec=spec)
 
 
-def training_loop(dataset_location):
+def training_loop(image_ds: Dataset, spec: Spec) -> None:
     """Train models across a range of hyperparameter values.\n
-    :param dataset_location: Path to training dataset.
+    :param ds_orig: Input dataset for training.
     """
     print("looping")
-    import os
-    import tomllib
-
-    from negate.config import NegateConfig
-    from negate.train import get_time
 
     def parse_num(val):
         """Try int first, fallback to float."""
@@ -266,56 +149,44 @@ def training_loop(dataset_location):
             return float(val)
 
     hyper_param = input("enter name of hyperparameter:")
-    increment = parse_num(input("enter increment"))
+    step_val = parse_num(input("enter increment"))
     start, end = map(parse_num, input("enter start and end values separated by comma").split(","))
 
     param_value = start
+    metadata = fetch_spec_data()
+    spec = adjust_spec(metadata=metadata, start=param_value, hyper_param=hyper_param)
     while param_value < end:
-        config_path = Path(__file__).parent.parent / "config" / "config.toml"
-        with open(config_path, "rb") as config_file:
-            data = tomllib.load(config_file)
-        for label in ["model", "vae", "param", "datasets", "library", "rounds", hyper_param]:
-            data.pop(label)
-        config_replacement = NegateConfig(**{str(hyper_param): param_value}, **data)
-        config_options = load_config_options()
-        spec = Spec(config_replacement, *config_options[1:])
-        loop_result_path = Path(__file__).parent.parent / "results" / get_time()
-        train_model(file_or_folder_path=dataset_location, spec=spec)
-        os.rename(result_path, loop_result_path)
-        param_value += increment
+        path_loop = Path(__file__).parent.parent / "results" / get_time()
+        features_ds = pretrain(image_ds=image_ds, spec=spec)
+        train_model(features_ds=features_ds, spec=spec)
+        os.rename(result_path, path_loop)
+        param_value += step_val
 
 
 def main() -> None:
     """CLI argument parser and command dispatcher.\n
     :raises ValueError: Missing image path.
     :raises ValueError: Invalid VAE choice.
-    :raises NotImplementedError: Unsupported command passed."""
-
+    :raises NotImplementedError: Unsupported command passed.
+    """
     pretrain_blurb = "Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default `assets/`."
     train_blurb = "Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will be saved to disk."
     infer_blurb = "Infer whether an image at the provided path is synthetic or original."
     dataset_blurb = "Genunie/Human-original image dataset path"
-    infer_path_blurb = "Path to the image or directory containing images of unknown origin"
-    measure_blurb = "Measure defining features of synthetic or genuine images at the provided path."
+    synthetic_blurb = "Synthetic image dataset path"
+    unidentified_blurb = "Path to the image or directory containing images of unidentified origin"
+    calculate_blurb = "Measure defining features of synthetic or genuine images at the provided path."
     spec = Spec()
 
-    model_blurb = f"Model to use. Default :{spec.model}"  # type: ignore
+    model_blurb = f"Model to use. Default :{spec.model}"
     model_choices = [repo for repo in spec.models]
     ae_choices = [ae[0] for ae in spec.model_config.list_vae]
     ae_choices.append("")
-    trained_model_folder = Path(__file__).parent.parent / "models"
-    results_folder = Path(__file__).parent.parent / "results"
-    trained_model_list = [
-        str(folder.stem)  # for formatting
-        for folder in Path(trained_model_folder).iterdir()
-        if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)
-    ]
-    results_list = [
-        str(folder.stem)  # for formatting
-        for folder in Path(results_folder).iterdir()
-        if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)
-    ]
-    trained_model_list.sort(reverse=True)
+    models_path = Path(__file__).parent.parent / "models"
+    results_path = Path(__file__).parent.parent / "results"
+    list_model = [str(folder.stem) for folder in Path(models_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
+    list_result = [str(folder.stem) for folder in Path(results_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
+    list_model.sort(reverse=True)
 
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
@@ -323,70 +194,62 @@ def main() -> None:
     pretrain_parser = subparsers.add_parser("pretrain", help=pretrain_blurb)
     train_parser = subparsers.add_parser("train", help=train_blurb)
     train_parser.add_argument("-l", "--loop", action="store_true", help="Loop training iterations across hyperparameter settings")
-    train_parser.add_argument("-f", "--features", choices=results_list, default=None, help="Train from an existing set of features")
+    train_parser.add_argument("-f", "--features", choices=list_result, default=None, help="Train from an existing set of features")
 
-    measure_parser = subparsers.add_parser("measure", help=measure_blurb)
-    measure_parser.add_argument("path", help=infer_path_blurb)
+    calculate_parser = subparsers.add_parser("calculate", help=calculate_blurb)
+    calculate_parser.add_argument("path", help=unidentified_blurb)
 
     infer_parser = subparsers.add_parser("infer", help=infer_blurb)
-    infer_parser.add_argument("path", help=infer_path_blurb)
-    infer_parser.add_argument("-m", "--model", choices=trained_model_list, default=trained_model_list[0])
+    infer_parser.add_argument("path", help=unidentified_blurb)
+    infer_parser.add_argument("-m", "--model", choices=list_model, default=list_model[0])
 
-    for sub_parser in [pretrain_parser, train_parser]:
-        sub_parser.add_argument("path", help=dataset_blurb, nargs="?", default=None)
-        sub_parser.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)  # type: ignore
-        sub_parser.add_argument("-a", "--ae", choices=ae_choices, default=spec.model_config.auto_vae[0], help=model_blurb)  # type: ignore
+    for sub in [pretrain_parser, train_parser]:
+        sub.add_argument("path", help=dataset_blurb, nargs="?", default=None)
+        sub.add_argument("-s", "--syn", help=synthetic_blurb, nargs="?", default=None)
+        sub.add_argument("-m", "--model", choices=model_choices, default=spec.model, help=model_blurb)
+        sub.add_argument("-a", "--ae", choices=ae_choices, default=spec.model_config.auto_vae[0], help=model_blurb)
 
-    for sub_parser in [infer_parser, measure_parser]:
-        label_grp = sub_parser.add_mutually_exclusive_group()
+    for sub in [infer_parser, calculate_parser]:
+        label_grp = sub.add_mutually_exclusive_group()
         label_grp.add_argument("-s", "--synthetic", action="store_const", const=1, dest="label", help="Mark image as synthetic (label = 1) for evaluation.")
         label_grp.add_argument("-g", "--genuine", action="store_const", const=0, dest="label", help="Mark image as genuine (label = 0) for evaluation.")
 
     args = parser.parse_args(argv[1:])
 
-    def build_call():
-        """Prepare CLI command input for function call"""
-        if args.path:
-            dataset_location: Path | None = Path(args.path)
-        else:
-            dataset_location: Path | None = None
-        spec.model = args.model
-        try:
-            spec.vae = next(iter(x for x in spec.model_config.list_vae if args.ae in x))
-        except StopIteration:
-            raise ValueError(f"Invalid VAE choice: {args.ae}")
-        return dataset_location
-
     match args.cmd:
         case "pretrain":
-            dataset_location = build_call()
-            pretrain(file_or_folder_path=dataset_location, spec=spec)
+            origin_ds = build_train_call(args=args, path_result=results_path, spec=spec)
+            pretrain(origin_ds, spec)
         case "train":
-            features = None
-            dataset_location = build_call()
+            origin_ds = build_train_call(args=args, path_result=results_path, spec=spec)
             if args.loop is True:
-                training_loop(dataset_location)
-            elif args.features is not None:
-                features_file_path = str(results_folder / args.features / f"features_{args.features}.json")
-                with open(features_file_path) as features_file:
-                    features = json.load(features_file)
-                features_dataframe = pd.DataFrame.from_dict(features)
-                features = Dataset.from_pandas(features_dataframe)
+                training_loop(image_ds=origin_ds, spec=spec)
             else:
-                train_model(file_or_folder_path=dataset_location, spec=spec, features=features)
+                train_model(features_ds=origin_ds, spec=spec)
         case "infer":
             if args.path is None:
                 raise ValueError("Infer requires an image path.")
 
-            image_path: Path = Path(args.path)
-            model_version = trained_model_folder / args.model
-            infer_origin(image_path=image_path, model_version=model_version, label=args.label)
-        case "measure":
+            file_image: Path = Path(args.path)
+            model_version = models_path / args.model
+            print(f"""Checking path '{file_image}' using model date {model_version.stem}""")
+
+            origin_ds: Dataset = generate_dataset(file_image)
+            ds_feat = preprocessing(origin_ds, spec)
+            spec = load_spec(model_version)
+            metadata = load_metadata(model_version)
+            infer_origin(features_dataset=ds_feat, spec=spec, train_metadata=metadata, model_version=model_version, label=args.label)
+        case "calculate":
             if args.path is None:
                 raise ValueError("Measure requires an image path.")
 
-            image_path: Path = Path(args.path)
-            measure_origin(image_path=image_path, label=args.label)
+            file_image: Path = Path(args.path)
+            origin_ds: Dataset = generate_dataset(file_image)
+            ds_feat = preprocessing(origin_ds, spec=spec)
+            json_path = run_feature_statistics(ds_feat, spec)
+            probabilities = classify_gnf_or_syn(json_path)
+            print(origin_ds.description)
+            print(probabilities)
         case _:
             raise NotImplementedError
 

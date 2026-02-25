@@ -9,7 +9,9 @@
 import torch
 import torchvision.transforms as T
 from PIL import Image
+from PIL.Image import fromarray
 from torch import Tensor
+import numpy as np
 
 
 def tensor_rescale(images: Image.Image | list[Image.Image], dim_rescale: int, device: torch.device, dtype: torch.dtype):
@@ -48,3 +50,59 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     batch, l_, channel, height, width = img.shape
     img = img.view(batch * l_, channel, height, width)
     return img
+
+
+def crop_select(image: Image.Image, size: int = 512, top_k: int = 5, mask_radius: int = 50, dtype: np.typing.DTypeLike = np.float64) -> list[Image.Image]:
+    """Crop image into patches, compute freq-divergence, return most extreme patches.\n
+    :param image: PIL image to process.\n
+    :param size: Patch dimension.\n
+    :param top_k: Number of extreme patches to return.\n
+    :param mask_radius: Radius used in masked_spectral logic.\n
+    :return: List of selected patch images."""
+    gray = image.convert("L")
+    arr = np.array(gray, dtype=dtype)
+
+    h, w = arr.shape
+    nx = (w + size - 1) // size
+    ny = (h + size - 1) // size
+
+    metrics: list[tuple[float, Image.Image]] = []
+
+    for image_y in range(ny):
+        for image_x in range(nx):
+            x0 = image_x * size
+            y0 = image_y * size
+            patch_arr = arr[y0 : y0 + size, x0 : x0 + size]
+            if patch_arr.shape != (size, size):
+                pad = np.zeros((size, size), dtype=dtype)
+                pad[: patch_arr.shape[0], : patch_arr.shape[1]] = patch_arr
+                patch_arr = pad
+
+            f = np.fft.fft2(patch_arr)
+            f_shift = np.fft.fftshift(f)
+
+            rows, cols = size, size
+            y, x = np.ogrid[:rows, :cols]
+            c = (rows // 2, cols // 2)
+            distribution = np.sqrt((x - c[1]) ** 2 + (y - c[0]) ** 2)
+            mask = distribution < mask_radius
+
+            low_mask = ~mask
+            high_mask = mask
+
+            # Magnitudes
+            low_mag = np.abs(f_shift[low_mask])
+            high_mag = np.abs(f_shift[high_mask])
+
+            diverge_metric = abs(np.mean(high_mag) - np.mean(low_mag))
+
+            patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
+            metrics.append((diverge_metric, patch_img))
+
+    metrics.sort(key=lambda x: x[0], reverse=True)
+
+    chosen: list[Image.Image] = []
+    chosen.extend([p for _, p in metrics[:top_k]])  # high diverges
+    chosen.extend([p for _, p in metrics[-top_k:]])  # low diverges
+
+    return chosen
