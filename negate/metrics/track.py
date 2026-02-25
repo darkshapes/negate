@@ -153,8 +153,7 @@ def run_feature_statistics(features_dataset: Dataset, spec: Spec):
     from negate.io.save import save_features
 
     json_path = save_features(features_dataset)
-    if any(wavelet_keys) in features_dataset["results"][0]:
-        chart_decompositions(features_dataset=features_dataset, spec=spec)
+    chart_decompositions(features_dataset=features_dataset, spec=spec)
     return json_path
 
 

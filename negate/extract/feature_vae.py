@@ -129,15 +129,19 @@ class VAEExtract:
         return sample  # .mean(dim=0).cpu().float().numpy()
 
     @torch.inference_mode()
-    def __call__(self, tensor: Tensor) -> dict[str, Tensor | list[Tensor]]:
+    def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, Tensor | list[Tensor]]:
         """Extract VAE features from a batch of images then use spectral contrast as divergence metric
         :param tensor: 4D image tensor
         :return: Dictionary with 'features' list."""
         import torch
 
         features_list = []
+        if not isinstance(tensor, list):
+            tensor = [tensor]
+        if not tensor:
+            raise RuntimeError("VAE received an empty tensor list.")
 
-        features_latent = torch.stack([tensor]).to(self.device, self.dtype)
+        features_latent = torch.stack(tensor).to(self.device, self.dtype)
 
         with torch.no_grad():
             if "AutoencoderDC" in self.library:

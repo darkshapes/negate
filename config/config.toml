@@ -5,7 +5,7 @@ alpha = 0.5               # strength of perturbation Default 0.5)
 load_onnx = true          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
 magnitude_sampling = true # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
 batch_size = 0            # Feature extraction batch size, 0 disables batching default[0]  (Not yet implemented)
-top_k = 1                 # Highest percent threshold of patch difference to keep
+top_k = 4                 # Highest percent threshold of patch difference to keep
 
 # less likely to be changed
 dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
@@ -20,8 +20,8 @@ synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedrea
 synthetic_local = []
 
 [vae.library]
-sana_fp16 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]          # dc_ae 'accuracy': 0.8235294117647058,
 flux2_fp16 = ["tonera/FLUX.2-klein-9B-Int8-TorchAo", "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"] # f2 klein 'accuracy': 0.9215686274509803,
+sana_fp16 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]          # dc_ae 'accuracy': 0.8235294117647058,
 flux1_fp16 = ["Freepik/F-Lite-Texture", "autoencoders.autoencoder_kl.AutoencoderKL"]                         # flite 'accuracy': 0.9509803921568627,
 sana_fp32 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]
 flux2_fp32 = ["black-forest-labs/FLUX.2-dev", "autoencoders.autoencoder_kl_flux2.AutoencoderKLFlux2"]        # f2 dev 'accuracy': 0.9313725490196079,

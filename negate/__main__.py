@@ -41,6 +41,7 @@ from negate import (
     run_training_statistics,
     save_train_result,
     root_folder,
+    InferContext,
 )
 from negate.io.config import NegateConfig
 from negate.train import get_time
@@ -243,6 +244,7 @@ def main() -> None:
                 training_loop(image_ds=origin_ds, spec=spec)
             else:
                 train_model(features_ds=origin_ds, spec=spec)
+
         case "infer":
             if args.path is None:
                 raise ValueError("Infer requires an image path.")
@@ -255,10 +257,14 @@ def main() -> None:
             print(f"""Checking path '{file_image}' using model date {model_version.stem}""")
 
             origin_ds: Dataset = generate_dataset(file_image)
-            ds_feat = wavelet_preprocessing(origin_ds, spec)
-            spec = load_spec(model_version)
-            metadata = load_metadata(model_version)
-            infer_origin(features_dataset=ds_feat, spec=spec, train_metadata=metadata, model_version=model_version, label=args.label)
+
+            infer_context = InferContext(
+                spec=load_spec(model_version),
+                model_version=model_version,
+                train_metadata=load_metadata(model_version),
+                label=args.label,
+            )
+            infer_origin(infer_context, wavelet_preprocessing(origin_ds, spec))
         case "calculate":
             if args.path is None:
                 raise ValueError("Calculating the origin requires an image path.")

@@ -101,7 +101,7 @@ class WaveletAnalyze(ContextManager):
         for img in rescaled:
             vae_results = {}
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
-            selected, fourier_max = self.select_patch(patched)
+            selected, fourier_max, patch_spectrum = self.select_patch(patched)
 
             low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
             perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
@@ -113,40 +113,50 @@ class WaveletAnalyze(ContextManager):
             residuals = self.residual(selected)
 
             if self.vae.model is not None:
-                latent_drift = self.vae(selected)
-                latent_drift = self.vae(selected)
+                features = self.vae(patch_spectrum)
+                latent_drift = self.vae.latent_drift(selected)
                 perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
-                perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
-                vae_results = latent_drift | perturbed_drift
+                vae_results = latent_drift | perturbed_drift | features
 
-            results.append({"scale": scale} | fourier_max | sim_extrema | residuals | vae_results)
+            results.append(fourier_max | sim_extrema | residuals | vae_results)
 
         return {"results": results}
 
     @torch.inference_mode()
-    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor | list[float]]]:
-        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x
+    def select_patch(self, img: Tensor) -> tuple[Tensor, dict[str, float | int | Tensor | list[float]], list[Tensor]]:
+        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)
 
-        max_magnitudes: list = []
-        metrics: list = []
+        max_magnitudes: list[float] = []  # fixed type hint
         discrepancy: dict[str, float] = {}
-        chosen = []
 
-        for patch in patched:  # TODO: add top_k logic here
-            discrepancy, spectrum = self.residual.fourier_discrepancy(patch)
+        for patch in patched:
+            discrepancy = self.residual.fourier_discrepancy(patch)
             max_magnitudes.append(discrepancy["max_magnitude"])
-            metrics.extend(spectrum)
-        metrics.sort(key=lambda x: x[0], reverse=True)
-        chosen.extend([p for _, p in metrics[: self.top_k]])
-        chosen.extend([p for _, p in metrics[-self.top_k :]])
 
-        max_idx = int(np.argmax(max_magnitudes))
-        selected: Tensor = patched[[max_idx]]
-        return selected, {
-            "selected_patch_idx": float(max_idx),
-            "max_fourier_magnitude": float(max_magnitudes[max_idx]),
-            "mag_spectrum": chosen,
-        }
+        mag_array = np.array(max_magnitudes)
+        k = min(self.top_k, len(mag_array))
+        if k == 0:
+            raise RuntimeError("No patches found for Fourier analysis.")
+        assert self.top_k >= 1, ValueError("top_k must be ≥ 1 for Fourier patch selection.")
+        top_k_idx = np.argpartition(mag_array, -k)[-k:]
+
+        max_mag_idx = int(top_k_idx[np.argmax(mag_array[top_k_idx])])
+        selected: Tensor = patched[[max_mag_idx]]
+        max_fourier = float(max_magnitudes[max_mag_idx])
+
+        patch_spectrum = [patched[i] for i in top_k_idx if i != max_mag_idx]
+        if not patch_spectrum:
+            print("Empty fourier magnitude spectrum: falling back to max magnitude patch.")
+            patch_spectrum = [selected]
+
+        return (
+            selected,
+            {
+                "selected_patch_idx": max_mag_idx,
+                "max_fourier_magnitude": max_fourier,
+            },
+            patch_spectrum,
+        )
 
     @torch.inference_mode()
     def sim_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, float]:

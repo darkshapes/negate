@@ -11,4 +11,4 @@ from negate.extract.feature_vit import VITExtract
 from negate.extract.feature_vae import VAEExtract
 from negate.decompose.wavelet import wavelet_preprocessing
 from negate.decompose.residuals import Residual
-from negate.metrics.heuristics import classify_gnf_or_syn, infer_origin, run_native, run_onnx
+from negate.metrics.heuristics import classify_gnf_or_syn, infer_origin, run_native, run_onnx, InferContext
