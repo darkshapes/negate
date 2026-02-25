@@ -31,14 +31,14 @@ from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
 from xgboost import Booster
 
-from negate.io.config import Spec
+from negate.io.config import Spec, root_folder
 
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
-model_path = Path(__file__).parent.parent / "models"
+model_path = root_folder / "models"
 
 timestamp = get_time()
-result_path = Path(__file__).parent.parent / "results" / timestamp
+result_path = root_folder / "results" / timestamp
 
 
 def generate_datestamp_path(file_name) -> str:

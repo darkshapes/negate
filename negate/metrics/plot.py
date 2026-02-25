@@ -2,7 +2,6 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import json
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -14,7 +13,7 @@ from PIL import Image
 from numpy.typing import NDArray
 from sklearn.metrics import confusion_matrix
 
-from negate.io.config import Spec
+from negate.io.config import Spec, root_folder
 from negate.train import result_path, timestamp, TrainResult
 
 plot_file = "plot_xp_data.json"
@@ -63,7 +62,7 @@ def save_frames(data_frame: pd.DataFrame, model_name: str) -> None:
 
 
 def load_frames(folder_path_name: str) -> tuple[pd.DataFrame, Series]:
-    plot_path = Path(__file__).parent.parent / "results" / folder_path_name
+    plot_path = root_folder / "results" / folder_path_name
     with open(str(plot_path / plot_file), "r") as plot_data:
         saved_frames = json.load(plot_data)
     xp_frames = pd.DataFrame.from_dict(json.loads(saved_frames))

@@ -8,8 +8,8 @@ import json
 from PIL import Image
 from tqdm import tqdm
 
-from negate.config import Spec
-from negate.residuals import Residual
+from negate.io.config import Spec
+from negate.decompose.residuals import Residual
 from negate.train import result_path, timestamp
 
 

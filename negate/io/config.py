@@ -29,6 +29,8 @@ from typing import Iterator, NamedTuple
 import numpy as np
 import torch
 
+root_folder = Path(__file__).parent.parent.parent
+
 
 class NegateTrainRounds(NamedTuple):
     """Training hyperparameter values."""
@@ -255,7 +257,7 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
-    config_path = Path(__file__).parent.parent / file_path_named
+    config_path = root_folder / file_path_named
     with open(config_path, "rb") as config_file:
         data = tomllib.load(config_file)
 

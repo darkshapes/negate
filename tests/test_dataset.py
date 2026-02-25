@@ -8,7 +8,7 @@ from PIL import Image as PillImage
 import tempfile
 import os
 import pytest
-from negate.datasets import generate_dataset
+from negate.io.datasets import generate_dataset
 
 
 def _create_test_image(path: Path, size: tuple = (100, 100)) -> None:
