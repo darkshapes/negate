@@ -40,7 +40,7 @@ from negate import (
     run_feature_statistics,
     run_training_statistics,
     save_train_result,
-    save_features,
+    root_folder,
 )
 from negate.io.config import NegateConfig
 from negate.train import get_time
@@ -94,7 +94,7 @@ def load_spec(model_version: Path = Path("config")) -> Spec:
 
 
 def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # unpack metadata, change individual options
-    path_conf = Path(__file__).parent.parent
+    path_conf = root_folder
     if str(model_version) != "config":
         path_result = str(path_conf / "results" / model_version.stem / "config.toml")
     else:
@@ -105,7 +105,7 @@ def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # 
 
 
 def load_metadata(model_version: Path) -> dict[str, Any]:
-    results_path = Path(__file__).parent.parent / "results" / model_version.stem / f"results_{model_version.stem}.json"
+    results_path = root_folder / "results" / model_version.stem / f"results_{model_version.stem}.json"
     with open(results_path, "rb") as handle:
         metadata = json.load(handle)
     return metadata
@@ -164,7 +164,7 @@ def training_loop(image_ds: Dataset, spec: Spec) -> None:
     metadata = fetch_spec_data()
     spec = adjust_spec(metadata=metadata, param_value=param_value, hyper_param=hyper_param)
     while param_value < end:
-        path_loop = Path(__file__).parent.parent / "results" / get_time()
+        path_loop = root_folder / "results" / get_time()
         features_ds = pretrain(image_ds=image_ds, spec=spec)
         train_model(features_ds=features_ds, spec=spec)
         os.rename(result_path, path_loop)
@@ -190,8 +190,8 @@ def main() -> None:
     model_choices = [repo for repo in spec.models]
     ae_choices = [ae[0] for ae in spec.model_config.list_vae]
     ae_choices.append("")
-    models_path = Path(__file__).parent.parent / "models"
-    results_path = Path(__file__).parent.parent / "results"
+    models_path = root_folder / "models"
+    results_path = root_folder / "results"
 
     list_results = []
     if len(os.listdir(results_path)) > 0:
