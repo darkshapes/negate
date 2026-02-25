@@ -4,7 +4,6 @@
 import pickle
 import shutil
 import time as timer_module
-from pathlib import Path
 
 import numpy as np
 import onnx
@@ -14,6 +13,7 @@ from skl2onnx.common.data_types import FloatTensorType
 from sklearn.decomposition import PCA
 from xgboost import Booster
 
+from negate.io.config import root_folder
 from negate.io.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
 from negate.train import TrainResult, generate_datestamp_path, result_path
 
@@ -106,7 +106,7 @@ def end_processing(process_name: str, start_ns: float) -> float:
     timecode = timer_module.perf_counter() - start_ns
     result_path.mkdir(parents=True, exist_ok=True)
     config_name = "config.toml"
-    shutil.copy(str(Path(__file__).parent.parent / "config" / config_name), str(result_path / config_name))
+    shutil.copy(str(root_folder / "config" / config_name), str(result_path / config_name))
     print(f"{process_name} completed in {timecode}")
     return timecode
 

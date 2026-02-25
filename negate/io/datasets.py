@@ -9,7 +9,7 @@ from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 from tqdm import tqdm
 
-from negate.io.config import Spec
+from negate.io.config import Spec, root_folder
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
@@ -87,7 +87,7 @@ def build_datasets(
     :param input_folder: Path to folder containing data. (optional)
     :return: Dataset containing synthetic and genuine images."""
 
-    synthetic_input_folder = Path(__file__).parent.parent / ".datasets"
+    synthetic_input_folder = root_folder / ".datasets"
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)
     synthetic_repos = []
 
@@ -104,7 +104,7 @@ def build_datasets(
             if data_folder is not None:
                 synthetic_repos.append(generate_dataset(Path(data_folder), label=1))
 
-    genuine_input_folder = Path(__file__).parent.parent / "assets"
+    genuine_input_folder = root_folder / "assets"
     genuine_input_folder.mkdir(parents=True, exist_ok=True)
     genuine_repos = []
     if spec.data.genuine_data is not None:
