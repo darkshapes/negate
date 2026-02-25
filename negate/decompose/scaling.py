@@ -97,7 +97,7 @@ def crop_select(image: Image.Image, size: int = 512, top_k: int = 5, mask_radius
             diverge_metric = abs(np.mean(high_mag) - np.mean(low_mag))
 
             patch_img = fromarray(np.uint8(patch_arr), mode="L").convert("RGB")
-            metrics.append((diverge_metric, patch_img))
+            metrics.append((diverge_metric, patch_img))  # type: ignore
 
     metrics.sort(key=lambda x: x[0], reverse=True)
 

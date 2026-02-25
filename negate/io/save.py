@@ -14,7 +14,7 @@ from skl2onnx.common.data_types import FloatTensorType
 from sklearn.decomposition import PCA
 from xgboost import Booster
 
-from negate.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
+from negate.io.to_onnx import DataType, IOShape, ModelInputFormat, ONNXConverter
 from negate.train import TrainResult, generate_datestamp_path, result_path
 
 

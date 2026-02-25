@@ -14,7 +14,7 @@ from PIL import Image
 from numpy.typing import NDArray
 from sklearn.metrics import confusion_matrix
 
-from negate.config import Spec
+from negate.io.config import Spec
 from negate.train import result_path, timestamp, TrainResult
 
 plot_file = "plot_xp_data.json"

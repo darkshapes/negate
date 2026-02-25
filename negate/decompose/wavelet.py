@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 import gc
-from typing import ContextManager, Any
+from typing import Any, ContextManager
 
 import numpy as np
 import torch
@@ -15,12 +15,12 @@ from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
-from negate.config import Spec
-from negate.feature_vae import VAEExtract
-from negate.feature_vit import VITExtract
-from negate.residuals import Residual
-from negate.scaling import patchify_image, tensor_rescale
-from negate.save import save_features
+from negate.decompose.residuals import Residual
+from negate.decompose.scaling import patchify_image, tensor_rescale
+from negate.extract.feature_vae import VAEExtract
+from negate.extract.feature_vit import VITExtract
+from negate.io.config import Spec
+from negate.io.save import save_features
 
 """Haar Wavelet processing"""
 
@@ -81,6 +81,7 @@ class WaveletAnalyze(ContextManager):
         self.device = spec.device
         self.np_dtype = spec.np_dtype
         self.magnitude_sampling = spec.opt.magnitude_sampling
+        self.top_k = spec.opt.top_k
         print("Please wait...")
 
     @torch.inference_mode()
@@ -92,13 +93,9 @@ class WaveletAnalyze(ContextManager):
         :returns: A dict of processed fourier residual, wavelet and rrc data"""
 
         images = dataset["image"]
-
-        dim_factors = self.dim_factor if isinstance(self.dim_factor, (list, tuple)) else [self.dim_factor]
-
         results: list[dict[str, Any]] = []
 
-        # for factor in dim_factors:
-        scale = dim_factors[0] * self.dim_patch[0]
+        scale = self.dim_factor * self.dim_patch[0]
         rescaled = tensor_rescale(images, scale, **self.cast_move)
 
         for img in rescaled:
@@ -111,13 +108,14 @@ class WaveletAnalyze(ContextManager):
             perturbed_selected = selected - self.alpha * perturbed_high_freq
             base_features: Tensor | list[Tensor] = self.extract(selected)
             warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
+            sim_extrema = self.sim_extrema(base_features, warp_features, selected.shape[0])
 
             residuals = self.residual(selected)
 
-            sim_extrema = self.shape_extrema(base_features, warp_features, selected.shape[0])
-
             if self.vae.model is not None:
-                latent_drift = self.vae.latent_drift(selected)
+                latent_drift = self.vae(selected)
+                latent_drift = self.vae(selected)
+                perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
                 perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
                 vae_results = latent_drift | perturbed_drift
 
@@ -126,24 +124,32 @@ class WaveletAnalyze(ContextManager):
         return {"results": results}
 
     @torch.inference_mode()
-    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor]]:
-        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
+    def select_patch(self, img: Tensor, selected_only: bool = False) -> tuple[Tensor, dict[str, float | Tensor | list[dict[str, list[float]]]]]:
+        patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x
+
         max_magnitudes: list = []
+        metrics: list = []
         discrepancy: dict[str, float | list[float]] = {}
+        chosen: list[dict[str, list[float]]] = []
 
         for patch in patched:  # TODO: add top_k logic here
             discrepancy = self.residual.fourier_discrepancy(patch)
             max_magnitudes.append(discrepancy["max_magnitude"])
+            metrics.extend(discrepancy["mag_spectrum"])
+        metrics.sort(key=lambda x: x[0], reverse=True)
+        chosen.extend([p for _, p in metrics[: self.top_k]])
+        chosen.extend([p for _, p in metrics[-self.top_k :]])
 
         max_idx = int(np.argmax(max_magnitudes))
         selected: Tensor = patched[[max_idx]]
         return selected, {
             "selected_patch_idx": float(max_idx),
             "max_fourier_magnitude": float(max_magnitudes[max_idx]),
+            "mag_spectrum": chosen,
         }
 
     @torch.inference_mode()
-    def shape_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, float]:
+    def sim_extrema(self, base_features: Tensor | list[Tensor], warp_features: Tensor | list[Tensor], batch: int) -> dict[str, float]:
         """Compute minimum and maximum cosine similarity between base and warped features.\n
         :param base_features: Raw feature tensors from original patches.
         :param warp_features: Warped feature tensors after wavelet perturbation.
@@ -204,7 +210,7 @@ class WaveletAnalyze(ContextManager):
             self.cleanup()
 
 
-def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
+def wavelet_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
     """Apply wavelet analysis transformations to dataset.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.

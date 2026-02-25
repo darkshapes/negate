@@ -28,9 +28,9 @@ from torch import Tensor
 from torch.nn import BCELoss, KLDivLoss, L1Loss, MSELoss
 from torch.nn import functional as F
 
-from negate.config import Spec
-from negate.save import save_features
-from negate.scaling import crop_select
+from negate.io.config import Spec
+from negate.io.save import save_features
+from negate.decompose.scaling import crop_select
 
 
 class VAEExtract:
@@ -60,16 +60,15 @@ class VAEExtract:
         :raises RuntimeError: If diffusers package is not installed.
         :raises ImportError: If required VAE library cannot be imported.
         """
-        print(f"Initializing VAE on {spec.device}...")
-
         self.spec = spec
 
         self.device = spec.device
+        print(f"Initializing VAE on {spec.device}...")
         self.dtype = spec.dtype
         self.model, self.library = spec.vae or spec.model_config.auto_vae
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
-        self.kl_div = KLDivLoss(log_target=True)
+        self.kl_div = KLDivLoss(log_target=True, reduction="batchmean")
         self.bce_loss = BCELoss()
         self.mse_loss = MSELoss()
         self.l1_loss = L1Loss()
@@ -218,7 +217,7 @@ class VAEExtract:
             self.cleanup()
 
 
-def preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
+def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
     """Apply wavelet analysis transformations to dataset.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.

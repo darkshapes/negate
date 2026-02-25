@@ -9,8 +9,8 @@ from datasets import Dataset
 from scipy.stats import iqr
 from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
-from negate.config import Spec
-from negate.plot import (
+from negate.io.config import Spec
+from negate.metrics.plot import (
     graph_cohen,
     graph_kde,
     graph_residual,
@@ -150,11 +150,11 @@ def chart_decompositions(features_dataset: Dataset, spec: Spec) -> None:
 
 
 def run_feature_statistics(features_dataset: Dataset, spec: Spec):
-    from negate.save import save_features
+    from negate.io.save import save_features
 
     json_path = save_features(features_dataset)
-    # if any(wavelet_keys) in features_dataset["results"][0]:
-    # chart_decompositions(features_dataset=features_dataset, spec=spec)
+    if any(wavelet_keys) in features_dataset["results"][0]:
+        chart_decompositions(features_dataset=features_dataset, spec=spec)
     return json_path
 
 

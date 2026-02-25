@@ -12,7 +12,7 @@ from datasets import Dataset
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
 
-from negate.config import Spec
+from negate.io.config import Spec
 from negate.train import prepare_dataset
 
 

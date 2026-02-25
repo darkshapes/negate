@@ -9,7 +9,7 @@ from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 from tqdm import tqdm
 
-from negate.config import Spec
+from negate.io.config import Spec
 
 
 def detect_nans(dataset: Dataset) -> Dataset:

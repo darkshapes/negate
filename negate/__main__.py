@@ -4,6 +4,13 @@
 """Command-line interface entry point for Negate package.\n
 Handles CLI parsing, dataset loading, preprocessing, and result saving.
 Supports 'predict' subcommand with automatic timestamping.
+
+Dataset (images)
+    → io/ops (load)
+    → wavelet.py (decompose)
+    → feature_{vit,vae}.py + residuals.py (extract)
+    → train.py (XGBoost grade)
+    → track.py (plotting/metrics)
 """
 
 import argparse
@@ -28,13 +35,14 @@ from negate import (
     grade,
     infer_origin,
     load_config_options,
-    preprocessing,
+    wavelet_preprocessing,
     result_path,
     run_feature_statistics,
     run_training_statistics,
     save_train_result,
+    save_features,
 )
-from negate.config import NegateConfig
+from negate.io.config import NegateConfig
 from negate.train import get_time
 
 start_ns = timer_module.perf_counter()
@@ -53,7 +61,7 @@ def build_train_call(args: argparse.Namespace, path_result: Path, spec: Spec) ->
         with open(file_feat) as handle:
             features = json.load(handle)
         features_df = pd.DataFrame.from_dict(features)
-        features_dataset: Dataset = Dataset.from_pandas(features_df)
+        features_ds: Dataset = Dataset.from_pandas(features_df)
     else:
         kwargs["genuine_path"] = args.path
         if args.syn is not None:
@@ -65,8 +73,8 @@ def build_train_call(args: argparse.Namespace, path_result: Path, spec: Spec) ->
             raise ValueError(f"Invalid VAE choice: {args.ae}")
         kwargs["spec"] = spec
         origin_ds: Dataset = build_datasets(**kwargs)
-        features_dataset = pretrain(origin_ds, spec)
-    return features_dataset
+        features_ds = pretrain(origin_ds, spec)
+    return features_ds
 
 
 def load_spec(model_version: Path = Path("config")) -> Spec:
@@ -97,13 +105,13 @@ def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # 
 
 
 def load_metadata(model_version: Path) -> dict[str, Any]:
-    path_result = Path(__file__).parent.parent / "results" / model_version / f"results_{model_version}.json"
-    with open(path_result, "rb") as handle:
-        metadata = tomllib.load(handle)
+    results_path = Path(__file__).parent.parent / "results" / model_version.stem / f"results_{model_version.stem}.json"
+    with open(results_path, "rb") as handle:
+        metadata = json.load(handle)
     return metadata
 
 
-def adjust_spec(metadata: dict[str, Any], start: int | float, hyper_param: str | None = None, param_value: int | float | None = None) -> Spec:
+def adjust_spec(metadata: dict[str, Any], hyper_param: str | None = None, param_value: int | float | None = None) -> Spec:
     for label in ["model", "vae", "param", "datasets", "library", "rounds", hyper_param]:
         metadata.pop(label)
     config_replacement = NegateConfig(**{str(hyper_param): param_value}, **metadata)
@@ -119,8 +127,9 @@ def pretrain(image_ds: Dataset, spec: Spec) -> Dataset:
     :param spec: Specification container with analysis configuration.
     :returns: Dataset of extracted image features
     """
-    features_ds = preprocessing(image_ds, spec=spec)
+    features_ds = wavelet_preprocessing(image_ds, spec=spec)
     end_processing("Pretraining", start_ns)
+    json_path = save_features(features_ds)
     run_feature_statistics(features_ds, spec)
     return features_ds
 
@@ -154,7 +163,7 @@ def training_loop(image_ds: Dataset, spec: Spec) -> None:
 
     param_value = start
     metadata = fetch_spec_data()
-    spec = adjust_spec(metadata=metadata, start=param_value, hyper_param=hyper_param)
+    spec = adjust_spec(metadata=metadata, param_value=param_value, hyper_param=hyper_param)
     while param_value < end:
         path_loop = Path(__file__).parent.parent / "results" / get_time()
         features_ds = pretrain(image_ds=image_ds, spec=spec)
@@ -184,9 +193,11 @@ def main() -> None:
     ae_choices.append("")
     models_path = Path(__file__).parent.parent / "models"
     results_path = Path(__file__).parent.parent / "results"
-    list_model = [str(folder.stem) for folder in Path(models_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
-    list_result = [str(folder.stem) for folder in Path(results_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
-    list_model.sort(reverse=True)
+
+    list_results = []
+    if len(os.listdir(results_path)) > 0:
+        list_results = [str(folder.stem) for folder in Path(results_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
+        list_results.sort(reverse=True)
 
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
@@ -194,14 +205,21 @@ def main() -> None:
     pretrain_parser = subparsers.add_parser("pretrain", help=pretrain_blurb)
     train_parser = subparsers.add_parser("train", help=train_blurb)
     train_parser.add_argument("-l", "--loop", action="store_true", help="Loop training iterations across hyperparameter settings")
-    train_parser.add_argument("-f", "--features", choices=list_result, default=None, help="Train from an existing set of features")
+    train_parser.add_argument("-f", "--features", choices=list_results, default=None, help="Train from an existing set of features")
 
     calculate_parser = subparsers.add_parser("calculate", help=calculate_blurb)
     calculate_parser.add_argument("path", help=unidentified_blurb)
 
     infer_parser = subparsers.add_parser("infer", help=infer_blurb)
     infer_parser.add_argument("path", help=unidentified_blurb)
-    infer_parser.add_argument("-m", "--model", choices=list_model, default=list_model[0])
+    if len(os.listdir(models_path)) > 0:
+        list_model = [str(folder.stem) for folder in Path(models_path).iterdir() if folder.is_dir() and re.fullmatch(r"\d{8}_\d{6}", folder.stem)]
+        list_model.sort(reverse=True)
+        if list_model:
+            infer_parser.add_argument("-m", "--model", choices=list_model, default=list_model[0])
+    else:
+        list_model = None
+        infer_parser.add_argument("-m", "--model", choices=None, default=None)
 
     for sub in [pretrain_parser, train_parser]:
         sub.add_argument("path", help=dataset_blurb, nargs="?", default=None)
@@ -229,23 +247,26 @@ def main() -> None:
         case "infer":
             if args.path is None:
                 raise ValueError("Infer requires an image path.")
-
+            if list_model is None or not list_model:
+                raise ValueError(f"Warning: No valid model directories found in {models_path} Create or add a trained model before running inference.")
             file_image: Path = Path(args.path)
-            model_version = models_path / args.model
+            model_version: Path = models_path / args.model
+            if not model_version.exists():
+                raise ValueError("Model format must match pattern YYYYMMDD_HHMMSS (e.g., 20240101_123456)")
             print(f"""Checking path '{file_image}' using model date {model_version.stem}""")
 
             origin_ds: Dataset = generate_dataset(file_image)
-            ds_feat = preprocessing(origin_ds, spec)
+            ds_feat = wavelet_preprocessing(origin_ds, spec)
             spec = load_spec(model_version)
             metadata = load_metadata(model_version)
             infer_origin(features_dataset=ds_feat, spec=spec, train_metadata=metadata, model_version=model_version, label=args.label)
         case "calculate":
             if args.path is None:
-                raise ValueError("Measure requires an image path.")
+                raise ValueError("Calculating the origin requires an image path.")
 
             file_image: Path = Path(args.path)
             origin_ds: Dataset = generate_dataset(file_image)
-            ds_feat = preprocessing(origin_ds, spec=spec)
+            ds_feat = wavelet_preprocessing(origin_ds, spec=spec)
             json_path = run_feature_statistics(ds_feat, spec)
             probabilities = classify_gnf_or_syn(json_path)
             print(origin_ds.description)
