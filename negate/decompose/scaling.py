@@ -52,6 +52,20 @@ def patchify_image(img: torch.Tensor, patch_size: tuple[int, int], stride: tuple
     return img
 
 
+def condense_tensors(tensors: list[Tensor], condense_factor: int, top_k: int) -> list[np.ndarray]:
+    """Reduce to single representative tensor via mean pooling,retaining top-k dimensions only\n
+    :param tensors: Tensors to condense."""
+    if condense_factor > 0:
+        stack = torch.stack(tensors)
+        ft_stack = [stack[:, ::condense_factor].mean(dim=1, keepdim=True)]
+        feat_arr = ft_stack[0]
+        k_keep = min(top_k or 64, len(feat_arr))
+        ft_stack = [tensor.mean(dim=0).cpu().float().numpy().flatten() for tensor in feat_arr[:k_keep]]
+    else:
+        ft_stack = [tensor.mean(dim=0).cpu().float().numpy().flatten() for tensor in tensors]
+    return ft_stack
+
+
 def crop_select(image: Image.Image, size: int = 512, top_k: int = 5, mask_radius: int = 50, dtype: np.typing.DTypeLike = np.float64) -> list[Image.Image]:
     """Crop image into patches, compute freq-divergence, return most extreme patches.\n
     :param image: PIL image to process.\n

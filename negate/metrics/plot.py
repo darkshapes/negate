@@ -53,6 +53,10 @@ vae_loss_keys = [
 
 
 def save_frames(data_frame: pd.DataFrame, model_name: str) -> None:
+    """Save dataframe to JSON with model name.\n
+    :param data_frame: Input dataframe to serialize.
+    :param model_name: Label for the model run."""
+
     data_frame["model_name"] = model_name
     frames = data_frame.to_dict(orient="records")
     data_log = str(result_path / plot_file)
@@ -62,6 +66,9 @@ def save_frames(data_frame: pd.DataFrame, model_name: str) -> None:
 
 
 def load_frames(folder_path_name: str) -> tuple[pd.DataFrame, Series]:
+    """Load dataframe and model name from JSON.\n
+    :param folder_path_name: Subfolder under results containing plot data.
+    :returns: Tuple of (dataframe, series of model names)."""
     plot_path = root_folder / "results" / folder_path_name
     with open(str(plot_path / plot_file), "r") as plot_data:
         saved_frames = json.load(plot_data)

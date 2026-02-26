@@ -69,7 +69,7 @@ class Residual:
             forward_result.setdefault(key, (int(np.mean(value)), int(np.sum(value))))
         return forward_result
 
-    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> tuple[dict[str, float], list[float]]:
+    def fourier_discrepancy(self, image: np.ndarray | Tensor) -> dict[str, float]:
         """Compute Fourier-based discrepancy metrics for discriminating image differences.\n
         :param image: Input numpy array.
         :returns: Dictionary with magnitude-based discrimination metrics."""
@@ -92,7 +92,7 @@ class Residual:
             "spectral_entropy": -(normalized_spec * np.log(normalized_spec + 1e-10)).sum(),
             "max_magnitude": float(magnitude_spectrum.max()),
             "mean_log_magnitude": float(log_mag.mean()),
-        }, [float(log_mag)]
+        }
 
     def make_numeric(self, image: Image.Image | Tensor | np.ndarray) -> np.ndarray:
         """Convert a PIL Image or tensor to a 2-D grayscale numpy array.\n
@@ -137,7 +137,7 @@ class Residual:
         for img in images:
             disc = self.fourier_discrepancy(img)
             for label in results:
-                results[label].append(disc[label])
+                results[label].append(disc[label])  # type: ignore
 
         return {label: np.array(result) for label, result in results.items()}
 

@@ -32,13 +32,14 @@ class VITExtract:
         self.model_name = spec.model
         self.dtype = spec.dtype
         self.device = spec.device
-        print(f"Initializing VIT on {spec.device}")
+        print(f"Initializing VIT on {spec.device}...")
         self.cast_move = spec.apply
         self.library = spec.model_config.library_for_model(self.model_name)
         self._set_models()
 
     @torch.inference_mode()
     def _set_models(self):
+        """Download and load the Vision Transformer from the model repo."""
         match self.library:
             case "timm":
                 import timm

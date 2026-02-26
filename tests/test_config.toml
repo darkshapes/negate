@@ -1,15 +1,18 @@
 # Advanced Configuration and Paths for Negate CLI
 
-feat_ext_path = ""         # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
-batch_size = 666           # Feature extraction batch size, 0 disables batching default[0]
-dim_factor = 666           # Multiplier for image rescale size Default 6
-dim_patch = 256            # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
-alpha = 0.666              # strength of perturbation Default 0.3)
-dtype = "float666"         # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
-load_onnx = false          # Use trained ONNX for inference : True → ONNX, False → native XGBoost
-magnitude_sampling = false # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
-residual_dtype = "float64" # decimal precision for numpy processing
-top_k = 1                  # Highest percent threshold of patch difference to keep (Not yet implemented)
+feat_ext_path = ""          # Path to save the model in or null for default: [$HOME/.cache/huggingface | C:/Users/USER/.cache/huggingface]
+batch_size = 666            # Feature extraction batch size, 0 disables batching default[0]
+dim_factor = 666            # Multiplier for image rescale size Default 6
+dim_patch = 256             # Patch width for residuals (larger is faster, default 224 dinov2 256 dinov3 512 csat)
+alpha = 0.666               # strength of perturbation Default 0.3)
+dtype = "float666"          # decimal precision ("float64", "float32","float16", lower = <20% speed increase, less mem, slight accuracy hit)
+load_onnx = false           # Use trained ONNX for inference : True → ONNX, False → native XGBoost
+magnitude_sampling = false  # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
+residual_dtype = "float64"  # decimal precision for numpy processing
+top_k = 1                   # Highest percent threshold of patch difference to keep (Not yet implemented)
+condense_factor = 2
+disable_nullable = true
+load_from_cache_file = true
 
 [vae.library]
 sana_fp16 = ["exdysa/dc-ae-f32c32-sana-1.1-diffusers", "autoencoders.autoencoder_dc.AutoencoderDC"]          # dc_ae 'accuracy': 0.8235294117647058,
