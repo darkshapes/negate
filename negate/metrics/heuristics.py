@@ -37,47 +37,96 @@ class InferContext:
                 self.train_metadata = json.load(f)
 
 
-def classify_gnf_or_syn(data_path: str) -> dict[str, dict[str, int | str]]:
-    """
-    Returns 0 for GNE-like results, 1 for SYN-like results determined by simple heuristic based on observed patterns:\n
-    :param data_path: Path to json file with saved parameter data"""
+def weigh_bce(entry):
     bce_threshold = -80  # SYN has very negative bce_loss (< -80 typically)
     ff_threshold = 0.0  # SYN tends to be higher in mean ff magnitude
     min_base_threshold = 100
 
-    result = {}
-    with open(data_path, "r") as json_file:
-        json_data = json.load(json_file)
-    for index, entry in enumerate(json_data):
-        bce_loss = entry["results"][0]["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
-        image_mean_ff = entry["results"][0]["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
-        min_base = entry["results"][0]["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
-        score = 0
-        confidence = 1
+    bce_loss = entry["results"][0]["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
+    image_mean_ff = entry["results"][0]["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
+    min_base = entry["results"][0]["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
+    score = 0
+    confidence = 1
 
-        if bce_loss is not None:
-            if bce_loss < -150 or (-15 < bce_loss < -5):
-                score += 1  # More likely SYN
-            if bce_loss > -20 or bce_loss < -170:
-                score += 1
-            if bce_threshold < bce_loss < -50 and min_base_threshold < min_base < 1400:
-                score -= 1
-            confidence += 1
-
-        if image_mean_ff > ff_threshold:
+    if bce_loss is not None:
+        if bce_loss < -150 or (-15 < bce_loss < -5):
+            score += 1  # More likely SYN
+        if bce_loss > -20 or bce_loss < -170:
             score += 1
-        elif bce_loss is not None and -100 > bce_loss > -50:
-            score -= 1  # More likely GNE
+        if bce_threshold < bce_loss < -50 and min_base_threshold < min_base < 1400:
+            score -= 1
+        confidence += 1
 
-        if min_base is not None:
-            if min_base_threshold <= min_base <= 1350:
-                score -= 1  # More likely GNE (tighter cluster)
-            if min_base > 4000 or min_base < 200:
-                score += 1
-            confidence += 1
+    if image_mean_ff > ff_threshold:
+        score += 1
+    elif bce_loss is not None and -100 > bce_loss > -50:
+        score -= 1  # More likely GNE
 
-        result[str(index)] = {"score": score, "class": "SYN" if score > 0 else "GNE", "confidence": confidence}
-    return result
+    if min_base is not None:
+        if min_base_threshold <= min_base <= 1350:
+            score -= 1  # More likely GNE (tighter cluster)
+        if min_base > 4000 or min_base < 200:
+            score += 1
+        confidence += 1
+    return score, confidence
+
+
+def weigh_v2(entry):
+    # flux2 klein fp16, timm/vit-base dino v3 lvd
+    #  dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5                  # strength of perturbation Default 0.5)
+
+    laplace = entry["laplace_mean"]  # Above ~4.2-4.3 for GNE
+    sobel = entry["sobel_mean"]  # Below 4 for GNE
+    max_ff_mag = entry["max_fourier_magnitude"]  # Above 1500 for GNE
+    bce_loss = entry["bce_loss"]  # bce_los GNE around -50 -60 is more likely to be GNE)
+
+    score = 2
+    confidence = 0
+    if laplace is not None and any(x > 4.2 for x in laplace):
+        confidence += 1
+        score -= 1
+
+    if sobel is not None and any(x < 4 for x in sobel):
+        confidence += 1
+        score -= 1
+
+    if max_ff_mag is not None and max_ff_mag > 1500:
+        confidence += 1
+        score -= 1
+
+    if -50 > bce_loss > -60:
+        confidence += 1
+        score += 0.6
+
+    return score, confidence
+
+
+def classify_gnf_or_syn(dataset: Dataset, label: int) -> list[int]:
+    """Returns 0 for GNE-like results, 1 for SYN-like results determined by simple heuristic based on observed patterns:\n
+    :param data_path: Path to json file with saved parameter data"""
+
+    result = {}
+    entries = dataset["results"]
+
+    # Collect ground truth from entry if available
+    gt_labels = []
+    predictions = []
+
+    for index, entry in enumerate(entries):
+        score, confidence = weigh_v2(entry[0])
+        class_pred = "SYN" if score > 0 else "GNE"
+        result[str(index)] = {"score": score, "class": class_pred, "confidence": confidence}
+
+        predictions.append(1 if class_pred == "SYN" else 0)
+
+        if label is not None:
+            gt_labels.append(label)  # or however you access ground truth
+
+    if label is not None:
+        acc = float(np.mean([p == g for p, g in zip(predictions, gt_labels)]))
+        print(f"Accuracy: {acc:.2%}")
+    print(predictions)
+    return predictions
 
 
 def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
@@ -178,7 +227,7 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
     #     sys.exit()
 
 
-def infer_origin(context: InferContext, features_dataset: Dataset | None = None) -> tuple[np.ndarray, ...]:
+def infer_origin(context: InferContext, features_dataset: Dataset | None = None) -> np.ndarray:
     """Predict synthetic or original for given image.\n
     :param context: Inference context containing spec, model path, and metadata.
     :param features_dataset: Optional dataset. If not provided, will be computed from input in context.
@@ -202,4 +251,4 @@ def infer_origin(context: InferContext, features_dataset: Dataset | None = None)
         print(f"Accuracy: {acc:.2%}")
     print(result)
     print(predictions)
-    return result, predictions
+    return predictions

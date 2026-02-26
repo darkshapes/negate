@@ -280,7 +280,9 @@ def main() -> None:
                 train_metadata=load_metadata(model_version),
                 label=args.label,
             )
-            infer_origin(infer_context, wavelet_preprocessing(origin_ds, spec))
+            features_ds = wavelet_preprocessing(origin_ds, spec)
+            save_features(features_ds)
+            infer_origin(infer_context, features_ds)
         case "calculate":
             if args.path is None:
                 raise ValueError("Calculating the origin requires an image path.")
@@ -288,11 +290,8 @@ def main() -> None:
             file_image: Path = Path(args.path)
             origin_ds: Dataset = generate_dataset(file_image)
             features_ds = wavelet_preprocessing(origin_ds, spec=spec)
-            json_path = save_features(features_ds)
-            chart_decompositions(features_dataset=features_ds, spec=spec)
-            probabilities = classify_gnf_or_syn(json_path)
-            print(origin_ds.description)
-            print(probabilities)
+            save_features(features_ds)
+            classify_gnf_or_syn(dataset=features_ds, label=args.label)
         case _:
             raise NotImplementedError
 
