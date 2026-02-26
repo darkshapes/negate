@@ -36,7 +36,8 @@ from negate.io.config import Spec, root_folder
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
 model_path = root_folder / "models"
-
+rng = default_rng(1)
+random_state = lambda x: int(np.round(rng.random() * x))
 timestamp = get_time()
 result_path = root_folder / "results" / timestamp
 
@@ -100,13 +101,14 @@ def prepare_dataset(features_dataset: Dataset, spec: Spec):
     samples = features_dataset["results"]
     all_dicts = [d for row in samples for d in row]
 
+    dtype = spec.np_dtype if spec.opt.load_onnx is False else np.float32
     df = pd.json_normalize(all_dicts).fillna(0)
 
     for col in df.columns:
         if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():  # type: ignore Invalid series conditional
-            df[col] = df[col].apply(lambda x: np.mean(x, dtype=spec.np_dtype) if isinstance(x, (list, np.ndarray)) else float(x))
+            df[col] = df[col].apply(lambda x: np.mean(x, dtype=dtype) if isinstance(x, (list, np.ndarray)) else float(x))
 
-    feature_matrix = df.to_numpy(dtype=spec.np_dtype)
+    feature_matrix = df.to_numpy(dtype=dtype)
     feature_matrix = np.where(np.isfinite(feature_matrix), feature_matrix, 0)
     return feature_matrix
 
@@ -129,10 +131,7 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
     labels = np.array(features_dataset["label"])
     # labels = np.repeat(labels, 3)  # adjust multiplier based on your data structure
     feature_matrix = prepare_dataset(features_dataset, spec)
-
-    rng = default_rng(1)
-    random_state = lambda: int(np.round(rng.random() * spec.train_rounds.max_rnd))
-    seed = spec.hyper_param.seed if spec.hyper_param.seed > 0 else random_state()
+    seed = spec.hyper_param.seed if spec.hyper_param.seed > 0 else random_state(spec.train_rounds.max_rnd)
     X_train, X_test, y_train, y_test = train_test_split(
         feature_matrix,
         labels,

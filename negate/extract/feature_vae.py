@@ -31,6 +31,7 @@ from torch.nn import functional as F
 from negate.io.config import Spec
 from negate.io.save import save_features
 from negate.decompose.scaling import crop_select
+from negate.train import random_state
 
 
 class VAEExtract:
@@ -129,7 +130,7 @@ class VAEExtract:
         return sample  # .mean(dim=0).cpu().float().numpy()
 
     @torch.inference_mode()
-    def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, Tensor | list[Tensor]]:
+    def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, list[Tensor]]:
         """Extract VAE features from a batch of images then use spectral contrast as divergence metric
         :param tensor: 4D image tensor
         :return: Dictionary with 'features' list."""
@@ -148,7 +149,8 @@ class VAEExtract:
                 features = self._extract_special(features_latent)
             else:
                 features = self.vae.encode(features_latent).latent_dist.sample()
-
+            # mean_latent = features.mean(dim=0).cpu().float().numpy()
+            # feature_vec = mean_latent.flatten()
             features_list.append(features)
 
         return {"features": features_list}
@@ -227,10 +229,18 @@ def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     print("Beginning preprocessing.")
+
     kwargs = {}
+    kwargs["disable_nullable"] = spec.opt.disable_nullable
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
+    if spec.opt.load_from_cache_file is False:
+        kwargs["new_fingerprint"] = str(random_state(spec.train_rounds.max_rnd))
+    else:
+        kwargs["load_from_cache_file"] = True
+        kwargs["keep_in_memory"] = True
+        kwargs["new_fingerprint"] = spec.hyper_param.seed
 
     with VAEExtract(spec) as extractor:  # type: ignore
         dataset = dataset.map(

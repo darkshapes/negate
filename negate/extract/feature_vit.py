@@ -39,6 +39,7 @@ class VITExtract:
 
     @torch.inference_mode()
     def _set_models(self):
+        """Download and load the Vision Transformer from the model repo."""
         match self.library:
             case "timm":
                 import timm

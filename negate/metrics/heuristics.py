@@ -5,7 +5,7 @@ import pickle
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 
 import numpy as np
 import onnxruntime as ort
@@ -120,31 +120,62 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
     else:
         model_file_path_named = str(model_file_path_named)
 
+    features_dataset = features_dataset.astype(np.float32)
     pca_file_path_named = model_version / "negate_pca.onnx"
     session_pca = ort.InferenceSession(pca_file_path_named)
     input_name_pca = session_pca.get_inputs()[0].name
     features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
 
-    # # input_name = ort.get_available_providers()[0]
-    # pca_file_path_named = model_version / "negate_pca.pkl"
-    # with open(pca_file_path_named, "rb") as pca_file:
-    #     pca = pickle.load(pca_file)
-
-    # features_pca = pca.transform(features_dataset)
-    features_model = features_pca.astype(np.float32)  # type: ignore
+    input_name = ort.get_available_providers()[0]
+    features_model = features_pca.astype(np.float32)
 
     session = ort.InferenceSession(model_file_path_named)
     print(f"Model '{model_file_path_named}' loaded.")
     input_name = session.get_inputs()[0].name
+    inputs = {input_name: features_dataset.astype(np.float32)}
     try:
-        result = session.run(None, {input_name: features_model})[0]  # type: ignore
+        result: ort.SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
         print(result)
-        return result
     except (InvalidArgument, ONNXRuntimeError) as error_log:
         import sys
 
         print(error_log)
         sys.exit()
+
+    # session_pca = ort.InferenceSession(pca_file_path_named)
+    # input_name_pca = session_pca.get_inputs()[0].name
+    # features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
+
+    # input_name = ort.get_available_providers()[0]
+    # pca_file_path_named = model_version / "negate_pca.pkl"
+    # with open(pca_file_path_named, "rb") as pca_file:
+    #     pca = pickle.load(pca_file)
+
+    # features_pca = pca.transform(features_dataset)
+    # features_model = features_pca.astype(np.float32)  # type: ignore
+    # session_pca = ort.InferenceSession("negate_pca.onnx")
+    # input_name_pca = session_pca.get_inputs()[0].name
+    # features_pca = session_pca.run(None, {input_name_pca: np.array(features_dataset).astype(np.float32)})[0]
+
+    # input_name = ort.get_available_providers()[0]
+    # inputs = {input_name: features_dataset.astype(np.float32)}
+
+    # session = ort.InferenceSession(model_file_path_named)
+    # print(f"Model '{model_file_path_named}' loaded.")
+    # return session.run(None, inputs)[0]
+
+    # session = ort.InferenceSession(model_file_path_named)
+    # print(f"Model '{model_file_path_named}' loaded.")
+    # input_name = session.get_inputs()[0].name
+    # try:
+    #     result = session.run(None, {input_name: features_model})[0]  # type: ignore
+    #     print(result)
+    #     return result
+    # except (InvalidArgument, ONNXRuntimeError) as error_log:
+    #     import sys
+
+    #     print(error_log)
+    #     sys.exit()
 
 
 def infer_origin(context: InferContext, features_dataset: Dataset | None = None) -> tuple[np.ndarray, ...]:

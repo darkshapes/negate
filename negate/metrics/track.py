@@ -129,18 +129,19 @@ def compute_tail_separation(data_frame, residual_keys) -> pd.DataFrame:
 
 
 def chart_decompositions(features_dataset: Dataset, spec: Spec) -> None:
-    """Plot wavelet sensitivity distributions."""
+    """Plot wavelet sensitivity distributions.\n
+    :param features_dataset: Input dataset with results to visualize.
+    :param spec: Specification containing plot configuration."""
 
     data_frame = features_dataset.to_pandas()
     expanded_frame = data_frame.explode("results").reset_index(drop=True)  # type: ignore explode
 
     total_keys = wavelet_keys + residual_keys + vae_loss_keys
     for key in total_keys:
-        if key in expanded_frame:
-            expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
+        expanded_frame[key] = expanded_frame["results"].apply(lambda x, k=key: float(np.mean(x[k])) if isinstance(x, dict) and k in x else None)
 
-    scores_dataframe = compute_tail_separation(expanded_frame, residual_keys)
-    graph_tail_separations(spec, scores_dataframe=scores_dataframe)
+    # scores_dataframe = compute_tail_separation(expanded_frame, residual_keys)
+    # graph_tail_separations(spec, scores_dataframe=scores_dataframe)
     graph_wavelet(spec, wavelet_dataframe=expanded_frame)
     graph_residual(spec, residual_dataframe=expanded_frame)
     graph_kde(spec, residual_dataframe=expanded_frame)
@@ -149,14 +150,11 @@ def chart_decompositions(features_dataset: Dataset, spec: Spec) -> None:
     print(f"[TRACK] Saved plots to {result_path}")
 
 
-def run_feature_statistics(features_dataset: Dataset, spec: Spec):
-    from negate.io.save import save_features
-
-    json_path = save_features(features_dataset)
-    chart_decompositions(features_dataset=features_dataset, spec=spec)
-    return json_path
-
-
 def run_training_statistics(train_result: TrainResult, timecode: float, spec: Spec):
+    """Generate accuracy and variance plots for training results.\n
+    :param train_result: Container with training metrics.
+    :param timecode: Elapsed time in seconds.
+    :param spec: Specification with plot configuration."""
+
     accuracy(train_result=train_result, timecode=timecode)
     graph_train_variance(train_result=train_result, spec=spec)

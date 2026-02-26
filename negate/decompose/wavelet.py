@@ -16,11 +16,11 @@ from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
 from negate.decompose.residuals import Residual
-from negate.decompose.scaling import patchify_image, tensor_rescale
+from negate.decompose.scaling import patchify_image, tensor_rescale, condense_tensors
 from negate.extract.feature_vae import VAEExtract
 from negate.extract.feature_vit import VITExtract
 from negate.io.config import Spec
-from negate.io.save import save_features
+from negate.train import random_state
 
 """Haar Wavelet processing"""
 
@@ -82,6 +82,7 @@ class WaveletAnalyze(ContextManager):
         self.np_dtype = spec.np_dtype
         self.magnitude_sampling = spec.opt.magnitude_sampling
         self.top_k = spec.opt.top_k
+        self.condense_factor = spec.opt.condense_factor
         print("Please wait...")
 
     @torch.inference_mode()
@@ -99,7 +100,6 @@ class WaveletAnalyze(ContextManager):
         rescaled = tensor_rescale(images, scale, **self.cast_move)
 
         for img in rescaled:
-            vae_results = {}
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
             selected, fourier_max, patch_spectrum = self.select_patch(patched)
 
@@ -112,18 +112,22 @@ class WaveletAnalyze(ContextManager):
 
             residuals = self.residual(selected)
 
-            if self.vae.model is not None:
-                features = self.vae(patch_spectrum)
-                latent_drift = self.vae.latent_drift(selected)
-                perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
-                vae_results = latent_drift | perturbed_drift | features
+            features = self.vae(patch_spectrum)
+            latent_drift = self.vae.latent_drift(selected)
+            perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
 
-            results.append(fourier_max | sim_extrema | residuals | vae_results)
+            condensed_ft = {"features": condense_tensors(features["features"], self.condense_factor, self.top_k)}
+
+            results.append(fourier_max | sim_extrema | residuals | latent_drift | perturbed_drift | condensed_ft)
 
         return {"results": results}
 
     @torch.inference_mode()
     def select_patch(self, img: Tensor) -> tuple[Tensor, dict[str, float | int | Tensor | list[float]], list[Tensor]]:
+        """Select highest Fourier magnitude patches from image.\n
+        :param img: Input tensor image to patchify.
+        :returns: Tuple of (selected patch tensor, metadata dict, spectrum patches).
+        """
         patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)
 
         max_magnitudes: list[float] = []  # fixed type hint
@@ -226,10 +230,18 @@ def wavelet_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     print("Beginning preprocessing.")
+
     kwargs = {}
+    kwargs["disable_nullable"] = spec.opt.disable_nullable
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
+    if spec.opt.load_from_cache_file is False:
+        kwargs["new_fingerprint"] = str(random_state(spec.train_rounds.max_rnd))
+    else:
+        kwargs["load_from_cache_file"] = True
+        kwargs["keep_in_memory"] = True
+        kwargs["new_fingerprint"] = spec.hyper_param.seed
 
     context = WaveletContext(spec)
     with WaveletAnalyze(context) as analyzer:  # type: ignore
@@ -239,5 +251,4 @@ def wavelet_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
             desc="Computing wavelets...",
             **kwargs,
         )
-    save_features(dataset)
     return dataset

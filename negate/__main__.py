@@ -27,21 +27,22 @@ import pandas as pd
 from datasets import Dataset
 
 from negate import (
+    InferContext,
     Spec,
     build_datasets,
+    chart_decompositions,
     classify_gnf_or_syn,
     end_processing,
     generate_dataset,
     grade,
     infer_origin,
     load_config_options,
-    wavelet_preprocessing,
     result_path,
-    run_feature_statistics,
-    run_training_statistics,
-    save_train_result,
     root_folder,
-    InferContext,
+    run_training_statistics,
+    save_features,
+    save_train_result,
+    wavelet_preprocessing,
 )
 from negate.io.config import NegateConfig
 from negate.train import get_time
@@ -95,6 +96,10 @@ def load_spec(model_version: Path = Path("config")) -> Spec:
 
 
 def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # unpack metadata, change individual options
+    """Load configuration from TOML file in results or config folder.\n
+    :param model_version: Subfolder name under results, defaults to 'config'.
+    :returns: Dictionary of loaded configuration values."""
+
     path_conf = root_folder
     if str(model_version) != "config":
         path_result = str(path_conf / "results" / model_version.stem / "config.toml")
@@ -106,6 +111,10 @@ def fetch_spec_data(model_version: Path = Path("config")) -> dict[str, Any]:  # 
 
 
 def load_metadata(model_version: Path) -> dict[str, Any]:
+    """\nLoad serialized training metadata from JSON result file.\n
+    :param model_version: Stem of the model version folder.
+    :returns: Dictionary containing saved metrics and parameters."""
+
     results_path = root_folder / "results" / model_version.stem / f"results_{model_version.stem}.json"
     with open(results_path, "rb") as handle:
         metadata = json.load(handle)
@@ -113,6 +122,12 @@ def load_metadata(model_version: Path) -> dict[str, Any]:
 
 
 def adjust_spec(metadata: dict[str, Any], hyper_param: str | None = None, param_value: int | float | None = None) -> Spec:
+    """Reconstruct spec with optional hyperparameter override.
+    :param metadata: Base configuration dictionary.
+    :param hyper_param: Key name of parameter to modify.
+    :param param_value: New value for the hyperparameter.
+    :returns: Reconstructed specification object.
+    """
     for label in ["model", "vae", "param", "datasets", "library", "rounds", hyper_param]:
         metadata.pop(label)
     config_replacement = NegateConfig(**{str(hyper_param): param_value}, **metadata)
@@ -130,7 +145,8 @@ def pretrain(image_ds: Dataset, spec: Spec) -> Dataset:
     """
     features_ds = wavelet_preprocessing(image_ds, spec=spec)
     end_processing("Pretraining", start_ns)
-    run_feature_statistics(features_ds, spec)
+    save_features(features_ds)
+    chart_decompositions(features_dataset=features_ds, spec=spec)
     return features_ds
 
 
@@ -271,8 +287,9 @@ def main() -> None:
 
             file_image: Path = Path(args.path)
             origin_ds: Dataset = generate_dataset(file_image)
-            ds_feat = wavelet_preprocessing(origin_ds, spec=spec)
-            json_path = run_feature_statistics(ds_feat, spec)
+            features_ds = wavelet_preprocessing(origin_ds, spec=spec)
+            json_path = save_features(features_ds)
+            chart_decompositions(features_dataset=features_ds, spec=spec)
             probabilities = classify_gnf_or_syn(json_path)
             print(origin_ds.description)
             print(probabilities)

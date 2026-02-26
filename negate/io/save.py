@@ -26,7 +26,7 @@ def save_features(features_dataset: Dataset) -> str:
 
     json_path = str(result_path / f"features_{result_path.stem}.json")
     features_dataset.to_pandas()
-    features_dataset.to_json(path_or_buf=json_path, lines=False)
+    features_dataset.to_json(path_or_buf=json_path)
     return json_path
 
 
