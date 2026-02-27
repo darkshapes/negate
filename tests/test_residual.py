@@ -8,9 +8,10 @@ import json
 from PIL import Image
 from tqdm import tqdm
 
-from negate.io.config import Spec
+from negate.io.spec import Spec
+from negate.io.config import timestamp
 from negate.decompose.residuals import Residual
-from negate.train import result_path, timestamp
+from negate.train import result_path
 
 
 def test_residual_processing():
