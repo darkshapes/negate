@@ -167,15 +167,18 @@ def main() -> None:
                 verbose=args.verbose,
             )
 
-            ae_inference = infer_origin(context_ae, dc_feat=True)
-            dc_inference = infer_origin(context_dc, dc_feat=False)
-            if args.label:
-                print(f"For :{'SYN [1]' if args.label == 1 else 'GNE (0)'}")
+            ae_inference = infer_origin(context_ae)
+            dc_inference = infer_origin(context_dc)
 
-            compute_weighted_certainty(
+            inferences = compute_weighted_certainty(
                 ae_inference,
                 dc_inference,
             )
+            if args.label is not None:
+                label = "SYN" if args.label == 1 else "GNE"
+                print(f"For : {label + ' [1]' if args.label == 1 else label + ' (0)'} ")
+                count = sum(1 for item in inferences if label in item[0])
+                print(f"{count} / {len(inferences)} {(count / len(inferences)):.2%}")
 
         case _:
             raise NotImplementedError

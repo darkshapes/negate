@@ -178,39 +178,7 @@ def predict_gne_or_syn(context: InferContext) -> np.ndarray:
     return result
 
 
-def classify_gne_or_syn(context: InferContext, dc_feat: bool = True) -> list[int]:
-    """Returns 0 for GNE-like results, 1 for SYN-like results determined by simple heuristic based on observed patterns:\n
-    :param dataset_feat: Extracted features data
-    :param label: Result evaluation label"""
-    result = {}
-    assert isinstance(context.dataset_feat, Dataset), ValueError("Dataset was not passed to prediction")
-    entries = context.dataset_feat["results"]
-
-    # Collect ground truth from entry if available
-    gt_labels = []
-    heur_pred = []
-
-    for index, entry in enumerate(entries):
-        if dc_feat:
-            score, confidence = weight_syn_feat(entry[0])
-        else:
-            score, confidence = weight_gne_feat(entry[0])
-        class_pred = "SYN" if score > 0 else "GNE"
-        result[str(index)] = {"score": score, "class": class_pred, "confidence": confidence}
-
-        heur_pred.append(1 if class_pred == "SYN" else 0)
-
-        if context.label is not None:
-            gt_labels.append(context.label)  # or however you access ground truth
-
-    if context.label is not None:
-        acc = float(np.mean([p == g for p, g in zip(heur_pred, gt_labels)]))
-        print(f"Heuristic Accuracy: {acc:.2%}")
-    print(result)
-    return heur_pred
-
-
-def infer_origin(context: InferContext, dc_feat: bool) -> dict[str, list[tuple[str, int]]]:
+def infer_origin(context: InferContext) -> dict[str, list[tuple[str, int]]]:
     """Predict synthetic or original for given image.\n
     :param context: Inference context containing spec, model path, and metadata.
     :param file_or_folder_path: Path to the image or folder to be checked.
@@ -225,18 +193,9 @@ def infer_origin(context: InferContext, dc_feat: bool) -> dict[str, list[tuple[s
     model_pred = model_accuracy(model_pred)
     heur_dc_pred = []
     heur_ae_pred = []
-    # heur_dc_pred = classify_gne_or_syn(context=context, dc_feat=True)
-    heur_ae_pred = classify_gne_or_syn(context=context, dc_feat=dc_feat)
-
-    if context.verbose:
-        print(f"""          Decision Tree Model result: {model_pred}
-            SYN Probability (DC VAE): {heur_dc_pred}
-            GNE Probability (AE VAE): {heur_ae_pred}""")
-    return {"unk": model_pred, "syn": heur_dc_pred, "gne": heur_ae_pred}
-
-    # for entry in context.dataset_feat["results"]:
-    #     heur_dc_pred.append(weight_gne_feat(entry[0]))
-    #     heur_ae_pred.append(weight_syn_feat(entry[0]))
+    for entry in context.dataset_feat["results"]:
+        heur_dc_pred.append(weight_gne_feat(entry[0]))
+        heur_ae_pred.append(weight_syn_feat(entry[0]))
 
     if context.verbose:
         print(f"""          Decision Tree Model result: {model_pred}
