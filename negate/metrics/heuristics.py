@@ -144,10 +144,10 @@ def compute_weighted_certainty(
     ae_inference: dict[str, list[float]],
     dc_inference: dict[str, list[float]],
     label: int | None = None,
-    ae_min=0.02,
-    ae_max=0.95,
-    dc_min=0.19,
-    dc_max=0.80,
+    ae_low_thresh: float = 0.4,
+    ae_high_thresh: float = 0.5,
+    dc_low_thresh: float = 0.42,
+    dc_high_thresh: float = 0.5,
 ) -> np.ndarray:
     """
     Compute certainty scores by combining all available inference methods.\n
@@ -163,20 +163,8 @@ def compute_weighted_certainty(
         print(f"For : {header} ")
 
     predictions = [
-        {
-            "raw_pred": ae_inference["pred"],
-            "thresh": (0.4, 0.5),
-            "norm": (0.02, 0.90),
-            "norm_pred": None,
-            "result": [],
-        },
-        {
-            "raw_pred": dc_inference["pred"],
-            "thresh": (0.42, 0.5),
-            "norm": (0.15, 0.80),
-            "norm_pred": None,
-            "result": [],
-        },
+        {"raw_pred": ae_inference["pred"], "thresh": (ae_low_thresh, ae_high_thresh), "norm": (0.02, 0.90), "norm_pred": None, "result": []},
+        {"raw_pred": dc_inference["pred"], "thresh": (dc_low_thresh, dc_high_thresh), "norm": (0.15, 0.80), "norm_pred": None, "result": []},
     ]
 
     for index in range(len(predictions)):
@@ -184,14 +172,7 @@ def compute_weighted_certainty(
         predictions[index]["norm_pred"] = predictions[index]["norm_pred"].tolist()
         for image, num in enumerate(predictions[index]["norm_pred"]):
             origin = predictor(num, *predictions[index]["thresh"])
-            predictions[index]["result"].append(
-                {
-                    "index": "ae" if index == 1 else "dc",
-                    "img": image,
-                    "num": num,
-                    "origin": origin,
-                }
-            )
+            predictions[index]["result"].append({"index": "ae" if index == 1 else "dc", "img": image, "num": num, "origin": origin})
 
     result_format = lambda x: f"{x['index']} :{x['origin']} img:{x['img']} " + f"{x['num']:.2%}"
     final_result = []
@@ -225,11 +206,3 @@ def compute_weighted_certainty(
 
     pprint(final_result)
     return model_pred
-
-    # if isclose(pct, low_thresh, rel_tol=0.3):
-    #     confidence = low_thresh - pct
-    # else:
-    #     confidence = pct - high_thresh
-    # {confidence:.2%}
-    # low_thresh = predictions[index]["thresh"][0]
-    # high_thresh = predictions[index]["thresh"][1]
