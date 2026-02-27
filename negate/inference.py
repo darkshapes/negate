@@ -17,7 +17,7 @@ from negate.extract.feature_vae import VAEExtract
 from negate.io.config import random_state
 from negate.io.datasets import generate_dataset, prepare_dataset
 from negate.io.spec import Spec
-from negate.metrics.heuristics import weight_gne_feat, weight_syn_feat
+from negate.metrics.heuristics import model_accuracy, weight_gne_feat, weight_syn_feat
 
 
 @dataclass
@@ -166,7 +166,7 @@ def preprocessing(dataset: Dataset, spec: Spec, inference=False) -> Dataset:
     return dataset
 
 
-def predict_gne_or_syn(context: InferContext) -> list[int]:
+def predict_gne_or_syn(context: InferContext) -> np.ndarray:
     """Returns 0 for GNE-like results, 1 for SYN-like results determined by decision tree model trained on dataset:\n
     :param data_path: Path to json file with saved parameter data"""
     spec = context.spec
@@ -175,14 +175,7 @@ def predict_gne_or_syn(context: InferContext) -> list[int]:
     features_matrix = prepare_dataset(context.dataset_feat, spec)
     parameters = asdict(spec.hyper_param) | {"scale_pos_weight": context.train_metadata["scale_pos_weight"]}
     result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
-
-    thresh = 0.5
-    model_pred = (result > thresh).astype(int)
-    if context.label is not None:
-        ground_truth = np.full(model_pred.shape, context.label, dtype=int)
-        acc = float(np.mean(model_pred == ground_truth))
-        print(f"Model Accuracy: {acc:.2%}")
-    return [int(x) for x in model_pred]
+    return result
 
 
 def classify_gne_or_syn(context: InferContext, dc_feat: bool = True) -> list[int]:
@@ -213,10 +206,11 @@ def classify_gne_or_syn(context: InferContext, dc_feat: bool = True) -> list[int
     if context.label is not None:
         acc = float(np.mean([p == g for p, g in zip(heur_pred, gt_labels)]))
         print(f"Heuristic Accuracy: {acc:.2%}")
+    print(result)
     return heur_pred
 
 
-def infer_origin(context: InferContext) -> dict[str, np.ndarray | list[int]]:
+def infer_origin(context: InferContext, dc_feat: bool) -> dict[str, list[tuple[str, int]]]:
     """Predict synthetic or original for given image.\n
     :param context: Inference context containing spec, model path, and metadata.
     :param file_or_folder_path: Path to the image or folder to be checked.
@@ -228,8 +222,21 @@ def infer_origin(context: InferContext) -> dict[str, np.ndarray | list[int]]:
         origin_ds: Dataset = generate_dataset(context.file_or_folder_path)
         context.dataset_feat = preprocessing(origin_ds, context.spec)
     model_pred = predict_gne_or_syn(context=context)
-    heur_dc_pred = classify_gne_or_syn(context=context, dc_feat=True)
-    heur_ae_pred = classify_gne_or_syn(context=context, dc_feat=False)
+    model_pred = model_accuracy(model_pred)
+    heur_dc_pred = []
+    heur_ae_pred = []
+    # heur_dc_pred = classify_gne_or_syn(context=context, dc_feat=True)
+    heur_ae_pred = classify_gne_or_syn(context=context, dc_feat=dc_feat)
+
+    if context.verbose:
+        print(f"""          Decision Tree Model result: {model_pred}
+            SYN Probability (DC VAE): {heur_dc_pred}
+            GNE Probability (AE VAE): {heur_ae_pred}""")
+    return {"unk": model_pred, "syn": heur_dc_pred, "gne": heur_ae_pred}
+
+    # for entry in context.dataset_feat["results"]:
+    #     heur_dc_pred.append(weight_gne_feat(entry[0]))
+    #     heur_ae_pred.append(weight_syn_feat(entry[0]))
 
     if context.verbose:
         print(f"""          Decision Tree Model result: {model_pred}

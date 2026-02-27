@@ -24,21 +24,20 @@ from sys import argv
 from negate import (
     InferContext,
     Spec,
-    load_spec,
     build_train_call,
     chart_decompositions,
-    compute_combined_certainty,
     compute_weighted_certainty,
     end_processing,
     infer_origin,
+    load_metadata,
+    load_spec,
     pretrain,
     root_folder,
-    training_loop,
-    load_metadata,
     run_training_statistics,
     save_features,
     save_train_result,
     train_model,
+    training_loop,
 )
 
 start_ns = timer_module.perf_counter()
@@ -98,12 +97,14 @@ def main() -> None:
                 "-m",
                 "--model",
                 choices=list_model,
-                default=["20260225_185933", "20260225_221149"],
+                default=[
+                    "20260225_185933",  # FLUX-AE
+                    "20260225_221149",  # DC-AE
+                ],
             )
     else:
         list_model = None
         infer_parser.add_argument("-m", "--model", choices=None, default=None)
-    infer_parser.add_argument("-u", "--unweighted", action="store_true", help="Disable weighted result calculation")
     infer_parser.add_argument("-v", "--verbose", action="store_true", help="Verbose console output")
 
     label_grp = infer_parser.add_mutually_exclusive_group()
@@ -166,18 +167,15 @@ def main() -> None:
                 verbose=args.verbose,
             )
 
-            ae_inference = infer_origin(context_ae)
-            dc_inference = infer_origin(context_dc)
+            ae_inference = infer_origin(context_ae, dc_feat=True)
+            dc_inference = infer_origin(context_dc, dc_feat=False)
+            if args.label:
+                print(f"For :{'SYN [1]' if args.label == 1 else 'GNE (0)'}")
 
-            if args.weighted:
-                compute_weighted_certainty(
-                    ae_inference,
-                    dc_inference,
-                    heuristic_weight=2.0,  # Heuristics are ~100% accurate
-                    model_weight=1.0,  # Models are ~50-70%
-                )
-            else:
-                compute_combined_certainty(ae_inference, dc_inference)
+            compute_weighted_certainty(
+                ae_inference,
+                dc_inference,
+            )
 
         case _:
             raise NotImplementedError
