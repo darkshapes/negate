@@ -20,16 +20,25 @@ Classes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
 import tomllib
+from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Iterator, NamedTuple
 
 import numpy as np
 import torch
+from numpy.random import default_rng
 
 root_folder = Path(__file__).parent.parent.parent
+get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
+datestamped_folder = Path("models", get_time())
+model_path = root_folder / "models"
+rng = default_rng(1)
+random_state = lambda x: int(np.round(rng.random() * x))
+timestamp = get_time()
+result_path = root_folder / "results" / timestamp
 
 
 class NegateTrainRounds(NamedTuple):
@@ -282,50 +291,3 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
 
 
 negate_options, hyperparam_config, data_paths, model_config, chip, train_rounds = load_config_options()
-
-
-class Spec:
-    """Main specification container aggregating all configuration objects.
-
-    This class serves as the central access point for all package configuration,
-    combining settings from NegateConfig, NegateHyperParam, NegateDataPaths,
-    and hardware detection via Chip. It is typically instantiated once at
-    application startup.
-
-    Attributes:
-        opt: Core runtime configuration (batch size, VAE options).
-        hyper_param: Training hyperparameters.
-        data_paths: Dataset directory paths.
-        model_config: Model registry for vision transformers and VAEs.
-        chip: Hardware abstraction layer.
-
-    Example:
-        >>> spec = Spec()
-        >>> print(f"Using device: {spec.chip.device}")
-        Using device: cuda
-    """
-
-    def __init__(
-        self,
-        negate_options=negate_options,
-        hyperparam_config=hyperparam_config,
-        data_paths=data_paths,
-        model_config=model_config,
-        chip=chip,
-        train_rounds=train_rounds,
-    ) -> None:
-        """Initialize specification container with loaded configuration."""
-
-        self.data_paths: NegateDataPaths = data_paths
-        self.device: torch.device = chip.device
-        self.dtype: torch.dtype = chip.dtype
-        self.apply: dict[str, torch.device | torch.dtype] = {"device": self.device, "dtype": self.dtype}
-        self.np_dtype: np.typing.DTypeLike = chip.np_dtype
-        self.hyper_param: NegateHyperParam = hyperparam_config
-        self.train_rounds: NegateTrainRounds = train_rounds
-        self.models: list[str] = [repo for repo in model_config.list_models]
-        self.model = model_config.auto_model[0]
-        self.vae = model_config.auto_vae
-        self.opt: NegateConfig = negate_options
-        self.data = data_paths
-        self.model_config = model_config

@@ -3,27 +3,30 @@
 
 import json
 
+
 import numpy as np
 import pandas as pd
 from datasets import Dataset
+
 from scipy.stats import iqr
 from sklearn.metrics import accuracy_score, classification_report, f1_score, roc_auc_score
 
-from negate.io.config import Spec
+
+from negate.io.config import timestamp
+from negate.io.spec import Spec, TrainResult
 from negate.metrics.plot import (
     graph_cohen,
     graph_kde,
     graph_residual,
-    graph_tail_separations,
+    graph_tail_separations,  # noqa TODO: just not all that useful?
+    graph_train_variance,
     graph_vae_loss,
     graph_wavelet,
     residual_keys,
     result_path,
     vae_loss_keys,
     wavelet_keys,
-    graph_train_variance,
 )
-from negate.train import TrainResult, timestamp
 
 
 def accuracy(train_result: TrainResult, timecode: float):

@@ -13,8 +13,8 @@ from PIL import Image
 from numpy.typing import NDArray
 from sklearn.metrics import confusion_matrix
 
-from negate.io.config import Spec, root_folder
-from negate.train import result_path, timestamp, TrainResult
+from negate.io.spec import Spec, root_folder, TrainResult
+from negate.io.config import result_path, timestamp
 
 plot_file = "plot_xp_data.json"
 
@@ -313,7 +313,6 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
     ax_conf = axes[0, 2]
     ax_orig = axes[1, 0]
     ax_pca = axes[1, 1]
-    ax_heat = axes[1, 2]
 
     ax_cum.plot(np.cumsum(pca.explained_variance_ratio_), color="aqua")  # 1. Cumulative explained variance
     ax_cum.set_xlabel("Number of Components")
@@ -336,7 +335,7 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
     ax_conf.set_yticks(np.arange(cm.shape[0]))
     ax_conf.set_xticklabels(["Real", "Synthetic"])
     ax_conf.set_yticklabels(["Real", "Synthetic"])
-    plt.setp(ax_conf.get_xticklabels(), rotation=45, ha="right")
+    plt.setp(ax_conf.get_xticklabels(), rotation=45, ha="right")  # not a typo
     for i in range(cm.shape[0]):
         for j in range(cm.shape[1]):
             ax_conf.text(j, i, cm[i, j], ha="center", va="center", color="black")
@@ -361,27 +360,6 @@ def graph_train_variance(train_result: TrainResult, spec: Spec) -> None:
         ax_pca.set_ylabel("Principal Component 2")
 
     ax_pca.set_title("PCA Transformed Data")
-    # ax_pca.colorbar(label="Prediction")
-
-    # corr = np.corrcoef(X_train_pca, rowvar=False)  # 6. Correlation heatmap
-    # upper_triangle_mask = np.triu(np.ones_like(corr, dtype=bool))
-    # lower_triangle = corr[np.tril_indices_from(corr, k=-1)]
-    # vmin = lower_triangle.min()
-    # vmax = lower_triangle.max()
-    # cmap = sns.diverging_palette(20, 230, as_cmap=True)
-    # sns.heatmap(
-    #     corr,
-    #     mask=upper_triangle_mask,
-    #     cmap=cmap,
-    #     vmin=vmin,
-    #     vmax=vmax,
-    #     center=0,
-    #     square=True,
-    #     linewidths=0.5,
-    #     cbar_kws={"shrink": 0.5},
-    #     ax=ax_heat,
-    # )
-    # ax_heat.set_title(f"Feature Correlation Heatmap (PCA Components)\nRange: [{vmin:.3e}, {vmax:.3e}]")
 
     plt.tight_layout(pad=0.5)
     combined_name = spec.vae[0] if isinstance(spec.vae, list) else spec.vae

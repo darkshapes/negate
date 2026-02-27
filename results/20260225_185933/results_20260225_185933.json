@@ -1,0 +1,21 @@
+{
+    "accuracy": "0.643609022556391",
+    "best_iter": "76",
+    "best_score": "0.8524509549390854",
+    "cumulative:": "[0.88176782 0.95739812]",
+    "explained_var": "0.9573981185051489",
+    "f1_macro": "0.6130075431669515",
+    "f1_weighted": "0.6604643828618042",
+    "feature_shape": "(6646, 26)",
+    "imbalance_ratio": "0.3929993712010061",
+    "label_dist": "{'real': 1875, 'synthetic': 4771, 'real_pct': np.float64(28.212458621727354), 'synthetic_pct': np.float64(71.78754137827265)}",
+    "labels_shape": "(6646,)",
+    "n_components": "2",
+    "original_dim": "26",
+    "pca_dim": "2",
+    "roc_auc": "0.715473647469459",
+    "scale_pos_weight": "0.39308176100628933",
+    "seed": "2198257139",
+    "time_elapsed": "3033.3796018339926",
+    "timestamp": "20260225_185933"
+}

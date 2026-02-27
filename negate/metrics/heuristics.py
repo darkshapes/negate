@@ -1,254 +1,208 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
-import json
-import pickle
-from dataclasses import asdict
-from pathlib import Path
+
+
+from pprint import pprint
+
 from typing import Any
-from dataclasses import dataclass
-
 import numpy as np
-import onnxruntime as ort
-from datasets import Dataset
-from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
-from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
-
-from negate.io.config import Spec
-from negate.train import prepare_dataset
 
 
-@dataclass
-class InferContext:
-    """Container for inference dependencies."""
-
-    spec: Spec
-    model_version: Path
-    train_metadata: dict
-    label: bool | None = None
-
-    def __post_init__(self) -> None:
-        if not self.model_version.exists():
-            raise FileNotFoundError(f"Model directory not found: {self.model_version}")
-        metadata_path = self.model_version / "metadata.json"
-        if self.train_metadata is None and metadata_path.exists():
-            import json
-
-            with open(metadata_path) as f:
-                self.train_metadata = json.load(f)
+# Heuristics are not in use, but left for reference example
+# These ended up not working as effectively as the decision tree
 
 
-def weigh_bce(entry):
-    bce_threshold = -80  # SYN has very negative bce_loss (< -80 typically)
-    ff_threshold = 0.0  # SYN tends to be higher in mean ff magnitude
-    min_base_threshold = 100
+def weight_dc_gne(entry: dict[str, Any]) -> float:
+    """Use DC metrics for the classification of GNE origin
+    :param entry: Image features and associated metadata used for classification.
 
-    bce_loss = entry["results"][0]["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
-    image_mean_ff = entry["results"][0]["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
-    min_base = entry["results"][0]["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
-    score = 0
-    confidence = 1
+    only applies to 20260225_221149:
+    dc-ae-f32c32-sana-1.1-diffusers, timm/vit-base dino v3 lvd
+    dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5
+    """
+    max_warp: float = entry["max_warp"]  # max_warp larger than 0.4 but less than 0.6 predominantly GNE
+    diff_tc: list = entry["diff_tc"]  # type: ignore diff_tc less than 20 largely GNE
+    max_base = entry["max_base"]  # higher than 10300 is GNE
+    laplace_mean: list = entry["laplace_mean"]  # more than 4.3 strong indicator of GNE
 
-    if bce_loss is not None:
-        if bce_loss < -150 or (-15 < bce_loss < -5):
-            score += 1  # More likely SYN
-        if bce_loss > -20 or bce_loss < -170:
-            score += 1
-        if bce_threshold < bce_loss < -50 and min_base_threshold < min_base < 1400:
-            score -= 1
-        confidence += 1
+    total = [0.66, 0.66, 0.66, 0.66]
+    score = []
 
-    if image_mean_ff > ff_threshold:
-        score += 1
-    elif bce_loss is not None and -100 > bce_loss > -50:
-        score -= 1  # More likely GNE
+    if 0.4 < max_warp < 0.6:
+        score.append(0)
 
-    if min_base is not None:
-        if min_base_threshold <= min_base <= 1350:
-            score -= 1  # More likely GNE (tighter cluster)
-        if min_base > 4000 or min_base < 200:
-            score += 1
-        confidence += 1
-    return score, confidence
+    if any(x < 20 for x in diff_tc):
+        score.append(1)
+
+    if max_base > 10300:
+        score.append(2)
+
+    if any(x > 7 for x in laplace_mean):
+        score.append(3)
+
+    probability = np.sum([total[x] for x in score])
+    return probability if probability.item() > 0 else 0
 
 
-def weigh_v2(entry):
-    # flux2 klein fp16, timm/vit-base dino v3 lvd
-    #  dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5                  # strength of perturbation Default 0.5)
+def weight_ae_gne(entry: dict[str, Any]) -> float:
+    """Use AE metrics for the classification of image origin
+    :param entry: Image features and associated metadata used for classification.
 
+    only applies to 20260225_185933:
+    flux2 klein fp16, timm/vit-base dino v3 lvd\n
+    dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5
+    """
     laplace = entry["laplace_mean"]  # Above ~4.2-4.3 for GNE
     sobel = entry["sobel_mean"]  # Below 4 for GNE
     max_ff_mag = entry["max_fourier_magnitude"]  # Above 1500 for GNE
-    bce_loss = entry["bce_loss"]  # bce_los GNE around -50 -60 is more likely to be GNE)
+    bce_loss = entry["bce_loss"]  # bce_los around -50 -60 is more likely to be GNE)
+    perturbed_bce_loss = entry["perturbed_bce_loss"]  # bce_los around -50 -60 is more likely to be GNE)
 
-    score = 2
-    confidence = 0
-    if laplace is not None and any(x > 4.2 for x in laplace):
-        confidence += 1
-        score -= 1
+    image_mean = entry["image_mean"]
 
-    if sobel is not None and any(x < 4 for x in sobel):
-        confidence += 1
-        score -= 1
+    laplace_metric = lambda x: any(x > 4.25 for x in laplace)
+    mean_metric = lambda x: any(y >= 5 for y in x)
+    bce_metric = lambda x: 40 < abs(x) < 60
+    max_ff_metric = lambda x: x >= 150000
+    sobel_metric = lambda x: any(y < 4 for y in x)
 
-    if max_ff_mag is not None and max_ff_mag > 1500:
-        confidence += 1
-        score -= 1
+    total = [0.8, 0.66, 0.7, 0.66, 0.66]
+    score = []
 
-    if -50 > bce_loss > -60:
-        confidence += 1
-        score += 0.6
+    if laplace_metric(laplace):
+        score.append(0)
 
-    return score, confidence
+    if sobel_metric(sobel):
+        score.append(1)
 
+    if max_ff_metric(max_ff_mag):
+        score.append(2)
 
-def classify_gnf_or_syn(dataset: Dataset, label: int) -> list[int]:
-    """Returns 0 for GNE-like results, 1 for SYN-like results determined by simple heuristic based on observed patterns:\n
-    :param data_path: Path to json file with saved parameter data"""
+    if bce_metric(bce_loss) and bce_metric(perturbed_bce_loss):
+        score.append(3)
 
-    result = {}
-    entries = dataset["results"]
+    if mean_metric(image_mean):
+        score.append(4)
 
-    # Collect ground truth from entry if available
-    gt_labels = []
-    predictions = []
-
-    for index, entry in enumerate(entries):
-        score, confidence = weigh_v2(entry[0])
-        class_pred = "SYN" if score > 0 else "GNE"
-        result[str(index)] = {"score": score, "class": class_pred, "confidence": confidence}
-
-        predictions.append(1 if class_pred == "SYN" else 0)
-
-        if label is not None:
-            gt_labels.append(label)  # or however you access ground truth
-
-    if label is not None:
-        acc = float(np.mean([p == g for p, g in zip(predictions, gt_labels)]))
-        print(f"Accuracy: {acc:.2%}")
-    print(predictions)
-    return predictions
+    probability = np.sum([total[x] for x in score])
+    return probability if probability.item() > 0 else 0
 
 
-def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
-    """Run inference using XGBoost with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
-
-    import xgboost as xgb
-
-    model_file_path_named = model_version / "negate.ubj"
-
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
-
-    pca_file_path_named = model_version / "negate_pca.pkl"
-    with open(pca_file_path_named, "rb") as pca_file:
-        pca = pickle.load(pca_file)
-
-    features_pca = pca.transform(features_dataset)
-
-    model = xgb.Booster(params=parameters)
-    model.load_model(model_file_path_named)
-
-    result = model.predict(xgb.DMatrix(features_pca))
+def heuristic_accuracy(result, dc=True):
+    """Calculate accuracy for heuristic evaluation runs"""
+    gt_labels = (
+        [
+            1,
+        ]
+        * len(result)
+        if dc
+        else [
+            0,
+        ]
+        * len(result)
+    )
+    acc = float(np.mean([p == g for p, g in zip(result, gt_labels)]))
+    print(f"Heuristic Accuracy: {acc:.2%}")
     return result
 
 
-def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
-    """Run inference using ONNX Runtime with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
-
-    model_file_path_named = model_version / "negate.onnx"
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
-
-    features_dataset = features_dataset.astype(np.float32)
-    pca_file_path_named = model_version / "negate_pca.onnx"
-    session_pca = ort.InferenceSession(pca_file_path_named)
-    input_name_pca = session_pca.get_inputs()[0].name
-    features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
-
-    input_name = ort.get_available_providers()[0]
-    features_model = features_pca.astype(np.float32)
-
-    session = ort.InferenceSession(model_file_path_named)
-    print(f"Model '{model_file_path_named}' loaded.")
-    input_name = session.get_inputs()[0].name
-    inputs = {input_name: features_dataset.astype(np.float32)}
-    try:
-        result: ort.SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
-        print(result)
-    except (InvalidArgument, ONNXRuntimeError) as error_log:
-        import sys
-
-        print(error_log)
-        sys.exit()
-
-    # session_pca = ort.InferenceSession(pca_file_path_named)
-    # input_name_pca = session_pca.get_inputs()[0].name
-    # features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
-
-    # input_name = ort.get_available_providers()[0]
-    # pca_file_path_named = model_version / "negate_pca.pkl"
-    # with open(pca_file_path_named, "rb") as pca_file:
-    #     pca = pickle.load(pca_file)
-
-    # features_pca = pca.transform(features_dataset)
-    # features_model = features_pca.astype(np.float32)  # type: ignore
-    # session_pca = ort.InferenceSession("negate_pca.onnx")
-    # input_name_pca = session_pca.get_inputs()[0].name
-    # features_pca = session_pca.run(None, {input_name_pca: np.array(features_dataset).astype(np.float32)})[0]
-
-    # input_name = ort.get_available_providers()[0]
-    # inputs = {input_name: features_dataset.astype(np.float32)}
-
-    # session = ort.InferenceSession(model_file_path_named)
-    # print(f"Model '{model_file_path_named}' loaded.")
-    # return session.run(None, inputs)[0]
-
-    # session = ort.InferenceSession(model_file_path_named)
-    # print(f"Model '{model_file_path_named}' loaded.")
-    # input_name = session.get_inputs()[0].name
-    # try:
-    #     result = session.run(None, {input_name: features_model})[0]  # type: ignore
-    #     print(result)
-    #     return result
-    # except (InvalidArgument, ONNXRuntimeError) as error_log:
-    #     import sys
-
-    #     print(error_log)
-    #     sys.exit()
-
-
-def infer_origin(context: InferContext, features_dataset: Dataset | None = None) -> np.ndarray:
-    """Predict synthetic or original for given image.\n
-    :param context: Inference context containing spec, model path, and metadata.
-    :param features_dataset: Optional dataset. If not provided, will be computed from input in context.
-    :return: Prediction arrays (0=genuine, 1=synthetic)."""
-
-    if features_dataset is None:  # Support lazy loading of features if not provided
-        raise ValueError("features_dataset must be provided or infer_origin called with full context")
-
-    spec = context.spec
-    model_version = context.model_version
-
-    features_matrix = prepare_dataset(features_dataset, spec)
-    parameters = asdict(spec.hyper_param) | {"scale_pos_weight": context.train_metadata["scale_pos_weight"]}
-    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
+def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float = 0.5) -> list[tuple[str, int]]:
+    """Convert probability array to tuple format (label, confidence)."""
 
     thresh = 0.5
-    predictions = (result > thresh).astype(int)
-    if context.label is not None:
-        ground_truth = np.full(predictions.shape, context.label, dtype=int)
-        acc = float(np.mean(predictions == ground_truth))
-        print(f"Accuracy: {acc:.2%}")
-    print(result)
-    print(predictions)
-    return predictions
+    model_pred = (result > thresh).astype(int)
+    if label is not None:
+        ground_truth = np.full(model_pred.shape, label, dtype=int)
+        acc = float(np.mean(model_pred == ground_truth))
+        print(f"Model Accuracy: {acc:.2%}")
+
+    type_conf = []
+    for x in result:
+        prob = float(x)
+        conf = round((1 - prob) * 100) if prob < thresh else round(prob * 100)
+        label_out = "GNE" if prob < thresh else "SYN"
+        type_conf.append((label_out, conf))
+    return type_conf
+
+    """Map data from [in_min, in_max] to [out_min, out_max]."""
+
+
+def normalize_to_range(
+    data: list[float] | np.ndarray,
+    in_min: float,
+    in_max: float,
+    out_min: float = 0.01,
+    out_max: float = 1.0,
+) -> np.ndarray:
+    """Normalize data to [out_min, out_max] range."""
+    if not isinstance(data, np.ndarray):
+        data = np.asarray(data)
+    return out_min + (data - in_min) * (out_max - out_min) / (in_max - in_min)
+
+
+def compute_weighted_certainty(
+    ae_inference: dict[str, list[float]],
+    dc_inference: dict[str, list[float]],
+    label: int | None = None,
+    ae_low_thresh: float = 0.4,
+    ae_high_thresh: float = 0.5,
+    dc_low_thresh: float = 0.42,
+    dc_high_thresh: float = 0.5,
+) -> np.ndarray:
+    """
+    Compute certainty scores by combining all available inference methods.\n
+    Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.
+    """
+
+    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "?"
+    if label is not None:
+        if label == 1:
+            header = "SYN [1]"
+        else:
+            header = "GNE (0)"
+        print(f"For : {header} ")
+
+    predictions = [
+        {"raw_pred": ae_inference["pred"], "thresh": (ae_low_thresh, ae_high_thresh), "norm": (0.02, 0.90), "norm_pred": None, "result": []},
+        {"raw_pred": dc_inference["pred"], "thresh": (dc_low_thresh, dc_high_thresh), "norm": (0.15, 0.80), "norm_pred": None, "result": []},
+    ]
+
+    for index in range(len(predictions)):
+        predictions[index]["norm_pred"] = normalize_to_range(predictions[index]["raw_pred"], *predictions[index]["norm"])
+        predictions[index]["norm_pred"] = predictions[index]["norm_pred"].tolist()
+        for image, num in enumerate(predictions[index]["norm_pred"]):
+            origin = predictor(num, *predictions[index]["thresh"])
+            predictions[index]["result"].append({"index": "ae" if index == 1 else "dc", "img": image, "num": num, "origin": origin})
+
+    result_format = lambda x: f"{x['index']} :{x['origin']} img:{x['img']} " + f"{x['num']:.2%}"
+    final_result = []
+    final_numeric = []
+
+    for index, result in enumerate(predictions[0]["result"]):
+        if predictions[1]["result"][index]["origin"] == result["origin"]:
+            most_certain = result
+        else:
+            low_amount_ae = (predictions[0]["thresh"][0] - result["num"]), result
+            high_amount_ae = (result["num"] - predictions[0]["thresh"][1]), result
+            low_amount_dc = (predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"]), predictions[1]["result"][1]
+            high_amount_dc = (predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1]), predictions[1]["result"][1]
+            most_certain = max(
+                max(low_amount_ae, high_amount_ae, key=lambda x: x[0]),
+                max(low_amount_dc, high_amount_dc, key=lambda x: x[0]),
+                key=lambda x: x[0],
+            )[1]
+
+        final_numeric.append(most_certain)
+        output = result_format(most_certain)
+        spacer = " " * (16 - len(output))
+        final_result.append(output + spacer)
+
+    thresh = 0.5
+    model_pred = (np.array([x["num"] for x in final_numeric]) > thresh).astype(int)
+    if label is not None:
+        ground_truth = np.full(model_pred.shape, label, dtype=int)
+        acc = float(np.mean(model_pred == ground_truth))
+        print(f"Model Accuracy: {acc:.2%}")
+
+    pprint(final_result)
+    return model_pred

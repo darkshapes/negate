@@ -6,7 +6,7 @@ from __future__ import annotations
 import torch
 from torch import Tensor
 
-from negate.io.config import Spec
+from negate.io.spec import Spec
 
 
 class VITExtract:
@@ -26,15 +26,13 @@ class VITExtract:
         >>> list(features["sensitivity])
     """
 
-    def __init__(self, spec: Spec) -> None:
+    def __init__(self, spec: Spec, verbose: bool) -> None:
         """Initialize analyzer with configuration.\n"""
-
-        self.model_name = spec.model
-        self.dtype = spec.dtype
-        self.device = spec.device
-        print(f"Initializing VIT on {spec.device}...")
-        self.cast_move = spec.apply
-        self.library = spec.model_config.library_for_model(self.model_name)
+        self.spec = spec
+        if verbose:
+            print(f"Initializing VIT {self.spec.model} on {self.spec.device}...")
+        self.library = spec.model_config.library_for_model(self.spec.model)
+        self.cast_move = self.spec.apply
         self._set_models()
 
     @torch.inference_mode()
@@ -44,32 +42,32 @@ class VITExtract:
             case "timm":
                 import timm
 
-                self.model = timm.create_model(self.model_name, pretrained=True, features_only=True).to(**self.cast_move)  # type: ignore
+                self.model = timm.create_model(self.spec.model, pretrained=True, features_only=True).to(**self.cast_move)  # type: ignore
                 data_config = timm.data.resolve_model_data_config(self.model)  # type: ignore
                 self.transforms = timm.data.create_transform(**data_config, is_training=False)  # type: ignore
             case "openclip":
                 import open_clip
 
-                precision = "f32" if self.dtype is torch.float32 else "bf16" if self.dtype is torch.bfloat16 else "f16"
+                precision = "f32" if self.spec.dtype is torch.float32 else "bf16" if self.spec.dtype is torch.bfloat16 else "f16"
 
                 self.model, _, self.preprocess = open_clip.create_model_and_transforms(
-                    self.model_name,
-                    device=self.device,
+                    self.spec.model,
+                    device=self.spec.device,
                     precision=precision,
                 )
             case "transformers":
                 from transformers import AutoModel
 
                 self.model = AutoModel.from_pretrained(
-                    self.model_name,
-                    dtype=self.dtype,
+                    self.spec.model,
+                    dtype=self.spec.dtype,
                     trust_remote_code=True,
                 )
             case _:
                 error = f"{self.library} : Unsupported library"
                 raise NotImplementedError(error)
 
-        self.model = self.model.eval().to(**self.cast_move)  # type: ignore
+        self.model = self.model.eval().to(**self.spec.apply)  # type: ignore
 
     @torch.inference_mode()
     def __call__(self, image: Tensor | list[Tensor]) -> Tensor | list[Tensor]:
@@ -107,12 +105,12 @@ class VITExtract:
 
         import gc
 
-        if self.device.type != "cpu":
-            gpu: torch.device = self.device
+        if self.spec.device.type != "cpu":
+            gpu: torch.device = self.spec.device
             gpu.empty_cache()  # type: ignore
             del gpu
         del self.model
-        del self.device
+        del self.spec.device
         gc.collect()
 
     def __enter__(self) -> VITExtract:

@@ -28,10 +28,8 @@ from torch import Tensor
 from torch.nn import BCELoss, KLDivLoss, L1Loss, MSELoss
 from torch.nn import functional as F
 
-from negate.io.config import Spec
-from negate.io.save import save_features
+from negate.io.spec import Spec
 from negate.decompose.scaling import crop_select
-from negate.train import random_state
 
 
 class VAEExtract:
@@ -55,18 +53,17 @@ class VAEExtract:
         >>> print(features['features'])
     """
 
-    def __init__(self, spec: Spec) -> None:
+    def __init__(self, spec: Spec, verbose: bool) -> None:
         """Initialize the VAE extractor with configuration.\n
         :param spec: Specification container with model config and hardware settings.\n
         :raises RuntimeError: If diffusers package is not installed.
         :raises ImportError: If required VAE library cannot be imported.
         """
         self.spec = spec
-
-        self.device = spec.device
-        print(f"Initializing VAE on {spec.device}...")
-        self.dtype = spec.dtype
         self.model, self.library = spec.vae or spec.model_config.auto_vae
+        self.verbose = verbose
+        if verbose:
+            print(f"Initializing VAE {self.model} on {self.spec.device}...")
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
         self.kl_div = KLDivLoss(log_target=True, reduction="batchmean")
@@ -80,6 +77,30 @@ class VAEExtract:
                 T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
             ]
         )
+
+    @torch.inference_mode()
+    def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, list[Tensor]]:
+        """Extract VAE features from a batch of images then use spectral contrast as divergence metric
+        :param tensor: 4D image tensor
+        :return: Dictionary with 'features' list."""
+        import torch
+
+        features_list = []
+        if not isinstance(tensor, list):
+            tensor = [tensor]
+        if not tensor:
+            raise RuntimeError("VAE received an empty tensor list.")
+
+        features_latent = torch.stack(tensor).to(self.spec.device, self.spec.dtype)
+
+        with torch.no_grad():
+            if "AutoencoderDC" in self.library:
+                features = self._extract_special(features_latent)
+            else:
+                features = self.vae.encode(features_latent).latent_dist.sample()
+            features_list.append(features)
+
+        return {"features": features_list}
 
     def create_vae(self):
         """Download and load the VAE from the model repo."""
@@ -99,15 +120,26 @@ class VAEExtract:
 
         autoencoder_cls = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
         try:
-            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.dtype, local_files_only=True).to(self.device)  # type: ignore
+            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
         except (LocalEntryNotFoundError, OSError, AttributeError):
-            print("Downloading model...")
+            if self.verbose is True:
+                print("Downloading model...")
         vae_path: str = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
-        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.dtype, local_files_only=True).to(self.device)  # type: ignore
+        vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
 
         vae_model.eval()
         self.vae = vae_model
+
+    def next_model(self, index: int = 1) -> None:
+        """Cycle the model and its library to the next available option.
+        :param index: The vae in the config index to load
+        :returns: None"""
+        vae_options = [*self.spec.model_config.list_vae]
+        self.model, self.library = vae_options[index]
+        del self.vae
+        gc.collect()
+        self.create_vae()
 
     def _extract_special(self, batch):
         """Handle SANA and AuraEqui models.\n
@@ -128,32 +160,6 @@ class VAEExtract:
         dist = DiagonalGaussianDistribution(params)
         sample = dist.sample()
         return sample  # .mean(dim=0).cpu().float().numpy()
-
-    @torch.inference_mode()
-    def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, list[Tensor]]:
-        """Extract VAE features from a batch of images then use spectral contrast as divergence metric
-        :param tensor: 4D image tensor
-        :return: Dictionary with 'features' list."""
-        import torch
-
-        features_list = []
-        if not isinstance(tensor, list):
-            tensor = [tensor]
-        if not tensor:
-            raise RuntimeError("VAE received an empty tensor list.")
-
-        features_latent = torch.stack(tensor).to(self.device, self.dtype)
-
-        with torch.no_grad():
-            if "AutoencoderDC" in self.library:
-                features = self._extract_special(features_latent)
-            else:
-                features = self.vae.encode(features_latent).latent_dist.sample()
-            # mean_latent = features.mean(dim=0).cpu().float().numpy()
-            # feature_vec = mean_latent.flatten()
-            features_list.append(features)
-
-        return {"features": features_list}
 
     @torch.inference_mode()
     def latent_drift(self, tensors: Tensor) -> dict[str, float]:
@@ -193,7 +199,7 @@ class VAEExtract:
                 patch_tensor = self.transform(patch_image)
                 patch_stack.append(patch_tensor)
             color_tensor = self.transform(image)
-            batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.device, dtype=self.dtype)
+            batch_tensor = torch.stack([color_tensor, *patch_stack]).to(self.spec.device, dtype=self.spec.dtype)
 
             if "AutoencoderDC" in self.library:
                 latents = self.vae.encode(batch_tensor).latent
@@ -207,8 +213,8 @@ class VAEExtract:
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
 
-        device_name = self.device.type
-        del self.device
+        device_name = self.spec.device.type
+        del self.spec.device
         if device_name != "cpu":
             self.gpu = getattr(torch, device_name)
             self.gpu.empty_cache()  # type: ignore
@@ -221,33 +227,3 @@ class VAEExtract:
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "vae"):
             self.cleanup()
-
-
-def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet analysis transformations to dataset.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column."""
-    print("Beginning preprocessing.")
-
-    kwargs = {}
-    kwargs["disable_nullable"] = spec.opt.disable_nullable
-    if spec.opt.batch_size > 0:
-        kwargs["batched"] = True
-        kwargs["batch_size"] = spec.opt.batch_size
-    if spec.opt.load_from_cache_file is False:
-        kwargs["new_fingerprint"] = str(random_state(spec.train_rounds.max_rnd))
-    else:
-        kwargs["load_from_cache_file"] = True
-        kwargs["keep_in_memory"] = True
-        kwargs["new_fingerprint"] = spec.hyper_param.seed
-
-    with VAEExtract(spec) as extractor:  # type: ignore
-        dataset = dataset.map(
-            extractor.forward,
-            remove_columns=["image"],
-            desc="Computing wavelets...",
-            **kwargs,
-        )
-    save_features(dataset)
-    return dataset

@@ -14,12 +14,8 @@ assets/
 .datasets/
 .cache/
 .continue/
-models/*
-
-results/features_residual/
-results/residual_analysis/
-results/features_updated/
-results/residual_results/
+models/.cache
+models/config.json
+models/preprocessor_config.json
+models/README.md
 .demo.ipynb
-results/2*
-results/gaussian*

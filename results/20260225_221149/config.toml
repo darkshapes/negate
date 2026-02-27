@@ -5,7 +5,7 @@ top_k = 4                    # Threshold percent of patch difference to extract 
 dtype = "float16"            # decimal precision ("float64", "float32","float16", lower = <10-15% speed increase, less mem, possible accuracy hit)
 alpha = 0.5                  # strength of perturbation Default 0.5)
 load_onnx = false            # Use trained ONNX for inference : True → ONNX, False → native XGBoost
-magnitude_sampling = true    # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate # disabled atm
+magnitude_sampling = true    # Process high/low freq only (True=dramatically faster+less accuracy, False=slower+more accurate
 batch_size = 0               # Feature extraction batch size, 0 disables batching default[0]  (Not implemented)
 disable_nullable = true      #
 load_from_cache_file = false
