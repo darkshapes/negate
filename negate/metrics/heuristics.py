@@ -146,9 +146,9 @@ def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float =
 def compute_weighted_certainty(
     ae_inference: dict[str, list[tuple[str, int]]],
     dc_inference: dict[str, list[tuple[str, int]]],
-    syn_heur_weight: float = 1.0,
-    gne_heur_weight: float = 1.0,
-    model_weight: float = 0.85,  # decrease everything lol
+    syn_heur_weight: float = 1.2,
+    gne_heur_weight: float = 0.01,
+    unk_model_weight: float = 1.0,  # baseline
 ) -> list[tuple[str, int]]:
     """
     Compute certainty scores by combining all available inference methods.\n
@@ -167,7 +167,7 @@ def compute_weighted_certainty(
         candidates = [
             (syn_weight, syn_weight[1] * syn_heur_weight),
             (gne_weight, gne_weight[1] * gne_heur_weight),
-            (unk_weight, unk_weight[1] * model_weight),
+            (unk_weight, unk_weight[1] * unk_model_weight),
         ]
         estimation, _ = max(candidates, key=lambda x: x[1])
         print(estimation)
