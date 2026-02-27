@@ -53,7 +53,7 @@ class VAEExtract:
         >>> print(features['features'])
     """
 
-    def __init__(self, spec: Spec) -> None:
+    def __init__(self, spec: Spec, verbose: bool) -> None:
         """Initialize the VAE extractor with configuration.\n
         :param spec: Specification container with model config and hardware settings.\n
         :raises RuntimeError: If diffusers package is not installed.
@@ -61,7 +61,9 @@ class VAEExtract:
         """
         self.spec = spec
         self.model, self.library = spec.vae or spec.model_config.auto_vae
-        print(f"Initializing VAE {self.model} on {self.spec.device}...")
+        self.verbose = verbose
+        if verbose:
+            print(f"Initializing VAE {self.model} on {self.spec.device}...")
         if not hasattr(self, "vae") and self.model != "None":
             self.create_vae()
         self.kl_div = KLDivLoss(log_target=True, reduction="batchmean")
@@ -120,7 +122,8 @@ class VAEExtract:
         try:
             vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
         except (LocalEntryNotFoundError, OSError, AttributeError):
-            print("Downloading model...")
+            if self.verbose is True:
+                print("Downloading model...")
         vae_path: str = snapshot_download(self.model, allow_patterns=["vae/*"])  # type: ignore
         vae_path = os.path.join(vae_path, "vae")
         vae_model = autoencoder_cls.from_pretrained(vae_path, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore

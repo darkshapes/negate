@@ -144,7 +144,8 @@ def main() -> None:
             dc_model: Path = models_path / args.model[1]
             assert ae_model and ae_model.exists(), ValueError(model_pattern_blurb)
             assert dc_model and dc_model.exists(), ValueError(model_pattern_blurb)
-            print(f"""Checking path '{img_file_or_folder}' using models dated {args.model}""")
+            if args.verbose:
+                print(f"""Checking path '{img_file_or_folder}' using models dated {args.model}""")
 
             context_ae = InferContext(
                 spec=load_spec(ae_model),
@@ -153,7 +154,7 @@ def main() -> None:
                 label=args.label,
                 file_or_folder_path=img_file_or_folder,
                 dataset_feat=None,
-                syn_check=True,
+                dc_vae=False,
                 verbose=args.verbose,
             )
             context_dc = InferContext(
@@ -163,7 +164,7 @@ def main() -> None:
                 label=args.label,
                 file_or_folder_path=img_file_or_folder,
                 dataset_feat=None,
-                syn_check=False,
+                dc_vae=True,
                 verbose=args.verbose,
             )
 
@@ -173,12 +174,8 @@ def main() -> None:
             inferences = compute_weighted_certainty(
                 ae_inference,
                 dc_inference,
+                args.label,
             )
-            if args.label is not None:
-                label = "SYN" if args.label == 1 else "GNE"
-                print(f"For : {label + ' [1]' if args.label == 1 else label + ' (0)'} ")
-                count = sum(1 for item in inferences if label in item[0])
-                print(f"{count} / {len(inferences)} {(count / len(inferences)):.2%}")
 
         case _:
             raise NotImplementedError

@@ -17,7 +17,7 @@ from negate.extract.feature_vae import VAEExtract
 from negate.io.config import random_state
 from negate.io.datasets import generate_dataset, prepare_dataset
 from negate.io.spec import Spec
-from negate.metrics.heuristics import model_accuracy, weight_gne_feat, weight_syn_feat
+from negate.metrics.heuristics import weight_dc_gne, weight_ae_gne
 
 
 @dataclass
@@ -30,7 +30,8 @@ class InferContext:
     file_or_folder_path: Path
     label: int | None = None
     dataset_feat: Dataset | None = None
-    syn_check: bool = False
+    dc_vae: bool = True
+    model: bool = False
     verbose: bool = False
 
     def __post_init__(self) -> None:
@@ -65,9 +66,9 @@ def run_native(features_dataset: np.ndarray, model_version: Path, parameters: di
 
     features_pca = pca.transform(features_dataset)
 
-    model = xgb.Booster(params=parameters)
+    model = xgb.Booster(params=parameters, model_file=model_file_path_named)
     model.load_model(model_file_path_named)
-
+    print(f"Model '{model_file_path_named}' loaded.")
     result = model.predict(xgb.DMatrix(features_pca))
     return result
 
@@ -136,7 +137,7 @@ def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
     return dataset
 
 
-def preprocessing(dataset: Dataset, spec: Spec, inference=False) -> Dataset:
+def preprocessing(dataset: Dataset, spec: Spec, verbose=False) -> Dataset:
     """Apply wavelet analysis transformations to dataset.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
@@ -155,7 +156,7 @@ def preprocessing(dataset: Dataset, spec: Spec, inference=False) -> Dataset:
         kwargs["keep_in_memory"] = True
         kwargs["new_fingerprint"] = spec.hyper_param.seed
 
-    context = WaveletContext(spec=spec, inference=inference)
+    context = WaveletContext(spec=spec, verbose=verbose)
     with WaveletAnalyze(context) as analyzer:  # type: ignore
         dataset = dataset.map(
             analyzer,
@@ -166,19 +167,25 @@ def preprocessing(dataset: Dataset, spec: Spec, inference=False) -> Dataset:
     return dataset
 
 
-def predict_gne_or_syn(context: InferContext) -> np.ndarray:
-    """Returns 0 for GNE-like results, 1 for SYN-like results determined by decision tree model trained on dataset:\n
+def predict_gne_or_syn(context: InferContext) -> list[float]:
+    """Returns probability results determined by decision tree model trained on dataset:\n
     :param data_path: Path to json file with saved parameter data"""
     spec = context.spec
     model_version = context.model_version
     assert isinstance(context.dataset_feat, Dataset), ValueError("Dataset was not passed to prediction")
     features_matrix = prepare_dataset(context.dataset_feat, spec)
     parameters = asdict(spec.hyper_param) | {"scale_pos_weight": context.train_metadata["scale_pos_weight"]}
-    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
-    return result
+    if spec.opt.load_onnx:
+        result = run_onnx(features_matrix, model_version, parameters=parameters)
+    else:
+        result = run_native(features_matrix, model_version, parameters=parameters)
+    prob = []
+    for x in result:
+        prob.append(float(x))
+    return prob
 
 
-def infer_origin(context: InferContext) -> dict[str, list[tuple[str, int]]]:
+def infer_origin(context: InferContext) -> dict[str, list[float]]:
     """Predict synthetic or original for given image.\n
     :param context: Inference context containing spec, model path, and metadata.
     :param file_or_folder_path: Path to the image or folder to be checked.
@@ -187,18 +194,16 @@ def infer_origin(context: InferContext) -> dict[str, list[tuple[str, int]]]:
 
     if context.dataset_feat is None:  # Support lazy loading of features if not provided
         assert context.file_or_folder_path, ValueError("Image path must be provided for inference")
-        origin_ds: Dataset = generate_dataset(context.file_or_folder_path)
-        context.dataset_feat = preprocessing(origin_ds, context.spec)
-    model_pred = predict_gne_or_syn(context=context)
-    model_pred = model_accuracy(model_pred)
-    heur_dc_pred = []
-    heur_ae_pred = []
-    for entry in context.dataset_feat["results"]:
-        heur_dc_pred.append(weight_gne_feat(entry[0]))
-        heur_ae_pred.append(weight_syn_feat(entry[0]))
+        origin_ds: Dataset = generate_dataset(context.file_or_folder_path, verbose=context.verbose)
+        context.dataset_feat = preprocessing(origin_ds, context.spec, verbose=context.verbose)
+    prob = {"unk": predict_gne_or_syn(context=context)}
+    if context.dc_vae:
+        prob["dc_gne"] = []
+        for entry in context.dataset_feat["results"]:
+            prob["dc_gne"].append(weight_dc_gne(entry[0]))
+    else:
+        prob["ae_gne"] = []
+        for entry in context.dataset_feat["results"]:
+            prob["ae_gne"].append(weight_ae_gne(entry[0]))
 
-    if context.verbose:
-        print(f"""          Decision Tree Model result: {model_pred}
-            SYN Probability (DC VAE): {heur_dc_pred}
-            GNE Probability (AE VAE): {heur_ae_pred}""")
-    return {"unk": model_pred, "syn": heur_dc_pred, "gne": heur_ae_pred}
+    return prob

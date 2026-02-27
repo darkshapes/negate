@@ -16,94 +16,84 @@ DC Decision Tree Model result: [1 0 0 0 1 0 0 0 0 1 1 1 1 1 1 0 0 1 0] Model Acc
 
 """
 
+from typing import Any
 import numpy as np
 
 
-def weight_syn_feat(entry: dict[str, np.ndarray | float | int]):
-    """Use VAE BCE LOSS threshold, base wavelet mean and mean RRC fourier to determine Synthetic (SYN) Images
+def weight_dc_gne(entry: dict[str, Any]) -> float:
+    """Use DC metrics for the classification of GNE origin
     :param entry: Image features and associated metadata used for classification.
+
+    only applies to 20260225_221149:
+    dc-ae-f32c32-sana-1.1-diffusers, timm/vit-base dino v3 lvd
+    dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5
     """
-    thresh = 0.5
-    total = 4
+    max_warp: float = entry["max_warp"]  # max_warp larger than 0.4 but less than 0.6 predominantly GNE
+    diff_tc: list = entry["diff_tc"]  # type: ignore diff_tc less than 20 largely GNE
+    max_base = entry["max_base"]  # higher than 10300 is GNE
+    laplace_mean: list = entry["laplace_mean"]  # more than 4.3 strong indicator of GNE
 
-    bce_threshold = -80  # SYN has very negative bce_loss (< -80 typically)
-    ff_threshold = 0.0  # SYN tends to be higher in mean ff magnitude
-    min_base_threshold = 1000
+    total = [0.66, 0.66, 0.66, 0.66]
+    score = []
 
-    bce_loss = entry["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
-    image_mean_ff = entry["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
-    min_base = entry["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
-    score = 0
-    confidence = 1
+    if 0.4 < max_warp < 0.6:
+        score.append(0)
 
-    if bce_loss is None:
-        pass
-        # total -= 1
-    else:
-        if bce_loss < -150 or (-15 < bce_loss < -5):
-            score += 1  # More likely SYN
-        if bce_loss > -20 or bce_loss < -170:
-            score += 1
-        # if bce_threshold < bce_loss < -50 and min_base_threshold < min_base < 1400: # push gne up
-        #     score -= 1
+    if any(x < 20 for x in diff_tc):
+        score.append(1)
 
-    if image_mean_ff > ff_threshold:
-        score += 1
-    # elif bce_loss is not None and -100 > bce_loss > -50: # these prop up gne
-    #     score -= 1  # More likely GNE
+    if max_base > 10300:
+        score.append(2)
 
-    if min_base is None:
-        pass
-    #     total -= 1
-    else:
-        # if min_base_threshold <= min_base <= 1350:
-        #     score -= 1  # More likely GNE (tighter cluster)
-        if min_base > 4000 or min_base < 200:
-            score += 1
+    if any(x > 7 for x in laplace_mean):
+        score.append(3)
 
-    confidence = round((score / total) * 100)
-    probability = float(score / total) if score != 0 else 0
-    type_name = "SYN" if probability > thresh else "GNE"
-    return type_name, confidence
+    probability = np.sum([total[x] for x in score])
+    return probability if probability.item() > 0 else 0
 
 
-def weight_gne_feat(entry: dict[str, np.ndarray | float | int]):
-    """Use Laplace/Sobel fourier mean, Max Fourier Magnitude and BCE loss to determine Genuine (GNE) Images
+def weight_ae_gne(entry: dict[str, Any]) -> float:
+    """Use AE metrics for the classification of image origin
     :param entry: Image features and associated metadata used for classification.
-    """
-    thresh = 0.5
-    total = 4
-    # flux2 klein fp16, timm/vit-base dino v3 lvd
-    #  dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5                  # strength of perturbation Default 0.5)
 
-    laplace: np.ndarray = entry["laplace_mean"]  # type: ignore | Above ~4.2-4.3 for GNE
-    sobel: np.ndarray = entry["sobel_mean"]  # type: ignore | Below 4 for GNE
+    only applies to 20260225_185933:
+    flux2 klein fp16, timm/vit-base dino v3 lvd\n
+    dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5
+    """
+    laplace = entry["laplace_mean"]  # Above ~4.2-4.3 for GNE
+    sobel = entry["sobel_mean"]  # Below 4 for GNE
     max_ff_mag = entry["max_fourier_magnitude"]  # Above 1500 for GNE
-    bce_loss = entry["bce_loss"]  # bce_los GNE around -50 -60 is more likely to be GNE)
+    bce_loss = entry["bce_loss"]  # bce_los around -50 -60 is more likely to be GNE)
+    perturbed_bce_loss = entry["perturbed_bce_loss"]  # bce_los around -50 -60 is more likely to be GNE)
 
-    score = 0
-    if laplace is None:
-        total -= 1
-    elif any(x > 4.2 for x in laplace):
-        score += 1
+    image_mean = entry["image_mean"]
 
-    if sobel is None:
-        total -= 1
-    elif any(x < 4 for x in sobel):
-        score += 1
+    laplace_metric = lambda x: any(x > 4.25 for x in laplace)
+    mean_metric = lambda x: any(y >= 5 for y in x)
+    bce_metric = lambda x: 40 < abs(x) < 60
+    max_ff_metric = lambda x: x >= 150000
+    sobel_metric = lambda x: any(y < 4 for y in x)
 
-    if max_ff_mag is None:
-        total -= 1
-    elif max_ff_mag > 1500:
-        score += 1
+    total = [0.8, 0.66, 0.7, 0.66, 0.66]
+    score = []
 
-    if -50 > bce_loss > -60:
-        score += 1
+    if laplace_metric(laplace):
+        score.append(0)
 
-    confidence = round((score / total) * 100)
-    probability = float(score / total) if score != 0 else 0
-    type_name = "GNE" if probability > thresh else "SYN"
-    return type_name, confidence
+    if sobel_metric(sobel):
+        score.append(1)
+
+    if max_ff_metric(max_ff_mag):
+        score.append(2)
+
+    if bce_metric(bce_loss) and bce_metric(perturbed_bce_loss):
+        score.append(3)
+
+    if mean_metric(image_mean):
+        score.append(4)
+
+    probability = np.sum([total[x] for x in score])
+    return probability if probability.item() > 0 else 0
 
 
 def heuristic_accuracy(result, dc=True):
@@ -144,32 +134,88 @@ def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float =
 
 
 def compute_weighted_certainty(
-    ae_inference: dict[str, list[tuple[str, int]]],
-    dc_inference: dict[str, list[tuple[str, int]]],
-    syn_heur_weight: float = 1.2,
-    gne_heur_weight: float = 0.01,
-    unk_model_weight: float = 1.0,  # baseline
-) -> list[tuple[str, int]]:
+    ae_inference: dict[str, list[float]],
+    dc_inference: dict[str, list[float]],
+    label: int | None = None,
+    dc_syn_thresh: float = 0.4,
+    ae_syn_thresh: float = 0.5,
+) -> None:
     """
     Compute certainty scores by combining all available inference methods.\n
-    Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.\n
-
+    Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.
     """
+    from pprint import pprint
 
-    n_images = min(len(ae_inference["gne"]), len(dc_inference["gne"]))
-    inferences = []
-    print(f"ae_inference: {ae_inference}")
-    print(f"dc_inference: {dc_inference}")
-    for i in range(n_images):
-        syn_weight: tuple[str, int] = ae_inference["syn"][i]
-        gne_weight: tuple[str, int] = dc_inference["gne"][i]
-        unk_weight: tuple[str, int] = ae_inference["unk"][i]
-        candidates = [
-            (syn_weight, syn_weight[1] * syn_heur_weight),
-            (gne_weight, gne_weight[1] * gne_heur_weight),
-            (unk_weight, unk_weight[1] * unk_model_weight),
-        ]
-        estimation, _ = max(candidates, key=lambda x: x[1])
-        print(estimation)
-        inferences.append((estimation))
-    return inferences
+    print(f"For : {'SYN' + ' [1]' if label == 1 else 'GNE' + ' (0)'} ")
+    model_thresh = 0.5
+    # hstc_thresh = 0
+    predictions = {
+        "ae_model": (np.array(ae_inference["unk"]) > model_thresh).astype(int),
+        "dc_model": (np.array(dc_inference["unk"]) > model_thresh).astype(int),
+    }
+
+    pred = {}
+    for id_name, model_pred in predictions.items():
+        if label is not None:
+            ground_truth = np.full(model_pred.shape, label, dtype=int)
+            acc = float(np.mean(model_pred == ground_truth))
+            print(f"{id_name} Accuracy: {acc:.2%}")
+        pred[id_name] = [f"{index} SYN % : {pred:.2%}" for index, pred in enumerate(dc_inference["unk"])]
+
+    pprint(pred)
+
+    # hstc_pred = {
+    #     "ae_hstc": (np.array(ae_inference["ae_gne"]) > hstc_thresh).astype(int),
+    #     "dc_hstc": (np.array(dc_inference["dc_gne"]) > hstc_thresh).astype(int),
+    # }
+    # for id_name, hstc in hstc_pred.items():
+    #     pred[id_name] = [f"{index} GNE % : {pred:.2%}" for index, pred in enumerate(hstc)]
+
+    # n_images = min(len(ae_inference["unk"]), len(dc_inference["unk"]))
+    # inferences = []
+    # print(f"ae_inference: {ae_inference}")
+    # print(f"dc_inference: {dc_inference}")
+    # for i in range(n_images):
+    #     syn_weight = dc_inference["dc_syn"][i]
+    #     gne_weight = ae_inference["ae_gne"][i], dc_inference["dc_gne"][i]
+    #     print(f"image {i} SYN % : {syn_weight}")
+    #     print(f"image {i} GNE % : {gne_weight}")
+    # unk_weight: float = ae_inference["unk"][i]
+    #     candidates = [
+    #         (syn_weight, syn_weight[1] * syn_heur_weight),
+    #         (gne_weight, gne_weight[1] * gne_heur_weight),
+    #         (unk_weight, unk_weight[1] * unk_model_weight),
+    #     ]
+    #     estimation, _ = max(candidates, key=lambda x: x[1])
+    #     print(estimation)
+    #     inferences.append((estimation))
+    # return inferences
+
+    # model_pred = model_accuracy(model_pred)
+    # if context.verbose:
+    #     print(f"""          Decision Tree Model result: {model_pred}
+    #         SYN Probability (DC VAE): {heur_dc_pred}
+    #         GNE Probability (AE VAE): {heur_ae_pred}""")
+
+    # if args.label is not None:
+    #     label = "SYN" if args.label == 1 else "GNE"
+    #     print(f"For : {label + ' [1]' if args.label == 1 else label + ' (0)'} ")
+    #     count = sum(1 for item in inferences if label in item[0])
+    #     print(f"{count} / {len(inferences)} {(count / len(inferences)):.2%}")
+    # result_dc = []
+    # result_ae = []
+    # print(ae_inference["ae_gne"])
+    # print(dc_inference["dc_gne"])
+    # # for index, image in enumerate(ae_inference["unk"]):
+    # #     result_dc.append(np.round(dc_inference["unk"][index] - ae_inference["ae_gne"][index]))
+    # #     result_ae.append(np.round(image - ae_inference["ae_gne"][index]))
+    # print(ae_inference["unk"])
+    # # print(dc_inference["unk"])
+    # print(result_dc)
+    # print(result_ae)
+    # thresh = 0.5
+
+    # ae_data = []
+    # dc_data = []
+    # for index, pred in enumerate(ae_inference["unk"]):
+    #     ae_data.append(f"{index} SYN % : {pred:.2%}")

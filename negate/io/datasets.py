@@ -13,19 +13,6 @@ from tqdm import tqdm
 from negate.io.spec import Spec, root_folder
 
 
-def detect_nans(dataset: Dataset) -> Dataset:
-    """Detect and remove NaN labels.\n
-    :param dataset: Dataset with a ``label`` column.
-    :return: Dataset without rows containing NaN labels."""
-
-    lbls = np.array(dataset["label"])
-    if np.isnan(lbls).any():
-        print("NaNs at indices:", np.where(np.isnan(lbls)))
-        valid = ~np.isnan(lbls)
-        dataset = dataset.select(valid)
-    return dataset
-
-
 def prepare_dataset(features_dataset: Dataset, spec: Spec):
     samples = features_dataset["results"]
     all_dicts = [d for row in samples for d in row]
@@ -52,11 +39,10 @@ def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int 
     remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split=split).cast_column("image", Image(decode=True, mode="RGB"))
     if label is not None:
         remote_dataset = remote_dataset.add_column("label", [label] * len(remote_dataset))
-    remote_dataset = detect_nans(remote_dataset)
     return remote_dataset
 
 
-def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None) -> Dataset:
+def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None, verbose: bool = False) -> Dataset:
     """Generates a dataset from an image file or folder of images.\n
     :param folder_path: Path to the folder containing image files.
     :return: Dataset containing images and labels with NaNs removed."""
@@ -91,7 +77,6 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
 
     if label is not None:
         dataset = dataset.add_column("label", [label] * len(validated_paths))
-        dataset = detect_nans(dataset)
     return dataset
 
 

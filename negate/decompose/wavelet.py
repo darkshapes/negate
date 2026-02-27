@@ -36,7 +36,7 @@ class WaveletContext:
     def __init__(
         self,
         spec: Spec,
-        inference: bool,
+        verbose: bool,
         dwt: DWTForward | None = None,
         idwt: DWTInverse | None = None,
         extract: VITExtract | None = None,
@@ -46,12 +46,10 @@ class WaveletContext:
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
-        self.extract = extract or VITExtract(spec)  # type: ignore
-        self.vae = vae or VAEExtract(spec)
-        if inference:
-            self.vae.next_model(1)
+        self.extract = extract or VITExtract(spec, verbose=verbose)  # type: ignore
+        self.vae = vae or VAEExtract(spec, verbose=verbose)
         self.residual = residual or Residual(spec)
-        self.inference = inference
+        self.verbose = verbose
 
     def __enter__(self) -> WaveletContext:
         return self
@@ -67,14 +65,16 @@ class WaveletAnalyze(ContextManager):
 
     def __init__(self, context: WaveletContext) -> None:
         """Extract wavelet energy features from images."""
-        print("Initializing Analyzer...")
         self.context = context
+        if self.context.verbose:
+            print("Initializing Analyzer...")
         self.cast_move: dict = self.context.spec.apply
         self.context.dwt = self.context.dwt.to(**self.cast_move)
         self.context.idwt = self.context.idwt.to(**self.cast_move)
         self.dim_patch = (self.context.spec.opt.dim_patch, self.context.spec.opt.dim_patch)
-        print("Initializing device...")
-        print("Please wait...")
+        if self.context.verbose:
+            print("Initializing device...")
+            print("Please wait...")
 
     @torch.inference_mode()
     def __call__(self, dataset: Dataset) -> dict[str, Any]:

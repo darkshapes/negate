@@ -26,10 +26,11 @@ class VITExtract:
         >>> list(features["sensitivity])
     """
 
-    def __init__(self, spec: Spec) -> None:
+    def __init__(self, spec: Spec, verbose: bool) -> None:
         """Initialize analyzer with configuration.\n"""
         self.spec = spec
-        print(f"Initializing VIT{self.spec.model} on {self.spec.device}...")
+        if verbose:
+            print(f"Initializing VIT {self.spec.model} on {self.spec.device}...")
         self.library = spec.model_config.library_for_model(self.spec.model)
         self.cast_move = self.spec.apply
         self._set_models()
