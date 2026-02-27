@@ -16,11 +16,10 @@ from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
 from negate.decompose.residuals import Residual
-from negate.decompose.scaling import patchify_image, tensor_rescale, condense_tensors
+from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
 from negate.extract.feature_vae import VAEExtract
 from negate.extract.feature_vit import VITExtract
-from negate.io.config import Spec
-from negate.train import random_state
+from negate.io.spec import Spec
 
 """Haar Wavelet processing"""
 
@@ -37,6 +36,7 @@ class WaveletContext:
     def __init__(
         self,
         spec: Spec,
+        inference: bool,
         dwt: DWTForward | None = None,
         idwt: DWTInverse | None = None,
         extract: VITExtract | None = None,
@@ -48,7 +48,10 @@ class WaveletContext:
         self.idwt = idwt or DWTInverse(wave="haar")
         self.extract = extract or VITExtract(spec)  # type: ignore
         self.vae = vae or VAEExtract(spec)
+        if inference:
+            self.vae.next_model(1)
         self.residual = residual or Residual(spec)
+        self.inference = inference
 
     def __enter__(self) -> WaveletContext:
         return self
@@ -65,24 +68,12 @@ class WaveletAnalyze(ContextManager):
     def __init__(self, context: WaveletContext) -> None:
         """Extract wavelet energy features from images."""
         print("Initializing Analyzer...")
-        spec = context.spec
-        self.cast_move: dict = spec.apply
-        self.dwt = context.dwt.to(**self.cast_move)
-        self.idwt = context.idwt.to(**self.cast_move)
-        self.extract = context.extract
-        self.residual = context.residual
-        self.vae = context.vae
-        self.batch_size = spec.opt.batch_size
-        self.alpha = spec.opt.alpha
-        dim_patch = spec.opt.dim_patch
-        self.dim_patch = (dim_patch, dim_patch)
-        self.dim_factor = spec.opt.dim_factor
+        self.context = context
+        self.cast_move: dict = self.context.spec.apply
+        self.context.dwt = self.context.dwt.to(**self.cast_move)
+        self.context.idwt = self.context.idwt.to(**self.cast_move)
+        self.dim_patch = (self.context.spec.opt.dim_patch, self.context.spec.opt.dim_patch)
         print("Initializing device...")
-        self.device = spec.device
-        self.np_dtype = spec.np_dtype
-        self.magnitude_sampling = spec.opt.magnitude_sampling
-        self.top_k = spec.opt.top_k
-        self.condense_factor = spec.opt.condense_factor
         print("Please wait...")
 
     @torch.inference_mode()
@@ -96,31 +87,40 @@ class WaveletAnalyze(ContextManager):
         images = dataset["image"]
         results: list[dict[str, Any]] = []
 
-        scale = self.dim_factor * self.dim_patch[0]
+        scale = self.context.spec.opt.dim_factor * self.dim_patch[0]
         rescaled = tensor_rescale(images, scale, **self.cast_move)
 
         for img in rescaled:
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
             selected, fourier_max, patch_spectrum = self.select_patch(patched)
 
-            low_residual, high_coefficient = self.dwt(selected)  # more or less verbatim from sungikchoi/WaRPAD
-            perturbed_high_freq = self.idwt((torch.zeros_like(low_residual), high_coefficient))
-            perturbed_selected = selected - self.alpha * perturbed_high_freq
-            base_features: Tensor | list[Tensor] = self.extract(selected)
-            warp_features: Tensor | list[Tensor] = self.extract(perturbed_selected)
-            sim_extrema = self.sim_extrema(base_features, warp_features, selected.shape[0])
+            decomposed_feat = {}
 
-            residuals = self.residual(selected)
+            vae_feat = self.context.vae(patch_spectrum)
+            condensed_feat = {"features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)}
 
-            features = self.vae(patch_spectrum)
-            latent_drift = self.vae.latent_drift(selected)
-            perturbed_drift = {f"perturbed_{k}": v for k, v in self.vae.latent_drift(perturbed_selected).items()}
+            decomposed_feat: dict[str, float | tuple[int, int]] = self.ensemble_decompose(selected)
 
-            condensed_ft = {"features": condense_tensors(features["features"], self.condense_factor, self.top_k)}
-
-            results.append(fourier_max | sim_extrema | residuals | latent_drift | perturbed_drift | condensed_ft)
+            results.append(decomposed_feat | condensed_feat | fourier_max)
 
         return {"results": results}
+
+    @torch.inference_mode()
+    def ensemble_decompose(self, tensor: Tensor) -> dict[str, float | tuple[int, int]]:
+        """Process tensors using multiple fourier decomposition and analysis methods (Haar, Laplace, Sobel, Spectral, Residual processing,etc )
+        :param selected: Patched tensor to analyze
+        :returns: A dictionary of measurements"""
+        low_residual, high_coefficient = self.context.dwt(tensor)  # more or less verbatim from sungikchoi/WaRPAD
+        perturbed_high_freq = self.context.idwt((torch.zeros_like(low_residual), high_coefficient))
+        perturbed_selected = tensor - self.context.spec.opt.alpha * perturbed_high_freq
+        base_features: Tensor | list[Tensor] = self.context.extract(tensor)
+        warp_features: Tensor | list[Tensor] = self.context.extract(perturbed_selected)
+
+        sim_extrema = self.sim_extrema(base_features, warp_features, tensor.shape[0])
+        residuals = self.context.residual(tensor)
+        latent_drift = self.context.vae.latent_drift(tensor)
+        perturbed_drift = {f"perturbed_{k}": v for k, v in self.context.vae.latent_drift(perturbed_selected).items()}
+        return sim_extrema | residuals | latent_drift | perturbed_drift
 
     @torch.inference_mode()
     def select_patch(self, img: Tensor) -> tuple[Tensor, dict[str, float | int | Tensor | list[float]], list[Tensor]]:
@@ -134,14 +134,14 @@ class WaveletAnalyze(ContextManager):
         discrepancy: dict[str, float] = {}
 
         for patch in patched:
-            discrepancy = self.residual.fourier_discrepancy(patch)
+            discrepancy = self.context.residual.fourier_discrepancy(patch)
             max_magnitudes.append(discrepancy["max_magnitude"])
 
         mag_array = np.array(max_magnitudes)
-        k = min(self.top_k, len(mag_array))
+        k = min(self.context.spec.opt.top_k, len(mag_array))
         if k == 0:
             raise RuntimeError("No patches found for Fourier analysis.")
-        assert self.top_k >= 1, ValueError("top_k must be ≥ 1 for Fourier patch selection.")
+        assert self.context.spec.opt.top_k >= 1, ValueError("top_k must be ≥ 1 for Fourier patch selection.")
         top_k_idx = np.argpartition(mag_array, -k)[-k:]
 
         max_mag_idx = int(top_k_idx[np.argmax(mag_array[top_k_idx])])
@@ -209,8 +209,8 @@ class WaveletAnalyze(ContextManager):
     def cleanup(self) -> None:
         """Free resources once discarded."""
 
-        device_name = self.device.type
-        del self.device
+        device_name = self.context.spec.device.type
+        del self.context.spec.device
         if device_name != "cpu":
             self.gpu = getattr(torch, device_name)
             self.gpu.empty_cache()  # type: ignore
@@ -222,33 +222,3 @@ class WaveletAnalyze(ContextManager):
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "extract"):
             self.cleanup()
-
-
-def wavelet_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet analysis transformations to dataset.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column."""
-    print("Beginning preprocessing.")
-
-    kwargs = {}
-    kwargs["disable_nullable"] = spec.opt.disable_nullable
-    if spec.opt.batch_size > 0:
-        kwargs["batched"] = True
-        kwargs["batch_size"] = spec.opt.batch_size
-    if spec.opt.load_from_cache_file is False:
-        kwargs["new_fingerprint"] = str(random_state(spec.train_rounds.max_rnd))
-    else:
-        kwargs["load_from_cache_file"] = True
-        kwargs["keep_in_memory"] = True
-        kwargs["new_fingerprint"] = spec.hyper_param.seed
-
-    context = WaveletContext(spec)
-    with WaveletAnalyze(context) as analyzer:  # type: ignore
-        dataset = dataset.map(
-            analyzer,
-            remove_columns=["image"],
-            desc="Computing wavelets...",
-            **kwargs,
-        )
-    return dataset

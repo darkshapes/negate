@@ -1,50 +1,20 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
-import json
-import pickle
-from dataclasses import asdict
-from pathlib import Path
-from typing import Any
-from dataclasses import dataclass
 
 import numpy as np
-import onnxruntime as ort
-from datasets import Dataset
-from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
-from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
-
-from negate.io.config import Spec
-from negate.train import prepare_dataset
 
 
-@dataclass
-class InferContext:
-    """Container for inference dependencies."""
-
-    spec: Spec
-    model_version: Path
-    train_metadata: dict
-    label: bool | None = None
-
-    def __post_init__(self) -> None:
-        if not self.model_version.exists():
-            raise FileNotFoundError(f"Model directory not found: {self.model_version}")
-        metadata_path = self.model_version / "metadata.json"
-        if self.train_metadata is None and metadata_path.exists():
-            import json
-
-            with open(metadata_path) as f:
-                self.train_metadata = json.load(f)
-
-
-def weigh_bce(entry):
+def weight_syn_feat(entry: dict[str, np.ndarray | float | int]):
+    """Use VAE BCE LOSS threshold, base wavelet mean and mean RRC fourier to determine Synthetic (SYN) Images
+    :param entry: Image features and associated metadata used for classification.
+    """
     bce_threshold = -80  # SYN has very negative bce_loss (< -80 typically)
     ff_threshold = 0.0  # SYN tends to be higher in mean ff magnitude
     min_base_threshold = 100
 
-    bce_loss = entry["results"][0]["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
-    image_mean_ff = entry["results"][0]["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
-    min_base = entry["results"][0]["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
+    bce_loss = entry["bce_loss"]  # bce_loss is much more negative in SYN (around -100+ vs GNE around -50)
+    image_mean_ff = entry["image_mean_ff"]  # Another indicator: Mean is dominated by negatives for SYN
+    min_base = entry["min_base"]  # min_base heuristic: GNE clusters around 1000-1300 range more tightly
     score = 0
     confidence = 1
 
@@ -71,12 +41,15 @@ def weigh_bce(entry):
     return score, confidence
 
 
-def weigh_v2(entry):
+def weight_gne_feat(entry: dict[str, np.ndarray | float | int]):
+    """Use Laplace/Sobel fourier mean, Max Fourier Magnitude and BCE loss to determine Genuine (GNE) Images
+    :param entry: Image features and associated metadata used for classification.
+    """
     # flux2 klein fp16, timm/vit-base dino v3 lvd
     #  dim_factor = 3, condense_factor = 2,  top_k = 4, dtype = "float16", alpha = 0.5                  # strength of perturbation Default 0.5)
 
-    laplace = entry["laplace_mean"]  # Above ~4.2-4.3 for GNE
-    sobel = entry["sobel_mean"]  # Below 4 for GNE
+    laplace: np.ndarray = entry["laplace_mean"]  # type: ignore | Above ~4.2-4.3 for GNE
+    sobel: np.ndarray = entry["sobel_mean"]  # type: ignore | Below 4 for GNE
     max_ff_mag = entry["max_fourier_magnitude"]  # Above 1500 for GNE
     bce_loss = entry["bce_loss"]  # bce_los GNE around -50 -60 is more likely to be GNE)
 
@@ -101,154 +74,148 @@ def weigh_v2(entry):
     return score, confidence
 
 
-def classify_gnf_or_syn(dataset: Dataset, label: int) -> list[int]:
-    """Returns 0 for GNE-like results, 1 for SYN-like results determined by simple heuristic based on observed patterns:\n
-    :param data_path: Path to json file with saved parameter data"""
-
-    result = {}
-    entries = dataset["results"]
-
-    # Collect ground truth from entry if available
-    gt_labels = []
-    predictions = []
-
-    for index, entry in enumerate(entries):
-        score, confidence = weigh_v2(entry[0])
-        class_pred = "SYN" if score > 0 else "GNE"
-        result[str(index)] = {"score": score, "class": class_pred, "confidence": confidence}
-
-        predictions.append(1 if class_pred == "SYN" else 0)
-
-        if label is not None:
-            gt_labels.append(label)  # or however you access ground truth
-
-    if label is not None:
-        acc = float(np.mean([p == g for p, g in zip(predictions, gt_labels)]))
-        print(f"Accuracy: {acc:.2%}")
-    print(predictions)
-    return predictions
-
-
-def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
-    """Run inference using XGBoost with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
-
-    import xgboost as xgb
-
-    model_file_path_named = model_version / "negate.ubj"
-
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
-
-    pca_file_path_named = model_version / "negate_pca.pkl"
-    with open(pca_file_path_named, "rb") as pca_file:
-        pca = pickle.load(pca_file)
-
-    features_pca = pca.transform(features_dataset)
-
-    model = xgb.Booster(params=parameters)
-    model.load_model(model_file_path_named)
-
-    result = model.predict(xgb.DMatrix(features_pca))
+def heuristic_accuracy(result, dc=True):
+    """Calculate accuracy for heuristic evaluation runs"""
+    gt_labels = (
+        [
+            1,
+        ]
+        * len(result)
+        if dc
+        else [
+            0,
+        ]
+        * len(result)
+    )
+    acc = float(np.mean([p == g for p, g in zip(result, gt_labels)]))
+    print(f"Heuristic Accuracy: {acc:.2%}")
     return result
 
 
-def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
-    """Run inference using ONNX Runtime with PCA pre-processing.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Result array of predicted origins."""
+def compute_combined_certainty(
+    ae_result: dict[str, list[int] | np.ndarray],
+    dc_result: dict[str, list[int] | np.ndarray],
+) -> None:  # list[dict]:
+    """
+    Compute certainty scores by combining all available inference methods.
 
-    model_file_path_named = model_version / "negate.onnx"
-    if not model_file_path_named.exists():
-        raise FileNotFoundError(f"Model file not found: {str(model_file_path_named)}. Please run 'train' first to create the model.")
-    else:
-        model_file_path_named = str(model_file_path_named)
+    Each method contributes a vote (0-1). Certainty is the sum normalized 0-5 scale.
+    """
+    combined = []
 
-    features_dataset = features_dataset.astype(np.float32)
-    pca_file_path_named = model_version / "negate_pca.onnx"
-    session_pca = ort.InferenceSession(pca_file_path_named)
-    input_name_pca = session_pca.get_inputs()[0].name
-    features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
+    # Ensure both have same length
+    n_images = min(len(ae_result["gne"]), len(dc_result["gne"]))
 
-    input_name = ort.get_available_providers()[0]
-    features_model = features_pca.astype(np.float32)
+    for i in range(n_images):
+        # Extract votes (0 or 1)
+        ae_gn_vote = ae_result["gne"][i]
+        dc_gn_vote = dc_result["gne"][i]
 
-    session = ort.InferenceSession(model_file_path_named)
-    print(f"Model '{model_file_path_named}' loaded.")
-    input_name = session.get_inputs()[0].name
-    inputs = {input_name: features_dataset.astype(np.float32)}
-    try:
-        result: ort.SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
-        print(result)
-    except (InvalidArgument, ONNXRuntimeError) as error_log:
-        import sys
+        ae_syn_vote = ae_result["syn"][i]
+        dc_syn_vote = dc_result["syn"][i]
 
-        print(error_log)
-        sys.exit()
+        model_ae_vote = 1 - ae_result["unk"][i]  # Convert model output: 0->GNE, 1->SYN
+        model_dc_vote = 1 - dc_result["unk"][i]
 
-    # session_pca = ort.InferenceSession(pca_file_path_named)
-    # input_name_pca = session_pca.get_inputs()[0].name
-    # features_pca = session_pca.run(None, {input_name_pca: features_dataset})[0]
+        # Aggregate GNE signals (inverse of SYN)
+        gne_score = (
+            ae_gn_vote  # AE heuristic says GNE
+            + dc_gn_vote  # DC heuristic says GNE
+            + model_ae_vote  # AE model says GNE
+            + model_dc_vote  # DC model says GNE
+        )
 
-    # input_name = ort.get_available_providers()[0]
-    # pca_file_path_named = model_version / "negate_pca.pkl"
-    # with open(pca_file_path_named, "rb") as pca_file:
-    #     pca = pickle.load(pca_file)
+        # Aggregate SYN signals
+        syn_score = (
+            ae_syn_vote  # AE heuristic says SYN
+            + dc_syn_vote  # DC heuristic says SYN
+            + (1 - model_ae_vote)  # AE model says SYN
+            + (1 - model_dc_vote)  # DC model says SYN
+        )
 
-    # features_pca = pca.transform(features_dataset)
-    # features_model = features_pca.astype(np.float32)  # type: ignore
-    # session_pca = ort.InferenceSession("negate_pca.onnx")
-    # input_name_pca = session_pca.get_inputs()[0].name
-    # features_pca = session_pca.run(None, {input_name_pca: np.array(features_dataset).astype(np.float32)})[0]
+        # Determine classification and confidence
+        total_signals = 4  # 2 heuristics + 2 models
 
-    # input_name = ort.get_available_providers()[0]
-    # inputs = {input_name: features_dataset.astype(np.float32)}
+        if gne_score >= syn_score:
+            label = "GNE"
+            certainty = round((gne_score / total_signals) * 100, 1)
+        else:
+            label = "SYN"
+            certainty = round((syn_score / total_signals) * 100, 1)
 
-    # session = ort.InferenceSession(model_file_path_named)
-    # print(f"Model '{model_file_path_named}' loaded.")
-    # return session.run(None, inputs)[0]
+        combined.append(
+            {
+                "index": i,
+                "label": label,
+                "confidence_pct": certainty,
+                "gne_votes": gne_score,
+                "syn_votes": syn_score,
+                "votes_detail": {"ae_heuristic": ae_gn_vote, "dc_heuristic": dc_gn_vote, "ae_model": model_ae_vote, "dc_model": model_dc_vote},
+            }
+        )
+    separator = lambda: print("=" * 60)
+    separator()
+    print("CERTAINTY RESULTS")
+    separator()
+    for result in combined:
+        print(f"IMG_{result['index']:02d}: {result['label']:3s} | Confidence: {result['confidence_pct']:5.1f}% | (GNE:{result['gne_votes']}, SYN:{result['syn_votes']})")
+    # return combined
 
-    # session = ort.InferenceSession(model_file_path_named)
-    # print(f"Model '{model_file_path_named}' loaded.")
-    # input_name = session.get_inputs()[0].name
-    # try:
-    #     result = session.run(None, {input_name: features_model})[0]  # type: ignore
-    #     print(result)
-    #     return result
-    # except (InvalidArgument, ONNXRuntimeError) as error_log:
-    #     import sys
 
-    #     print(error_log)
-    #     sys.exit()
+def compute_weighted_certainty(
+    ae_result: dict[str, list[int] | np.ndarray],
+    dc_result: dict[str, list[int] | np.ndarray],
+    heuristic_weight: float = 1.5,
+    model_weight: float = 1,  # Models less lessbased on your logs
+) -> None:  # list[dict]:
+    """
+    Compute certainty scores by combining all available inference methods.\n
+    Each method contributes a vote (0-1). Certainty is the sum normalized 0-5 scale.\n
+    - Heuristics: ~85-100% accurate
+    - Models: ~47-71% accurate
+    """
+    combined = []
+    n_images = min(len(ae_result["gne"]), len(dc_result["gne"]))
 
+    for i in range(n_images):
+        gne_score = 0.0
+        syn_score = 0.0
 
-def infer_origin(context: InferContext, features_dataset: Dataset | None = None) -> np.ndarray:
-    """Predict synthetic or original for given image.\n
-    :param context: Inference context containing spec, model path, and metadata.
-    :param features_dataset: Optional dataset. If not provided, will be computed from input in context.
-    :return: Prediction arrays (0=genuine, 1=synthetic)."""
+        # AE heuristic contribution
+        if ae_result["gne"][i] == 1:
+            gne_score += heuristic_weight
+        else:
+            syn_score += heuristic_weight
 
-    if features_dataset is None:  # Support lazy loading of features if not provided
-        raise ValueError("features_dataset must be provided or infer_origin called with full context")
+        # DC heuristic contribution
+        if dc_result["gne"][i] == 1:
+            gne_score += heuristic_weight
+        else:
+            syn_score += heuristic_weight
 
-    spec = context.spec
-    model_version = context.model_version
+        # AE model contribution (unk: 0=GNE, 1=SYN)
+        if ae_result["unk"][i] == 0:
+            gne_score += model_weight
+        else:
+            syn_score += model_weight
 
-    features_matrix = prepare_dataset(features_dataset, spec)
-    parameters = asdict(spec.hyper_param) | {"scale_pos_weight": context.train_metadata["scale_pos_weight"]}
-    result = run_onnx(features_matrix, model_version, parameters) if spec.opt.load_onnx else run_native(features_matrix, model_version, parameters=parameters)
+        # DC model contribution
+        if dc_result["unk"][i] == 0:
+            gne_score += model_weight
+        else:
+            syn_score += model_weight
 
-    thresh = 0.5
-    predictions = (result > thresh).astype(int)
-    if context.label is not None:
-        ground_truth = np.full(predictions.shape, context.label, dtype=int)
-        acc = float(np.mean(predictions == ground_truth))
-        print(f"Accuracy: {acc:.2%}")
-    print(result)
-    print(predictions)
-    return predictions
+        max_possible = (heuristic_weight * 2) + (model_weight * 2)
+
+        pred = "GNE" if gne_score > syn_score else "SYN"
+        certainty = round((max(gne_score, syn_score) / max_possible) * 100, 1)
+
+        combined.append({"index": i, "prediction": pred, "confidence_pct": certainty, "score_diff": abs(gne_score - syn_score)})
+        # Print formatted results
+        separator = lambda: print("=" * 60)
+        separator()
+        print("CERTAINTY RESULTS")
+        separator()
+        for result in combined:
+            print(f"IMG_{result['index']:02d}: {result['prediction']:3s} | Confidence: {result['confidence_pct']:5.1f}% | {result['score_diff']})")
+    # return combined

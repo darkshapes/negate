@@ -5,11 +5,12 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from datasets import Dataset, Image, concatenate_datasets, load_dataset
 from PIL import Image as PillowImage
 from tqdm import tqdm
 
-from negate.io.config import Spec, root_folder
+from negate.io.spec import Spec, root_folder
 
 
 def detect_nans(dataset: Dataset) -> Dataset:
@@ -23,6 +24,22 @@ def detect_nans(dataset: Dataset) -> Dataset:
         valid = ~np.isnan(lbls)
         dataset = dataset.select(valid)
     return dataset
+
+
+def prepare_dataset(features_dataset: Dataset, spec: Spec):
+    samples = features_dataset["results"]
+    all_dicts = [d for row in samples for d in row]
+
+    dtype = spec.np_dtype if spec.opt.load_onnx is False else np.float32
+    df = pd.json_normalize(all_dicts).fillna(0)
+
+    for col in df.columns:
+        if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():  # type: ignore Invalid series conditional
+            df[col] = df[col].apply(lambda x: np.mean(x, dtype=dtype) if isinstance(x, (list, np.ndarray)) else float(x))
+
+    feature_matrix = df.to_numpy(dtype=dtype)
+    feature_matrix = np.where(np.isfinite(feature_matrix), feature_matrix, 0)
+    return feature_matrix
 
 
 def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int | None = None) -> Dataset:

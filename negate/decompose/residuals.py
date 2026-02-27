@@ -11,7 +11,7 @@ from skimage.feature import local_binary_pattern
 from skimage.filters import difference_of_gaussians, laplace, sobel_h, sobel_v
 from torch import Tensor
 
-from negate.io.config import Spec
+from negate.io.spec import Spec
 
 
 class Residual:

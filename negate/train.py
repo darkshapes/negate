@@ -16,30 +16,28 @@ Functions:
     generate_datestamp_path: Generate timestamped file paths for model artifacts.
 """
 
-from dataclasses import asdict, dataclass
-from datetime import datetime
+import argparse
+import json
+import os
+from dataclasses import asdict
+
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
 import xgboost as xgb
 from datasets import Dataset
-from numpy.random import default_rng
-from numpy.typing import NDArray
+
+
 from sklearn.decomposition import PCA
 from sklearn.model_selection import train_test_split
-from xgboost import Booster
 
-from negate.io.config import Spec, root_folder
 
-get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
-datestamped_folder = Path("models", get_time())
-model_path = root_folder / "models"
-rng = default_rng(1)
-random_state = lambda x: int(np.round(rng.random() * x))
-timestamp = get_time()
-result_path = root_folder / "results" / timestamp
+from negate.inference import preprocessing
+from negate.io.config import root_folder, random_state, get_time, result_path
+from negate.io.datasets import build_datasets, prepare_dataset
+from negate.io.spec import Spec, fetch_spec_data, adjust_spec, TrainResult
+from negate.io.config import datestamped_folder
 
 
 def generate_datestamp_path(file_name) -> str:
@@ -57,60 +55,6 @@ def generate_datestamp_path(file_name) -> str:
     datestamped_folder.mkdir(parents=True, exist_ok=True)
     generated_path = str(datestamped_folder / file_name)
     return generated_path
-
-
-@dataclass
-class TrainResult:
-    """Container holding all artifacts produced by :func:`grade`.
-
-    This dataclass aggregates the trained model, preprocessing transformers,
-    training data matrices, and metadata needed for inference or further analysis.
-
-    Attributes:
-        d_matrix_test: XGBoost DMatrix with test set features.
-        feature_matrix: Full dataset feature array before PCA.
-        labels: Complete label vector from original dataset.
-        model: Trained XGBoost booster object.
-        num_features: Number of features after PCA transformation.
-        pca: Fitted sklearn PCA transformer.
-        scale_pos_weight: Computed class weight ratio.
-        seed: Random seed used for reproducibility.
-        X_train_pca: Training set after PCA transform.
-        X_train: Original training feature matrix.
-        y_test: Test set labels.
-
-    Example:
-        >>> result = grade(features_dataset)
-        >>> predictions = result.model.predict(result.d_matrix_test)
-    """
-
-    d_matrix_test: NDArray
-    feature_matrix: NDArray
-    labels: Any
-    model: Booster
-    num_features: int
-    pca: PCA
-    scale_pos_weight: float | None
-    seed: int
-    X_train_pca: NDArray
-    X_train: NDArray
-    y_test: NDArray
-
-
-def prepare_dataset(features_dataset: Dataset, spec: Spec):
-    samples = features_dataset["results"]
-    all_dicts = [d for row in samples for d in row]
-
-    dtype = spec.np_dtype if spec.opt.load_onnx is False else np.float32
-    df = pd.json_normalize(all_dicts).fillna(0)
-
-    for col in df.columns:
-        if df[col].apply(lambda x: isinstance(x, (list, np.ndarray))).any():  # type: ignore Invalid series conditional
-            df[col] = df[col].apply(lambda x: np.mean(x, dtype=dtype) if isinstance(x, (list, np.ndarray)) else float(x))
-
-    feature_matrix = df.to_numpy(dtype=dtype)
-    feature_matrix = np.where(np.isfinite(feature_matrix), feature_matrix, 0)
-    return feature_matrix
 
 
 def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
@@ -179,3 +123,78 @@ def grade(features_dataset: Dataset, spec: Spec) -> TrainResult:
         seed=seed,
         num_features=model.num_features(),
     )
+
+
+def build_train_call(args: argparse.Namespace, path_result: Path, spec: Spec) -> Dataset:
+    """Prepare CLI command input for function call.\n
+    :param args: Parsed command-line arguments.
+    :param path_result: Directory containing training outputs.
+    :param spec: Model specification container.
+    :returns: A dataset of raw images or precalculated features
+    """
+    kwargs = {}
+    if args.features is not None:
+        file_feat = str(path_result / args.features / f"features_{args.features}.json")
+        with open(file_feat) as handle:
+            features = json.load(handle)
+        features_df = pd.DataFrame.from_dict(features)
+        features_ds: Dataset = Dataset.from_pandas(features_df)
+    else:
+        kwargs["genuine_path"] = args.path
+        if args.syn is not None:
+            kwargs["synthetic_path"] = Path(args.syn)
+        spec.model = args.model
+        try:
+            spec.vae = next(iter(x for x in spec.model_config.list_vae if args.ae in x))
+        except StopIteration:
+            raise ValueError(f"Invalid VAE choice: {args.ae}")
+        kwargs["spec"] = spec
+        origin_ds: Dataset = build_datasets(**kwargs)
+        features_ds = pretrain(origin_ds, spec)
+    return features_ds
+
+
+def pretrain(image_ds: Dataset, spec: Spec) -> Dataset:
+    """Calibration of computing wavelet energy features.\n
+    :param ds_orig: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :returns: Dataset of extracted image features
+    """
+    features_ds = preprocessing(image_ds, spec=spec)
+    return features_ds
+
+
+def train_model(spec: Spec, features_ds: Dataset) -> TrainResult:
+    """Train XGBoost model on preprocessed image features.\n
+    :param spec: Specification container.
+    """
+    train_result = grade(features_ds, spec)
+    return train_result
+
+
+def training_loop(image_ds: Dataset, spec: Spec) -> None:
+    """Train models across a range of hyperparameter values.\n
+    :param ds_orig: Input dataset for training.
+    """
+    print("looping")
+
+    def parse_num(val):
+        """Try int first, fallback to float."""
+        try:
+            return int(val)
+        except ValueError:
+            return float(val)
+
+    hyper_param = input("enter name of hyperparameter:")
+    step_val = parse_num(input("enter increment"))
+    start, end = map(parse_num, input("enter start and end values separated by comma").split(","))
+
+    param_value = start
+    metadata = fetch_spec_data()
+    spec = adjust_spec(metadata=metadata, param_value=param_value, hyper_param=hyper_param)
+    while param_value < end:
+        path_loop = root_folder / "results" / get_time()
+        features_ds = pretrain(image_ds=image_ds, spec=spec)
+        train_model(features_ds=features_ds, spec=spec)
+        os.rename(result_path, path_loop)
+        param_value += step_val
