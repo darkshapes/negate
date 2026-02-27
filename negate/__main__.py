@@ -154,7 +154,8 @@ def main() -> None:
                 label=args.label,
                 file_or_folder_path=img_file_or_folder,
                 dataset_feat=None,
-                dc_vae=False,
+                run_heuristics=False,
+                model=True,
                 verbose=args.verbose,
             )
             context_dc = InferContext(
@@ -164,7 +165,8 @@ def main() -> None:
                 label=args.label,
                 file_or_folder_path=img_file_or_folder,
                 dataset_feat=None,
-                dc_vae=True,
+                run_heuristics=False,
+                model=True,
                 verbose=args.verbose,
             )
 

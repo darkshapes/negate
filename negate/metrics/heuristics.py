@@ -1,23 +1,15 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-"""
-Genuine
-DC GNE Probability (GNE_HEUR): [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] Heuristic Accuracy: 100.00%
-AE GNE Probability (GNE_HEUR): [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0] Heuristic Accuracy: 85.71%
-AE Decision Tree Model result: [0 0 0 1 0 0 0 0 0 0 0 1 1 1] Model Accuracy: 71.43%
-DC Decision Tree Model result: [0 0 0 0 0 0 0 1 0 0 0 1 1 1] Model Accuracy: 71.43%
 
-Synthetic
-AE SYN Probability (SYN HEUR): [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] Heuristic Accuracy: 100.00%
-DC SYN Probability (SYN HEUR): [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1] Heuristic Accuracy: 100.00%
-AE Decision Tree Model result: [1 0 0 1 1 0 0 0 0 1 1 1 1 1 1 1 0 0 0] Model Accuracy: 52.63%
-DC Decision Tree Model result: [1 0 0 0 1 0 0 0 0 1 1 1 1 1 1 0 0 1 0] Model Accuracy: 47.37%
-
-"""
+from pprint import pprint
 
 from typing import Any
 import numpy as np
+
+
+# Heuristics are not in use, but left for reference example
+# These ended up not working as effectively as the decision tree
 
 
 def weight_dc_gne(entry: dict[str, Any]) -> float:
@@ -132,90 +124,112 @@ def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float =
         type_conf.append((label_out, conf))
     return type_conf
 
+    """Map data from [in_min, in_max] to [out_min, out_max]."""
+
+
+def normalize_to_range(
+    data: list[float] | np.ndarray,
+    in_min: float,
+    in_max: float,
+    out_min: float = 0.01,
+    out_max: float = 1.0,
+) -> np.ndarray:
+    """Normalize data to [out_min, out_max] range."""
+    if not isinstance(data, np.ndarray):
+        data = np.asarray(data)
+    return out_min + (data - in_min) * (out_max - out_min) / (in_max - in_min)
+
 
 def compute_weighted_certainty(
     ae_inference: dict[str, list[float]],
     dc_inference: dict[str, list[float]],
     label: int | None = None,
-    dc_syn_thresh: float = 0.4,
-    ae_syn_thresh: float = 0.5,
-) -> None:
+    ae_min=0.02,
+    ae_max=0.95,
+    dc_min=0.19,
+    dc_max=0.80,
+) -> np.ndarray:
     """
     Compute certainty scores by combining all available inference methods.\n
     Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.
     """
-    from pprint import pprint
 
-    print(f"For : {'SYN' + ' [1]' if label == 1 else 'GNE' + ' (0)'} ")
-    model_thresh = 0.5
-    # hstc_thresh = 0
-    predictions = {
-        "ae_model": (np.array(ae_inference["unk"]) > model_thresh).astype(int),
-        "dc_model": (np.array(dc_inference["unk"]) > model_thresh).astype(int),
-    }
+    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "?"
+    if label is not None:
+        if label == 1:
+            header = "SYN [1]"
+        else:
+            header = "GNE (0)"
+        print(f"For : {header} ")
 
-    pred = {}
-    for id_name, model_pred in predictions.items():
-        if label is not None:
-            ground_truth = np.full(model_pred.shape, label, dtype=int)
-            acc = float(np.mean(model_pred == ground_truth))
-            print(f"{id_name} Accuracy: {acc:.2%}")
-        pred[id_name] = [f"{index} SYN % : {pred:.2%}" for index, pred in enumerate(dc_inference["unk"])]
+    predictions = [
+        {
+            "raw_pred": ae_inference["pred"],
+            "thresh": (0.4, 0.5),
+            "norm": (0.02, 0.90),
+            "norm_pred": None,
+            "result": [],
+        },
+        {
+            "raw_pred": dc_inference["pred"],
+            "thresh": (0.42, 0.5),
+            "norm": (0.15, 0.80),
+            "norm_pred": None,
+            "result": [],
+        },
+    ]
 
-    pprint(pred)
+    for index in range(len(predictions)):
+        predictions[index]["norm_pred"] = normalize_to_range(predictions[index]["raw_pred"], *predictions[index]["norm"])
+        predictions[index]["norm_pred"] = predictions[index]["norm_pred"].tolist()
+        for image, num in enumerate(predictions[index]["norm_pred"]):
+            origin = predictor(num, *predictions[index]["thresh"])
+            predictions[index]["result"].append(
+                {
+                    "index": "ae" if index == 1 else "dc",
+                    "img": image,
+                    "num": num,
+                    "origin": origin,
+                }
+            )
 
-    # hstc_pred = {
-    #     "ae_hstc": (np.array(ae_inference["ae_gne"]) > hstc_thresh).astype(int),
-    #     "dc_hstc": (np.array(dc_inference["dc_gne"]) > hstc_thresh).astype(int),
-    # }
-    # for id_name, hstc in hstc_pred.items():
-    #     pred[id_name] = [f"{index} GNE % : {pred:.2%}" for index, pred in enumerate(hstc)]
+    result_format = lambda x: f"{x['index']} :{x['origin']} img:{x['img']} " + f"{x['num']:.2%}"
+    final_result = []
+    final_numeric = []
 
-    # n_images = min(len(ae_inference["unk"]), len(dc_inference["unk"]))
-    # inferences = []
-    # print(f"ae_inference: {ae_inference}")
-    # print(f"dc_inference: {dc_inference}")
-    # for i in range(n_images):
-    #     syn_weight = dc_inference["dc_syn"][i]
-    #     gne_weight = ae_inference["ae_gne"][i], dc_inference["dc_gne"][i]
-    #     print(f"image {i} SYN % : {syn_weight}")
-    #     print(f"image {i} GNE % : {gne_weight}")
-    # unk_weight: float = ae_inference["unk"][i]
-    #     candidates = [
-    #         (syn_weight, syn_weight[1] * syn_heur_weight),
-    #         (gne_weight, gne_weight[1] * gne_heur_weight),
-    #         (unk_weight, unk_weight[1] * unk_model_weight),
-    #     ]
-    #     estimation, _ = max(candidates, key=lambda x: x[1])
-    #     print(estimation)
-    #     inferences.append((estimation))
-    # return inferences
+    for index, result in enumerate(predictions[0]["result"]):
+        if predictions[1]["result"][index]["origin"] == result["origin"]:
+            most_certain = result
+        else:
+            low_amount_ae = (predictions[0]["thresh"][0] - result["num"]), result
+            high_amount_ae = (result["num"] - predictions[0]["thresh"][1]), result
+            low_amount_dc = (predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"]), predictions[1]["result"][1]
+            high_amount_dc = (predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1]), predictions[1]["result"][1]
+            most_certain = max(
+                max(low_amount_ae, high_amount_ae, key=lambda x: x[0]),
+                max(low_amount_dc, high_amount_dc, key=lambda x: x[0]),
+                key=lambda x: x[0],
+            )[1]
 
-    # model_pred = model_accuracy(model_pred)
-    # if context.verbose:
-    #     print(f"""          Decision Tree Model result: {model_pred}
-    #         SYN Probability (DC VAE): {heur_dc_pred}
-    #         GNE Probability (AE VAE): {heur_ae_pred}""")
+        final_numeric.append(most_certain)
+        output = result_format(most_certain)
+        spacer = " " * (16 - len(output))
+        final_result.append(output + spacer)
 
-    # if args.label is not None:
-    #     label = "SYN" if args.label == 1 else "GNE"
-    #     print(f"For : {label + ' [1]' if args.label == 1 else label + ' (0)'} ")
-    #     count = sum(1 for item in inferences if label in item[0])
-    #     print(f"{count} / {len(inferences)} {(count / len(inferences)):.2%}")
-    # result_dc = []
-    # result_ae = []
-    # print(ae_inference["ae_gne"])
-    # print(dc_inference["dc_gne"])
-    # # for index, image in enumerate(ae_inference["unk"]):
-    # #     result_dc.append(np.round(dc_inference["unk"][index] - ae_inference["ae_gne"][index]))
-    # #     result_ae.append(np.round(image - ae_inference["ae_gne"][index]))
-    # print(ae_inference["unk"])
-    # # print(dc_inference["unk"])
-    # print(result_dc)
-    # print(result_ae)
-    # thresh = 0.5
+    thresh = 0.5
+    model_pred = (np.array([x["num"] for x in final_numeric]) > thresh).astype(int)
+    if label is not None:
+        ground_truth = np.full(model_pred.shape, label, dtype=int)
+        acc = float(np.mean(model_pred == ground_truth))
+        print(f"Model Accuracy: {acc:.2%}")
 
-    # ae_data = []
-    # dc_data = []
-    # for index, pred in enumerate(ae_inference["unk"]):
-    #     ae_data.append(f"{index} SYN % : {pred:.2%}")
+    pprint(final_result)
+    return model_pred
+
+    # if isclose(pct, low_thresh, rel_tol=0.3):
+    #     confidence = low_thresh - pct
+    # else:
+    #     confidence = pct - high_thresh
+    # {confidence:.2%}
+    # low_thresh = predictions[index]["thresh"][0]
+    # high_thresh = predictions[index]["thresh"][1]

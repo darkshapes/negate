@@ -30,8 +30,8 @@ class InferContext:
     file_or_folder_path: Path
     label: int | None = None
     dataset_feat: Dataset | None = None
-    dc_vae: bool = True
-    model: bool = False
+    run_heuristics: bool = False
+    model: bool = True
     verbose: bool = False
 
     def __post_init__(self) -> None:
@@ -196,12 +196,14 @@ def infer_origin(context: InferContext) -> dict[str, list[float]]:
         assert context.file_or_folder_path, ValueError("Image path must be provided for inference")
         origin_ds: Dataset = generate_dataset(context.file_or_folder_path, verbose=context.verbose)
         context.dataset_feat = preprocessing(origin_ds, context.spec, verbose=context.verbose)
-    prob = {"unk": predict_gne_or_syn(context=context)}
-    if context.dc_vae:
+    prob = {}
+    if context.model:
+        prob["pred"] = predict_gne_or_syn(context=context)
+
+    if context.run_heuristics:
         prob["dc_gne"] = []
         for entry in context.dataset_feat["results"]:
             prob["dc_gne"].append(weight_dc_gne(entry[0]))
-    else:
         prob["ae_gne"] = []
         for entry in context.dataset_feat["results"]:
             prob["ae_gne"].append(weight_ae_gne(entry[0]))
