@@ -20,6 +20,7 @@ import re
 import time as timer_module
 from pathlib import Path
 from sys import argv
+import numpy as np
 
 from negate import (
     InferContext,
@@ -43,7 +44,7 @@ from negate import (
 start_ns = timer_module.perf_counter()
 
 
-def main() -> None:
+def main() -> np.ndarray | None:
     """CLI argument parser and command dispatcher.\n
     :raises ValueError: Missing image path.
     :raises ValueError: Invalid VAE choice.
@@ -178,6 +179,7 @@ def main() -> None:
                 dc_inference,
                 args.label,
             )
+            return inferences
 
         case _:
             raise NotImplementedError
