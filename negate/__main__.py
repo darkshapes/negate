@@ -43,7 +43,7 @@ from negate import (
 start_ns = timer_module.perf_counter()
 
 
-def main() -> None:
+def main() -> list[dict[str, str | float | int]] | None:
     """CLI argument parser and command dispatcher.\n
     :raises ValueError: Missing image path.
     :raises ValueError: Invalid VAE choice.
@@ -173,11 +173,12 @@ def main() -> None:
             ae_inference = infer_origin(context_ae)
             dc_inference = infer_origin(context_dc)
 
-            inferences = compute_weighted_certainty(
+            compute_weighted_certainty(
                 ae_inference,
                 dc_inference,
                 args.label,
             )
+            # return inferences
 
         case _:
             raise NotImplementedError
