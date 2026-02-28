@@ -144,24 +144,25 @@ def compute_weighted_certainty(
     ae_inference: dict[str, list[float]],
     dc_inference: dict[str, list[float]],
     label: int | None = None,
-    ae_low_thresh: float = 0.4,
-    ae_high_thresh: float = 0.5,
-    dc_low_thresh: float = 0.42,
-    dc_high_thresh: float = 0.5,
-) -> np.ndarray:
+    ae_low_thresh: float = 0.4,  # lowering adjust certainty
+    ae_high_thresh: float = 0.48,
+    dc_low_thresh: float = 0.39,
+    dc_high_thresh: float = 0.43,
+) -> None:
     """
     Compute certainty scores by combining all available inference methods.\n
     Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.
     """
-
-    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "?"
+    gne = "GNE"
+    syn = "SYN"
+    header = ""
     if label is not None:
         if label == 1:
-            header = "SYN [1]"
+            header = f"{syn} [1]"
         else:
-            header = "GNE (0)"
-        print(f"For : {header} ")
+            header = f"{gne} (0)"
 
+    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "GNE" if pct < 0.4 else "?"
     predictions = [
         {"raw_pred": ae_inference["pred"], "thresh": (ae_low_thresh, ae_high_thresh), "norm": (0.02, 0.90), "norm_pred": None, "result": []},
         {"raw_pred": dc_inference["pred"], "thresh": (dc_low_thresh, dc_high_thresh), "norm": (0.15, 0.80), "norm_pred": None, "result": []},
@@ -172,7 +173,7 @@ def compute_weighted_certainty(
         predictions[index]["norm_pred"] = predictions[index]["norm_pred"].tolist()
         for image, num in enumerate(predictions[index]["norm_pred"]):
             origin = predictor(num, *predictions[index]["thresh"])
-            predictions[index]["result"].append({"index": "ae" if index == 1 else "dc", "img": image, "num": num, "origin": origin})
+            predictions[index]["result"].append({"index": "dc" if index == 1 else "ae", "img": image, "num": num, "origin": origin})
 
     result_format = lambda x: f"{x['index']} :{x['origin']} img:{x['img']} " + f"{x['num']:.2%}"
     final_result = []
@@ -182,27 +183,30 @@ def compute_weighted_certainty(
         if predictions[1]["result"][index]["origin"] == result["origin"]:
             most_certain = result
         else:
-            low_amount_ae = (predictions[0]["thresh"][0] - result["num"]), result
-            high_amount_ae = (result["num"] - predictions[0]["thresh"][1]), result
-            low_amount_dc = (predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"]), predictions[1]["result"][1]
-            high_amount_dc = (predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1]), predictions[1]["result"][1]
+            low_amount_ae = (abs(predictions[0]["thresh"][0] - result["num"])), result
+            high_amount_ae = (abs(result["num"] - predictions[0]["thresh"][1])), result
+            low_amount_dc = (abs(predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"])), predictions[1]["result"][1]
+            high_amount_dc = (abs(predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1])), predictions[1]["result"][1]
             most_certain = max(
                 max(low_amount_ae, high_amount_ae, key=lambda x: x[0]),
                 max(low_amount_dc, high_amount_dc, key=lambda x: x[0]),
                 key=lambda x: x[0],
             )[1]
-
+            most_certain["diffs"] = {"ae": (low_amount_ae[0], high_amount_ae[0]), "dc": (low_amount_dc[0], high_amount_dc[0])}
+        if label is not None:
+            most_certain["match"] = int(most_certain["origin"] == header[:-4])
         final_numeric.append(most_certain)
         output = result_format(most_certain)
         spacer = " " * (16 - len(output))
         final_result.append(output + spacer)
 
-    thresh = 0.5
-    model_pred = (np.array([x["num"] for x in final_numeric]) > thresh).astype(int)
+    model_pred = np.array([x["match"] for x in final_numeric]).astype(int)
     if label is not None:
-        ground_truth = np.full(model_pred.shape, label, dtype=int)
+        ground_truth = np.full(model_pred.shape, 1, dtype=int)
         acc = float(np.mean(model_pred == ground_truth))
+        pprint([x for x in final_numeric if x["match"] == 0])
+        print(f"For : {header} ")
         print(f"Model Accuracy: {acc:.2%}")
 
     pprint(final_result)
-    return model_pred
+    # return final_numeric
