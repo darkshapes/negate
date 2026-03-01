@@ -21,15 +21,14 @@ Requirements:
 - [huggingface.co](https://huggingface.co) Account
 
 Quick start
-Open Terminal/Powershell/cmd
 
-| Instruction       | Windows                                                                                                         | Linux/Macos |
-| ----------------- | --------------------------------------------------------------------------------------------------------------- | ----------- |
-| Install Git       | `git clone https://github.com/darkshapes/negate.git`                                                            |
-| Move into project | `cd negate`                                                                                                     |
-| Install project   | `uv sync negate`                                                                                                |
-| Activate          | `Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1`                                  |
-| Linux/MacOS       | git clone https://github.com/darkshapes/negate.git && cd negate && uv sync && source /negate/.venv/bin.activate |
+| Instruction       | Windows                                                                                                                                                | Linux/Macos |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| Install `UV`      | [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv) |
+| Move into project | `cd negate`                                                                                                                                            |
+| Install project   | `uv sync negate`                                                                                                                                       |
+| Activate          | `Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1`                                                                         |
+| Linux/MacOS       | git clone https://github.com/darkshapes/negate.git && cd negate && uv sync && source /negate/.venv/bin.activate                                        |
 | `cd negate`       |
 | uv sync           |
 | `                 |
