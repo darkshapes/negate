@@ -1,0 +1,27 @@
+# Commands
+pretrain = "Analyze and graph performance..."
+train = "Train XGBoost model..."
+infer = "Infer whether features..."
+
+# Flags
+loop = "Toggle training across the range..."
+features_load = "Train from an existing set of features"
+verbose = "Verbose console output"
+label_syn = "Mark image as synthetic (label = 1) for evaluation."
+label_gne = "Mark image as genuine (label = 0) for evaluation."
+
+# Dataset paths
+gne_path = "Genunie/Human-origin image dataset path"
+syn_path = "Synthetic image dataset path"
+unidentified_path = "Path to the image or directory containing images of unidentified origin"
+
+# Verbute Output
+verbose_status = "Checking path "
+verbose_dated = " using models dated "
+
+# Errors
+infer_path_error = "Infer requires an image path."
+model_error = "Warning: No valid model directories found in "
+model_error_hint = " Create or add a trained model before running inference."
+model_pair = "Two models must be provided for inference..."
+model_pattern = "Model format must match pattern YYYYMMDD_HHMMSS..."

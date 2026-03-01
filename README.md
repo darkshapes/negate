@@ -93,7 +93,7 @@ positional arguments:
     pretrain            Analyze and graph performance of image preprocessing on the image dataset at the provided path from CLI and config paths, default `assets/`.
     train               Train XGBoost model on preprocessed image features using the image dataset in the provided path or `assets/`. The resulting model will be saved to disk.
     measure             Measure defining features of synthetic or genuine images at the provided path.
-    infer               Infer whether an image at the provided path is synthetic or original.
+    infer               Infer whether an image at the provided path is synthetic or genuine human origin.
 
 options:
   -h, --help            show this help message and exit
@@ -108,7 +108,7 @@ uusage: negate pretrain [-h]
                        [path]
 
 positional arguments:
-  path                  Genunie/Human-original image dataset path
+  path                  Genunie/Human origin image dataset path
 
 options:
   -h, --help            show this help message and exit

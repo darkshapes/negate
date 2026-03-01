@@ -27,6 +27,7 @@ from negate.io.config import (
     negate_options,
     root_folder,
     train_rounds,
+    result_path,
 )
 
 
@@ -115,28 +116,28 @@ class Spec:
         self.model_config: NegateModelConfig = model_config
 
 
-def load_spec(model_version: Path = Path("config")) -> Spec:
+def load_spec(model_version: str = "config") -> Spec:
     """Load model specification and training metadata.\n
     :param ver_model: Version folder path containing config and results.
     :returns: Updated specification and additional metadata
     """
 
     if str(model_version) != "config":
-        path_result = Path("results") / model_version.stem
+        path_result = Path("results") / model_version
     else:
-        path_result = model_version
+        path_result = Path(model_version)
     path_config = str(path_result / "config.toml")
     config_options = load_config_options(path_config)  # load a different config
     spec = Spec(*config_options)
     return spec
 
 
-def load_metadata(model_version: Path) -> dict[str, Any]:
+def load_metadata(model_version: str) -> dict[str, Any]:
     """\nLoad serialized training metadata from JSON result file.\n
     :param model_version: Stem of the model version folder.
     :returns: Dictionary containing saved metrics and parameters."""
 
-    results_path = root_folder / "results" / model_version.stem / f"results_{model_version.stem}.json"
+    results_path = root_folder / "results" / model_version / f"results_{model_version}.json"
     with open(results_path, "rb") as handle:
         metadata = json.load(handle)
     return metadata

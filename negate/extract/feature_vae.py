@@ -108,10 +108,7 @@ class VAEExtract:
         from huggingface_hub import snapshot_download
         from huggingface_hub.errors import LocalEntryNotFoundError
 
-        try:
-            from diffusers.models import autoencoders  # type: ignore
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency 'diffusers'. Please install it using 'negate[extractor]'")
+        from diffusers.models import autoencoders  # type: ignore
 
         if getattr(self.spec.opt, "vae_tiling", False):
             self.vae.enable_tiling()
@@ -146,10 +143,7 @@ class VAEExtract:
         :param batch: Tensor of image + patches.
         :return: NumPy mean latent."""
 
-        try:
-            from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution  # type: ignore
-        except (ImportError, ModuleNotFoundError, Exception):
-            raise RuntimeError("missing dependency 'diffusers'. Please install it using 'negate[extractor]'")
+        from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
         import torch
 
         latent: Tensor = self.vae.encode(batch).latent  # type: ignore
