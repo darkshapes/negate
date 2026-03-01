@@ -113,11 +113,11 @@ write_to = "_version.py"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["negate*"]
+include = ["negate*", "config*", "models*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-negate = ["negate/config/*.toml", "negate/results/*"]
+negate = ["negate/config/*", "negate/results/*", "negate/models/*"]
 
 [tool.ruff]
 line-length = 140
