@@ -41,6 +41,8 @@ timestamp = get_time()
 results_root = root_folder / "results"
 results_root.mkdir(exist_ok=True)
 model_path = root_folder / "models"
+model_path.mkdir(exist_ok=True)
+
 result_path = results_root / timestamp
 config_path = root_folder / "config"
 
