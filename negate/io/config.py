@@ -34,11 +34,13 @@ from numpy.random import default_rng
 root_folder = Path(__file__).parent.parent.parent
 get_time = lambda: datetime.now().strftime("%Y%m%d_%H%M%S")
 datestamped_folder = Path("models", get_time())
-model_path = root_folder / "models"
 rng = default_rng(1)
 random_state = lambda x: int(np.round(rng.random() * x))
 timestamp = get_time()
+
+model_path = root_folder / "models"
 result_path = root_folder / "results" / timestamp
+config_path = root_folder / "config"
 
 
 class NegateTrainRounds(NamedTuple):
@@ -269,8 +271,8 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
-    config_path = root_folder / file_path_named
-    with open(config_path, "rb") as config_file:
+    config_path_named = root_folder / file_path_named
+    with open(config_path_named, "rb") as config_file:
         data = tomllib.load(config_file)
 
     models = data.pop("model")

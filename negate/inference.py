@@ -8,7 +8,7 @@ from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from datasets import Dataset
+from datasets import Dataset, enable_progress_bar, logging
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
 
@@ -45,7 +45,7 @@ class InferContext:
                 self.train_metadata = json.load(f)
 
 
-def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray:
+def run_native(features_dataset: np.ndarray, model_version: Path, parameters: dict, verbose: bool = False) -> np.ndarray:
     """Run inference using XGBoost with PCA pre-processing.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
@@ -68,12 +68,13 @@ def run_native(features_dataset: np.ndarray, model_version: Path, parameters: di
 
     model = xgb.Booster(params=parameters, model_file=model_file_path_named)
     model.load_model(model_file_path_named)
-    print(f"Model '{model_file_path_named}' loaded.")
+    if verbose:
+        print(f"Model '{model_file_path_named}' loaded.")
     result = model.predict(xgb.DMatrix(features_pca))
     return result
 
 
-def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict) -> np.ndarray | Any:
+def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict, verbose: bool = False) -> np.ndarray | Any:
     """Run inference using ONNX Runtime with PCA pre-processing.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
@@ -95,7 +96,8 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
     features_model = features_pca.astype(np.float32)  # type: ignore
 
     session = ort.InferenceSession(model_file_path_named)
-    print(f"Model '{model_file_path_named}' loaded.")
+    if verbose:
+        print(f"Model '{model_file_path_named}' loaded.")
     input_name = session.get_inputs()[0].name
     inputs = {input_name: features_dataset.astype(np.float32)}  # noqa
     try:
@@ -108,15 +110,10 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
         sys.exit()
 
 
-def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
-    """Apply wavelet analysis transformations to dataset.\n
-    :param dataset: HuggingFace Dataset with 'image' column.
-    :param spec: Specification container with analysis configuration.
-    :return: Transformed dataset with 'features' column."""
-    print("Beginning preprocessing.")
-
+def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
     kwargs = {}
     kwargs["disable_nullable"] = spec.opt.disable_nullable
+    kwargs["remove_columns"] = ["image"]
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
@@ -126,43 +123,53 @@ def batch_preprocessing(dataset: Dataset, spec: Spec) -> Dataset:
         kwargs["load_from_cache_file"] = True
         kwargs["keep_in_memory"] = True
         kwargs["new_fingerprint"] = spec.hyper_param.seed
+    if verbose:
+        from datasets import logging as ds_logging, enable_progress_bars as ds_enable_progress_bars
+        from huggingface_hub.utils.tqdm import enable_progress_bars as hf_enable_progress_bars
+        from huggingface_hub import logging as hf_logging
+        from transformers import logging as tf_logging
+        from diffusers.utils import logging as df_logging
+        from timm.utils.log import setup_default_logging
+        import logging
+
+        ds_enable_progress_bars()
+        hf_enable_progress_bars()
+
+        setup_default_logging(logging.INFO)
+        for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
+            logger.set_verbosity_info()
+        print("Beginning preprocessing.")
+        kwargs["desc"] = ("Computing wavelets...",)
+    return kwargs
+
+
+def batch_preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> Dataset:
+    """Apply wavelet analysis transformations to dataset.\n
+    :param dataset: HuggingFace Dataset with 'image' column.
+    :param spec: Specification container with analysis configuration.
+    :return: Transformed dataset with 'features' column."""
+    kwargs = build_map_call(spec, verbose)
 
     with VAEExtract(spec) as extractor:  # type: ignore
         dataset = dataset.map(
             extractor.forward,
-            remove_columns=["image"],
-            desc="Computing wavelets...",
-            **kwargs,
+            **kwargs,  # type: ignore
         )
     return dataset
 
 
-def preprocessing(dataset: Dataset, spec: Spec, verbose=False) -> Dataset:
+def preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> Dataset:
     """Apply wavelet analysis transformations to dataset.\n
     :param dataset: HuggingFace Dataset with 'image' column.
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
-    print("Beginning preprocessing.")
-
-    kwargs = {}
-    kwargs["disable_nullable"] = spec.opt.disable_nullable
-    if spec.opt.batch_size > 0:
-        kwargs["batched"] = True
-        kwargs["batch_size"] = spec.opt.batch_size
-    if spec.opt.load_from_cache_file is False:
-        kwargs["new_fingerprint"] = str(random_state(spec.train_rounds.max_rnd))
-    else:
-        kwargs["load_from_cache_file"] = True
-        kwargs["keep_in_memory"] = True
-        kwargs["new_fingerprint"] = spec.hyper_param.seed
+    kwargs = build_map_call(spec, verbose)
 
     context = WaveletContext(spec=spec, verbose=verbose)
     with WaveletAnalyze(context) as analyzer:  # type: ignore
         dataset = dataset.map(
             analyzer,
-            remove_columns=["image"],
-            desc="Computing wavelets...",
-            **kwargs,
+            **kwargs,  # type: ignore
         )
     return dataset
 
@@ -176,9 +183,9 @@ def predict_gne_or_syn(context: InferContext) -> list[float]:
     features_matrix = prepare_dataset(context.dataset_feat, spec)
     parameters = asdict(spec.hyper_param) | {"scale_pos_weight": context.train_metadata["scale_pos_weight"]}
     if spec.opt.load_onnx:
-        result = run_onnx(features_matrix, model_version, parameters=parameters)
+        result = run_onnx(features_matrix, model_version, parameters=parameters, verbose=context.verbose)
     else:
-        result = run_native(features_matrix, model_version, parameters=parameters)
+        result = run_native(features_matrix, model_version, parameters=parameters, verbose=context.verbose)
     prob = []
     for x in result:
         prob.append(float(x))
