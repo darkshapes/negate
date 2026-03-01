@@ -117,7 +117,7 @@ include = ["negate*", "config*", "models*"]
 exclude = ["tests*"]
 
 [tool.setuptools.package-data]
-negate = ["negate/config/*", "negate/results/*", "negate/models/*"]
+negate = ["negate/config/*"]
 
 [tool.ruff]
 line-length = 140
