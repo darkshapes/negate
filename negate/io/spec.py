@@ -27,7 +27,6 @@ from negate.io.config import (
     negate_options,
     root_folder,
     train_rounds,
-    result_path,
 )
 
 

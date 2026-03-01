@@ -38,8 +38,10 @@ rng = default_rng(1)
 random_state = lambda x: int(np.round(rng.random() * x))
 timestamp = get_time()
 
+results_root = root_folder / "results"
+results_root.mkdir(exist_ok=True)
 model_path = root_folder / "models"
-result_path = root_folder / "results" / timestamp
+result_path = results_root / timestamp
 config_path = root_folder / "config"
 
 
