@@ -103,6 +103,7 @@ def cmd(ctx: CmdContext) -> None:  # -> list[dict[str, str | float | int]]
                 import warnings
 
                 warnings.filterwarnings("default", category=UserWarning)
+                warnings.filterwarnings("default", category=DeprecationWarning)
                 print(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
 
             inference_result = {}

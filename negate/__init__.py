@@ -12,6 +12,7 @@ import logging
 import warnings
 
 warnings.filterwarnings("ignore", category=UserWarning)
+warnings.filterwarnings("ignore", category=DeprecationWarning)
 setup_default_logging(logging.ERROR)
 for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
     logger.set_verbosity_error()
