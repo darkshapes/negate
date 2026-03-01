@@ -114,8 +114,8 @@ write_to = "_version.py"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["negate*", "config*", "models/20260225_221149*", "models/20260225_185933*", "results/20260225_221149*", "results/20260225_185933*"]
-exclude = ["tests*", "models*", "results*"]
+include = ["negate*", "config*", "models*", "results*"]
+exclude = ["tests*"]
 
 [tool.setuptools.package-data]
 negate = ["negate/config/*"]
