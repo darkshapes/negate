@@ -3,6 +3,10 @@ language:
   - en
 library_name: nnll
 license_name: MPL-2.0 + Commons Clause 1.0
+compatibility:
+  - macos
+  - windows
+  - linux
 ---
 
 <div align="center">
@@ -11,45 +15,83 @@ license_name: MPL-2.0 + Commons Clause 1.0
 
 # negate <br><sub> entrypoint synthetic image classifier</sub>
 
-A CLI tool and Python library for ongoing research of origin prediction tasks using image processing and feature extraction.
+A tool, research, and training library to detect the origin of images.
 
 [<img src="https://img.shields.io/badge/feed_me-__?logo=kofi&logoColor=white&logoSize=auto&label=donate&labelColor=maroon&color=grey&link=https%3A%2F%2Fko-fi.com%2Fdarkshapes">](https://ko-fi.com/darkshapes)<br>
 <br>
 
-Requirements:
+## Quick Start
 
-- [huggingface.co](https://huggingface.co) Account
+<svg viewBox="0 0 30 28" width="22" height="26" xmlns="http://www.w3.org/2000/svg"><title>MacOS</title><path d="M24.769 20.3a4.949 4.949 0 012.356-4.151 5.066 5.066 0 00-3.99-2.158c-1.68-.176-3.308 1.005-4.164 1.005-.872 0-2.19-.988-3.608-.958a5.315 5.315 0 00-4.473 2.728c-1.934 3.348-.491 8.269 1.361 10.976.927 1.325 2.01 2.805 3.428 2.753 1.387-.058 1.905-.885 3.58-.885 1.658 0 2.144.885 3.59.852 1.489-.025 2.426-1.332 3.32-2.67a10.962 10.962 0 001.52-3.092 4.782 4.782 0 01-2.92-4.4zM22.037 12.21a4.872 4.872 0 001.115-3.49 4.957 4.957 0 00-3.208 1.66A4.636 4.636 0 0018.8 13.74a4.1 4.1 0 003.237-1.53z" style="fill:white;stroke:white;stroke-width:1" /></svg> <sup>Terminal</sup>
+<svg viewBox="0 0 30 15" width="20" height="25" xmlns="http://www.w3.org/2000/svg"><title>Windows</title><path d="M11.5216 0.5H0V11.9067H11.5216V0.5Z M24.2418 0.5H12.7202V11.9067H24.2418V0.5Z M11.5216 13.0933H0V24.5H11.5216V13.0933Z M24.2418 13.0933H12.7202V24.5H24.2418V13.0933Z" fill="white" /></svg><sup>Powershell</sup>
+<svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="-122.5 -162.5 260 265"><title>Linux</title><g id="U"><circle cx="-96.3772" r="18.9215" fill="white" /><path d="M-45.6059,68.395C-62.1655,57.3316-74.4844,40.4175-79.6011,20.6065-73.623,15.7354-69.8047,8.3164-69.8047,0-69.8047-8.3164-73.623-15.7354-79.6011-20.6065-74.4844-40.4175-62.1655-57.3316-45.6059-68.395L-31.7715-45.2212C-45.9824-35.2197-55.2754-18.7026-55.2754,0-55.2754,18.7026-45.9824,35.2197-31.7715,45.2212Z" fill="white" /></g><use xlink:href="#U" transform="rotate(120)"/><use xlink:href="#U" transform="rotate(240)"/></svg><sup>sh</sup>
 
-Quick start
+> **1.** [![uv from astral.sh](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json?&label=astral.sh&logoSize=auto)](https://docs.astral.sh/uv/#installation)
 
-| Instruction       | Windows                                                                                                                                                | Linux/Macos |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| Install `UV`      | [![uv](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json)](https://github.com/astral-sh/uv) |
-| Move into project | `cd negate`                                                                                                                                            |
-| Install project   | `uv sync negate`                                                                                                                                       |
-| Activate          | `Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1`                                                                         |
-| Linux/MacOS       | git clone https://github.com/darkshapes/negate.git && cd negate && uv sync && source /negate/.venv/bin.activate                                        |
-| `cd negate`       |
-| uv sync           |
-| `                 |
+> **2.** `uv tool install 'negate @ git+https://github.com/darkshapes/negate'`
 
-<sub>windows</sub>
+> **3.** `negate infer image.webp`
 
-```powershell
-Set-ExecutionPolicy Bypass -Scope Process -Force; .venv\Scripts\Activate.ps1
-```
+</sup>
 
-<sub>macos/linux</sub>
+| Result | Translated Source    |
+| ------ | -------------------- |
+| `SYN`  | **Synthetic/AI**     |
+| `GNE`  | **Genuine/Human**    |
+| `?`    | **High Uncertainty** |
 
-## Related Research:
+> [!TIP]
+> To run without installing, use the `uv` command `uvx --from 'negate @ git+https://github.com/darkshapes/negate' infer image.webp`
 
-- [arxiv:2511.14030](https://arxiv.org/abs/2511.14030)
-- [arxiv:2505.11278](https://arxiv.org/abs/2505.11278)
-- [arxiv:2502.15176](https://arxiv.org/abs/2502.15176)
-- [arxiv:2411.19417](https://arxiv.org/abs/2411.19417)
-- [arxiv:2409.07913](https://arxiv.org/abs/2409.07913)
-- [VeridisQuo](https://github.com/VeridisQuo-orga/VeridisQuo)
-- https://drive.google.com/file/d/1bxDmREBn-TkTe-GkcLVD9_bVw3nokehI/view
+## Training
+
+Train a new model with the following command:
+
+`negate train`
+
+> [!TIP]
+> type a `path` to an image file or directory of image files to add genuine human origin assets to the dataset
+> add synthetic images using _`-s`_ before a `path`
+
+## Technical Details & Research Results
+
+<details><summary> Expand</summary>
+
+### Structure
+
+Directories are located within `$HOME\.local\bin\uv\tools` or `.local/bin/uv/tools`
+
+| Data                  | Location                                      | source                                |
+| --------------------- | --------------------------------------------- | ------------------------------------- |
+| adjustable parameters | [config/config.toml](config/config.toml)      | included                              |
+| downloaded datasets   | `.datasets/`                                  | [HuggingFace](https://huggingface.co) |
+| downloaded models     | [/models](/models) root folder                | [HuggingFace](https://huggingface.co) |
+| trained models        | [/models](/models) date-numbered subfolders   | generated via training                |
+| training metadata     | [/results](/results) date-numbered subfolders | generated via training                |
+
+---
+
+| Module       | Summary             | Purpose                                                                                                                        |
+| ------------ | ------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| negate       | core module         | Root source code folder. Creates CLI arguments and interprets commands.                                                        |
+| →→ decompose | image processing    | Random Resize Crop and Haar Wavelet transformations - [arxiv:2511.14030](https://arxiv.org/abs/2511.14030)                     |
+| →→ extract   | feature processing  | Laplace/Sobel/Spectral analysis, VIT/VAE extraction, cross‑entropy loss - [arxiv:2411.19417](https://arxiv.org/abs/2411.19417) |
+| →→ io        | load / save / state | Hyperparameters, image datasets, console messages, model serialization and conversion.                                         |
+| →→ metrics   | evaluation          | Graphs, visualizations, model performance metadata, and a variety of heuristics for results interpretation.                    |
+| → inference  | predictions         | Detector functions to determine origin from trained model predictions.                                                         |
+| → train      | XGBoost             | PCA data transforms and gradient-boosted decision tree model training.                                                         |
+
+### Research
+
+<div align="center">
+
+<img src="results/tail_plot.png" style="width:50%; max-width:500px;" alt="Visualization of Fourier Image Residual variance for the DinoViTL Model">
+
+<img src="results/vae_plot.png" style="width:50%; max-width:500px;" alt="Visualization of VAE mean loss results for the Flux Klein model"></div>
+
+The ubiqity of online services, connected presence, generative models, and the proliferate digital output that has accompanied these nascent developments have yielded a colossal and simultaneous disintegration of trust, judgement and ecological welfare, exacerbating prevailing struggles in all species of life. While the outcome of these deep-seated issues is beyond the means of a small group of academic researchers to determine, and while remediation efforts will require far more resources than attention alone, we have nevertheless taken pause to reconsider the consequences of our way of life while investigating the prospects of new avenues that may diminish harm.
+
+</details>
 
 ```bib
 @misc{darkshapes2026,
