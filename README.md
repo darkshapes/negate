@@ -22,9 +22,9 @@ A tool, research, and training library to detect the origin of images.
 
 ## Quick Start
 
-<svg viewBox="0 0 30 28" width="22" height="26" xmlns="http://www.w3.org/2000/svg"><title>MacOS</title><path d="M24.769 20.3a4.949 4.949 0 012.356-4.151 5.066 5.066 0 00-3.99-2.158c-1.68-.176-3.308 1.005-4.164 1.005-.872 0-2.19-.988-3.608-.958a5.315 5.315 0 00-4.473 2.728c-1.934 3.348-.491 8.269 1.361 10.976.927 1.325 2.01 2.805 3.428 2.753 1.387-.058 1.905-.885 3.58-.885 1.658 0 2.144.885 3.59.852 1.489-.025 2.426-1.332 3.32-2.67a10.962 10.962 0 001.52-3.092 4.782 4.782 0 01-2.92-4.4zM22.037 12.21a4.872 4.872 0 001.115-3.49 4.957 4.957 0 00-3.208 1.66A4.636 4.636 0 0018.8 13.74a4.1 4.1 0 003.237-1.53z" style="fill:white;stroke:white;stroke-width:1" /></svg> <sup>Terminal</sup>
-<svg viewBox="0 0 30 15" width="20" height="25" xmlns="http://www.w3.org/2000/svg"><title>Windows</title><path d="M11.5216 0.5H0V11.9067H11.5216V0.5Z M24.2418 0.5H12.7202V11.9067H24.2418V0.5Z M11.5216 13.0933H0V24.5H11.5216V13.0933Z M24.2418 13.0933H12.7202V24.5H24.2418V13.0933Z" fill="white" /></svg><sup>Powershell</sup>
-<svg xmlns="http://www.w3.org/2000/svg" width="25" height="25" viewBox="-122.5 -162.5 260 265"><title>Linux</title><g id="U"><circle cx="-96.3772" r="18.9215" fill="white" /><path d="M-45.6059,68.395C-62.1655,57.3316-74.4844,40.4175-79.6011,20.6065-73.623,15.7354-69.8047,8.3164-69.8047,0-69.8047-8.3164-73.623-15.7354-79.6011-20.6065-74.4844-40.4175-62.1655-57.3316-45.6059-68.395L-31.7715-45.2212C-45.9824-35.2197-55.2754-18.7026-55.2754,0-55.2754,18.7026-45.9824,35.2197-31.7715,45.2212Z" fill="white" /></g><use xlink:href="#U" transform="rotate(120)"/><use xlink:href="#U" transform="rotate(240)"/></svg><sup>sh</sup>
+![MacOS](https://darkshapes.org/img/macos.svg)<sup> Terminal</sup>
+![Windows](https://darkshapes.org/img/win.svg)<sup> Powershell</sup>
+![Linux](https://darkshapes.org/img/linux.svg)<sup> sh</sup>
 
 > **1.** [![uv from astral.sh](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/uv/main/assets/badge/v0.json?&label=astral.sh&logoSize=auto)](https://docs.astral.sh/uv/#installation)
 
