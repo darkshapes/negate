@@ -15,7 +15,7 @@ compatibility:
 
 # negate <br><sub> entrypoint synthetic image classifier</sub>
 
-A tool, research, and training library to detect the origin of images.
+A scanning, training, and research library for detecting the origin of digital images.
 
 [<img src="https://img.shields.io/badge/feed_me-__?logo=kofi&logoColor=white&logoSize=auto&label=donate&labelColor=maroon&color=grey&link=https%3A%2F%2Fko-fi.com%2Fdarkshapes">](https://ko-fi.com/darkshapes)<br>
 <br>
