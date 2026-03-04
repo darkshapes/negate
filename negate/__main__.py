@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import logging
 import re
 import time as timer_module
 import tomllib
@@ -19,6 +20,13 @@ CONFIG_TOML_PATH = CONFIG_PATH / "config.toml"
 TIMESTAMP_PATTERN = re.compile(r"\d{8}_\d{6}")
 DEFAULT_INFERENCE_PAIR = ["20260225_185933", "20260225_221149"]
 start_ns = timer_module.perf_counter()
+CLI_LOGGER = logging.getLogger("negate.cli")
+if not CLI_LOGGER.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(message)s"))
+    CLI_LOGGER.addHandler(_handler)
+CLI_LOGGER.setLevel(logging.INFO)
+CLI_LOGGER.propagate = False
 
 
 @dataclass
@@ -243,9 +251,9 @@ def cmd(ctx: CmdContext) -> None:
 
                 warnings.filterwarnings("default", category=UserWarning)
                 warnings.filterwarnings("default", category=DeprecationWarning)
-                print(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
+                CLI_LOGGER.info(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
 
-            print("Preparing feature dataset and loading selected models...")
+            CLI_LOGGER.info("Preparing feature dataset and loading selected models...")
             origin_ds = generate_dataset(img_file_or_folder, verbose=args.verbose)
             feature_cache: dict[str, Any] = {}
             feature_key_by_model: dict[str, str] = {}

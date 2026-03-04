@@ -2,6 +2,7 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import pickle
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ from negate.io.datasets import generate_dataset, prepare_dataset
 from negate.inference_types import ModelOutput, OriginLabel
 from negate.io.spec import Spec
 from negate.metrics.heuristics import weight_dc_gne, weight_ae_gne
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -70,7 +73,7 @@ def run_native(features_dataset: np.ndarray, model_version: Path, parameters: di
     model = xgb.Booster(params=parameters, model_file=model_file_path_named)
     model.load_model(model_file_path_named)
     if verbose:
-        print(f"Model '{model_file_path_named}' loaded.")
+        LOGGER.info("Model '%s' loaded.", model_file_path_named)
     result = model.predict(xgb.DMatrix(features_pca))
     return result
 
@@ -98,16 +101,16 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
 
     session = ort.InferenceSession(model_file_path_named)
     if verbose:
-        print(f"Model '{model_file_path_named}' loaded.")
+        LOGGER.info("Model '%s' loaded.", model_file_path_named)
     input_name = session.get_inputs()[0].name
     inputs = {input_name: features_dataset.astype(np.float32)}  # noqa
     try:
         result: ort.SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
-        print(result)
+        LOGGER.info("%s", result)
     except (InvalidArgument, ONNXRuntimeError) as error_log:
         import sys
 
-        print(error_log)
+        LOGGER.error("%s", error_log)
         sys.exit()
 
 
@@ -140,7 +143,7 @@ def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
         setup_default_logging(logging.INFO)
         for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
             logger.set_verbosity_info()
-        print("Beginning preprocessing.")
+        LOGGER.info("Beginning preprocessing.")
     return kwargs
 
 
