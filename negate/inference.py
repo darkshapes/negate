@@ -17,7 +17,7 @@ from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
 from negate.extract.feature_vae import VAEExtract
 from negate.io.config import random_state
 from negate.io.datasets import generate_dataset, prepare_dataset
-from negate.inference_types import ModelOutput, OriginLabel
+from negate.types import ModelOutput, OriginLabel
 from negate.io.spec import Spec
 from negate.metrics.heuristics import weight_dc_gne, weight_ae_gne
 

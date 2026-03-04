@@ -7,7 +7,7 @@ from pprint import pprint
 from typing import Any
 import numpy as np
 
-from negate.inference_types import InferenceModel, ModelOutput, OriginLabel
+from negate.types import InferenceModel, ModelOutput, OriginLabel
 
 
 # Heuristics are not in use, but left for reference example
