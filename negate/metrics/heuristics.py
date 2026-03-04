@@ -185,8 +185,8 @@ def compute_weighted_certainty(
         else:
             low_amount_ae = (abs(predictions[0]["thresh"][0] - result["num"])), result
             high_amount_ae = (abs(result["num"] - predictions[0]["thresh"][1])), result
-            low_amount_dc = (abs(predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"])), predictions[1]["result"][1]
-            high_amount_dc = (abs(predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1])), predictions[1]["result"][1]
+            low_amount_dc = (abs(predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"])), predictions[1]["result"][index]
+            high_amount_dc = (abs(predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1])), predictions[1]["result"][index]
             most_certain = max(
                 max(low_amount_ae, high_amount_ae, key=lambda x: x[0]),
                 max(low_amount_dc, high_amount_dc, key=lambda x: x[0]),
@@ -200,8 +200,8 @@ def compute_weighted_certainty(
         spacer = " " * (16 - len(output))
         final_result.append(output + spacer)
 
-    model_pred = np.array([x["match"] for x in final_numeric]).astype(int)
     if label is not None:
+        model_pred = np.array([x["match"] for x in final_numeric], dtype=int)
         ground_truth = np.full(model_pred.shape, 1, dtype=int)
         acc = float(np.mean(model_pred == ground_truth))
         pprint([x for x in final_numeric if x["match"] == 0])
