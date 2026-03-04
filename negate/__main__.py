@@ -214,7 +214,8 @@ def cmd(ctx: CmdContext) -> None:
         case "infer":
             from tqdm import tqdm
 
-            from negate.inference import InferContext, infer_origin
+            from negate.inference import InferContext, infer_origin, preprocessing
+            from negate.io.datasets import generate_dataset
             from negate.io.spec import load_metadata
             from negate.metrics.heuristics import compute_weighted_certainty
 
@@ -228,10 +229,14 @@ def cmd(ctx: CmdContext) -> None:
                 raise ValueError(ctx.blurb.model_pair)
 
             negate_models: dict[str, Path] = {}
+            model_specs: dict[str, Any] = {}
+            model_metadata: dict[str, Any] = {}
             for saved_model in args.model:
                 negate_models[saved_model] = ctx.models_path / saved_model
                 if not negate_models[saved_model].exists():
                     raise ValueError(ctx.blurb.model_pattern)
+                model_specs[saved_model] = load_spec(saved_model)
+                model_metadata[saved_model] = load_metadata(saved_model)
 
             if args.verbose:
                 import warnings
@@ -239,6 +244,29 @@ def cmd(ctx: CmdContext) -> None:
                 warnings.filterwarnings("default", category=UserWarning)
                 warnings.filterwarnings("default", category=DeprecationWarning)
                 print(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
+
+            print("Preparing feature dataset and loading selected models...")
+            origin_ds = generate_dataset(img_file_or_folder, verbose=args.verbose)
+            feature_cache: dict[str, Any] = {}
+            feature_key_by_model: dict[str, str] = {}
+            for saved_model, model_spec in model_specs.items():
+                feature_key = "|".join(
+                    [
+                        str(model_spec.model),
+                        str(model_spec.vae),
+                        str(model_spec.dtype),
+                        str(model_spec.device),
+                        str(model_spec.opt.dim_factor),
+                        str(model_spec.opt.dim_patch),
+                        str(model_spec.opt.top_k),
+                        str(model_spec.opt.condense_factor),
+                        str(model_spec.opt.alpha),
+                        str(model_spec.opt.magnitude_sampling),
+                    ]
+                )
+                feature_key_by_model[saved_model] = feature_key
+                if feature_key not in feature_cache:
+                    feature_cache[feature_key] = preprocessing(origin_ds, model_spec, verbose=args.verbose)
 
             inference_result = {}
             for saved_model, model_data in tqdm(
@@ -248,12 +276,12 @@ def cmd(ctx: CmdContext) -> None:
                 disable=False,
             ):
                 context = InferContext(
-                    spec=load_spec(saved_model),
+                    spec=model_specs[saved_model],
                     model_version=model_data,
-                    train_metadata=load_metadata(saved_model),
+                    train_metadata=model_metadata[saved_model],
                     label=args.label,
                     file_or_folder_path=img_file_or_folder,
-                    dataset_feat=None,
+                    dataset_feat=feature_cache[feature_key_by_model[saved_model]],
                     run_heuristics=False,
                     model=True,
                     verbose=args.verbose,
