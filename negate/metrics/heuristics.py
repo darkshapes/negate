@@ -162,7 +162,7 @@ def compute_weighted_certainty(
         else:
             header = f"{gne} (0)"
 
-    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "GNE" if pct < 0.4 else "?"
+    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "GNE" if pct < 0.4 else "SYN"
     predictions = [
         {"raw_pred": ae_inference["pred"], "thresh": (ae_low_thresh, ae_high_thresh), "norm": (0.02, 0.90), "norm_pred": None, "result": []},
         {"raw_pred": dc_inference["pred"], "thresh": (dc_low_thresh, dc_high_thresh), "norm": (0.15, 0.80), "norm_pred": None, "result": []},
