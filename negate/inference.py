@@ -2,13 +2,14 @@
 # <!-- // /*  d a r k s h a p e s */ -->
 
 import pickle
+import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import onnxruntime as ort
-from datasets import Dataset, enable_progress_bar, logging
+from datasets import Dataset
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
 
@@ -16,8 +17,11 @@ from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
 from negate.extract.feature_vae import VAEExtract
 from negate.io.config import random_state
 from negate.io.datasets import generate_dataset, prepare_dataset
+from negate.types import ModelOutput, OriginLabel
 from negate.io.spec import Spec
 from negate.metrics.heuristics import weight_dc_gne, weight_ae_gne
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass
@@ -28,7 +32,7 @@ class InferContext:
     model_version: Path
     train_metadata: dict
     file_or_folder_path: Path
-    label: int | None = None
+    label: OriginLabel | int | None = None
     dataset_feat: Dataset | None = None
     run_heuristics: bool = False
     model: bool = True
@@ -69,7 +73,7 @@ def run_native(features_dataset: np.ndarray, model_version: Path, parameters: di
     model = xgb.Booster(params=parameters, model_file=model_file_path_named)
     model.load_model(model_file_path_named)
     if verbose:
-        print(f"Model '{model_file_path_named}' loaded.")
+        LOGGER.info("Model '%s' loaded.", model_file_path_named)
     result = model.predict(xgb.DMatrix(features_pca))
     return result
 
@@ -97,16 +101,16 @@ def run_onnx(features_dataset: np.ndarray, model_version: Path, parameters: dict
 
     session = ort.InferenceSession(model_file_path_named)
     if verbose:
-        print(f"Model '{model_file_path_named}' loaded.")
+        LOGGER.info("Model '%s' loaded.", model_file_path_named)
     input_name = session.get_inputs()[0].name
     inputs = {input_name: features_dataset.astype(np.float32)}  # noqa
     try:
         result: ort.SparseTensor = session.run(None, {input_name: features_model})[0]  # type: ignore
-        print(result)
+        LOGGER.info("%s", result)
     except (InvalidArgument, ONNXRuntimeError) as error_log:
         import sys
 
-        print(error_log)
+        LOGGER.error("%s", error_log)
         sys.exit()
 
 
@@ -114,6 +118,7 @@ def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
     kwargs = {}
     kwargs["disable_nullable"] = spec.opt.disable_nullable
     kwargs["remove_columns"] = ["image"]
+    kwargs["desc"] = "Extracting wavelet and latent features from images"
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
@@ -138,8 +143,7 @@ def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
         setup_default_logging(logging.INFO)
         for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
             logger.set_verbosity_info()
-        print("Beginning preprocessing.")
-        kwargs["desc"] = ("Computing wavelets...",)
+        LOGGER.info("Beginning preprocessing.")
     return kwargs
 
 
@@ -149,8 +153,7 @@ def batch_preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> 
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     kwargs = build_map_call(spec, verbose)
-
-    with VAEExtract(spec) as extractor:  # type: ignore
+    with VAEExtract(spec, verbose=verbose) as extractor:  # type: ignore
         dataset = dataset.map(
             extractor.forward,
             **kwargs,  # type: ignore
@@ -164,7 +167,6 @@ def preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> Datase
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     kwargs = build_map_call(spec, verbose)
-
     context = WaveletContext(spec=spec, verbose=verbose)
     with WaveletAnalyze(context) as analyzer:  # type: ignore
         dataset = dataset.map(
@@ -174,7 +176,7 @@ def preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> Datase
     return dataset
 
 
-def predict_gne_or_syn(context: InferContext) -> list[float]:
+def predict_gne_or_syn(context: InferContext) -> list[ModelOutput]:
     """Returns probability results determined by decision tree model trained on dataset:\n
     :param data_path: Path to json file with saved parameter data"""
     spec = context.spec
@@ -186,13 +188,13 @@ def predict_gne_or_syn(context: InferContext) -> list[float]:
         result = run_onnx(features_matrix, model_version, parameters=parameters, verbose=context.verbose)
     else:
         result = run_native(features_matrix, model_version, parameters=parameters, verbose=context.verbose)
-    prob = []
-    for x in result:
-        prob.append(float(x))
-    return prob
+    outputs: list[ModelOutput] = []
+    for value in result:
+        outputs.append(ModelOutput.from_probability(float(value)))
+    return outputs
 
 
-def infer_origin(context: InferContext) -> dict[str, list[float]]:
+def infer_origin(context: InferContext) -> dict[str, list[ModelOutput] | list[float]]:
     """Predict synthetic or original for given image.\n
     :param context: Inference context containing spec, model path, and metadata.
     :param file_or_folder_path: Path to the image or folder to be checked.

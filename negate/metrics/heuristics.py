@@ -7,6 +7,8 @@ from pprint import pprint
 from typing import Any
 import numpy as np
 
+from negate.types import InferenceModel, ModelOutput, OriginLabel
+
 
 # Heuristics are not in use, but left for reference example
 # These ended up not working as effectively as the decision tree
@@ -106,13 +108,13 @@ def heuristic_accuracy(result, dc=True):
     return result
 
 
-def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float = 0.5) -> list[tuple[str, int]]:
+def model_accuracy(result: np.ndarray, label: OriginLabel | int | None = None, thresh: float = 0.5) -> list[tuple[OriginLabel, int]]:
     """Convert probability array to tuple format (label, confidence)."""
 
     thresh = 0.5
     model_pred = (result > thresh).astype(int)
     if label is not None:
-        ground_truth = np.full(model_pred.shape, label, dtype=int)
+        ground_truth = np.full(model_pred.shape, int(OriginLabel.coerce(label)), dtype=int)
         acc = float(np.mean(model_pred == ground_truth))
         print(f"Model Accuracy: {acc:.2%}")
 
@@ -120,7 +122,7 @@ def model_accuracy(result: np.ndarray, label: int | None = None, thresh: float =
     for x in result:
         prob = float(x)
         conf = round((1 - prob) * 100) if prob < thresh else round(prob * 100)
-        label_out = "GNE" if prob < thresh else "SYN"
+        label_out = OriginLabel.from_probability(prob, threshold=thresh)
         type_conf.append((label_out, conf))
     return type_conf
 
@@ -140,10 +142,21 @@ def normalize_to_range(
     return out_min + (data - in_min) * (out_max - out_min) / (in_max - in_min)
 
 
+def _extract_probabilities(predictions: list[ModelOutput] | list[float]) -> list[float]:
+    """Normalize legacy float predictions and typed ModelOutput predictions."""
+    raw_predictions = []
+    for entry in predictions:
+        if isinstance(entry, ModelOutput):
+            raw_predictions.append(float(entry.probability))
+        else:
+            raw_predictions.append(float(entry))
+    return raw_predictions
+
+
 def compute_weighted_certainty(
-    ae_inference: dict[str, list[float]],
-    dc_inference: dict[str, list[float]],
-    label: int | None = None,
+    ae_inference: dict[str, list[ModelOutput] | list[float]],
+    dc_inference: dict[str, list[ModelOutput] | list[float]],
+    label: OriginLabel | int | None = None,
     ae_low_thresh: float = 0.4,  # lowering adjust certainty
     ae_high_thresh: float = 0.48,
     dc_low_thresh: float = 0.39,
@@ -153,19 +166,32 @@ def compute_weighted_certainty(
     Compute certainty scores by combining all available inference methods.\n
     Each method contributes a vote (unk: 0=GNE, 1=SYN)). Certainty is the sum normalized 0-5 scale.
     """
-    gne = "GNE"
-    syn = "SYN"
-    header = ""
-    if label is not None:
-        if label == 1:
-            header = f"{syn} [1]"
-        else:
-            header = f"{gne} (0)"
+    expected_origin = OriginLabel.coerce(label) if label is not None else None
 
-    predictor = lambda pct, low_thresh, high_thresh,: "GNE" if pct < low_thresh else "SYN" if pct > high_thresh else "GNE" if pct < 0.4 else "SYN"
+    def predictor(pct: float, low_thresh: float, high_thresh: float) -> OriginLabel:
+        if pct < low_thresh:
+            return OriginLabel.GNE
+        if pct > high_thresh:
+            return OriginLabel.SYN
+        return OriginLabel.GNE if pct < 0.4 else OriginLabel.SYN
+
     predictions = [
-        {"raw_pred": ae_inference["pred"], "thresh": (ae_low_thresh, ae_high_thresh), "norm": (0.02, 0.90), "norm_pred": None, "result": []},
-        {"raw_pred": dc_inference["pred"], "thresh": (dc_low_thresh, dc_high_thresh), "norm": (0.15, 0.80), "norm_pred": None, "result": []},
+        {
+            "index": InferenceModel.AE,
+            "raw_pred": _extract_probabilities(ae_inference["pred"]),
+            "thresh": (ae_low_thresh, ae_high_thresh),
+            "norm": (0.02, 0.90),
+            "norm_pred": None,
+            "result": [],
+        },
+        {
+            "index": InferenceModel.DC,
+            "raw_pred": _extract_probabilities(dc_inference["pred"]),
+            "thresh": (dc_low_thresh, dc_high_thresh),
+            "norm": (0.15, 0.80),
+            "norm_pred": None,
+            "result": [],
+        },
     ]
 
     for index in range(len(predictions)):
@@ -173,9 +199,9 @@ def compute_weighted_certainty(
         predictions[index]["norm_pred"] = predictions[index]["norm_pred"].tolist()
         for image, num in enumerate(predictions[index]["norm_pred"]):
             origin = predictor(num, *predictions[index]["thresh"])
-            predictions[index]["result"].append({"index": "dc" if index == 1 else "ae", "img": image, "num": num, "origin": origin})
+            predictions[index]["result"].append({"index": predictions[index]["index"], "img": image, "num": num, "origin": origin})
 
-    result_format = lambda x: f"{x['index']} :{x['origin']} img:{x['img']} " + f"{x['num']:.2%}"
+    result_format = lambda x: f"{x['index'].value} :{x['origin'].name} img:{x['img']} " + f"{x['num']:.2%}"
     final_result = []
     final_numeric = []
 
@@ -185,27 +211,27 @@ def compute_weighted_certainty(
         else:
             low_amount_ae = (abs(predictions[0]["thresh"][0] - result["num"])), result
             high_amount_ae = (abs(result["num"] - predictions[0]["thresh"][1])), result
-            low_amount_dc = (abs(predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"])), predictions[1]["result"][1]
-            high_amount_dc = (abs(predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1])), predictions[1]["result"][1]
+            low_amount_dc = (abs(predictions[1]["thresh"][0] - predictions[1]["result"][index]["num"])), predictions[1]["result"][index]
+            high_amount_dc = (abs(predictions[1]["result"][index]["num"] - predictions[1]["thresh"][1])), predictions[1]["result"][index]
             most_certain = max(
                 max(low_amount_ae, high_amount_ae, key=lambda x: x[0]),
                 max(low_amount_dc, high_amount_dc, key=lambda x: x[0]),
                 key=lambda x: x[0],
             )[1]
             most_certain["diffs"] = {"ae": (low_amount_ae[0], high_amount_ae[0]), "dc": (low_amount_dc[0], high_amount_dc[0])}
-        if label is not None:
-            most_certain["match"] = int(most_certain["origin"] == header[:-4])
+        if expected_origin is not None:
+            most_certain["match"] = int(most_certain["origin"] == expected_origin)
         final_numeric.append(most_certain)
         output = result_format(most_certain)
         spacer = " " * (16 - len(output))
         final_result.append(output + spacer)
 
-    model_pred = np.array([x["match"] for x in final_numeric]).astype(int)
-    if label is not None:
+    if expected_origin is not None:
+        model_pred = np.array([x["match"] for x in final_numeric], dtype=int)
         ground_truth = np.full(model_pred.shape, 1, dtype=int)
         acc = float(np.mean(model_pred == ground_truth))
         pprint([x for x in final_numeric if x["match"] == 0])
-        print(f"For : {header} ")
+        print(f"For : {expected_origin.name} [{int(expected_origin)}] ")
         print(f"Model Accuracy: {acc:.2%}")
 
     pprint(final_result)
