@@ -241,7 +241,12 @@ def cmd(ctx: CmdContext) -> None:
                 print(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
 
             inference_result = {}
-            for saved_model, model_data in tqdm(negate_models.items(), disable=args.verbose):
+            for saved_model, model_data in tqdm(
+                negate_models.items(),
+                total=len(negate_models),
+                desc="Running inference with each selected model",
+                disable=False,
+            ):
                 context = InferContext(
                     spec=load_spec(saved_model),
                     model_version=model_data,

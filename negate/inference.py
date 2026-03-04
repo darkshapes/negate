@@ -11,6 +11,7 @@ import onnxruntime as ort
 from datasets import Dataset, enable_progress_bar, logging
 from onnxruntime.capi.onnxruntime_pybind11_state import Fail as ONNXRuntimeError
 from onnxruntime.capi.onnxruntime_pybind11_state import InvalidArgument
+from tqdm import tqdm
 
 from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
 from negate.extract.feature_vae import VAEExtract
@@ -18,6 +19,28 @@ from negate.io.config import random_state
 from negate.io.datasets import generate_dataset, prepare_dataset
 from negate.io.spec import Spec
 from negate.metrics.heuristics import weight_dc_gne, weight_ae_gne
+
+_FIRST_COMPILE_PROGRESS_DONE = False
+
+
+def _start_first_compile_progress() -> tqdm | None:
+    global _FIRST_COMPILE_PROGRESS_DONE
+    if _FIRST_COMPILE_PROGRESS_DONE:
+        return None
+    return tqdm(
+        total=3,
+        desc="First run setup: loading models and compiling kernels",
+        unit="step",
+        disable=False,
+    )
+
+
+def _finish_first_compile_progress(progress: tqdm | None) -> None:
+    global _FIRST_COMPILE_PROGRESS_DONE
+    if progress is None:
+        return
+    progress.close()
+    _FIRST_COMPILE_PROGRESS_DONE = True
 
 
 @dataclass
@@ -114,6 +137,7 @@ def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
     kwargs = {}
     kwargs["disable_nullable"] = spec.opt.disable_nullable
     kwargs["remove_columns"] = ["image"]
+    kwargs["desc"] = "Extracting wavelet and latent features from images"
     if spec.opt.batch_size > 0:
         kwargs["batched"] = True
         kwargs["batch_size"] = spec.opt.batch_size
@@ -139,7 +163,6 @@ def build_map_call(spec: Spec, verbose: bool) -> dict[str, str | int | bool]:
         for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
             logger.set_verbosity_info()
         print("Beginning preprocessing.")
-        kwargs["desc"] = ("Computing wavelets...",)
     return kwargs
 
 
@@ -149,12 +172,20 @@ def batch_preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> 
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     kwargs = build_map_call(spec, verbose)
-
-    with VAEExtract(spec) as extractor:  # type: ignore
-        dataset = dataset.map(
-            extractor.forward,
-            **kwargs,  # type: ignore
-        )
+    compile_progress = _start_first_compile_progress()
+    try:
+        with VAEExtract(spec, verbose=verbose) as extractor:  # type: ignore
+            if compile_progress is not None:
+                compile_progress.update(1)
+                compile_progress.update(1)
+            dataset = dataset.map(
+                extractor.forward,
+                **kwargs,  # type: ignore
+            )
+            if compile_progress is not None:
+                compile_progress.update(1)
+    finally:
+        _finish_first_compile_progress(compile_progress)
     return dataset
 
 
@@ -164,13 +195,22 @@ def preprocessing(dataset: Dataset, spec: Spec, verbose: bool = False) -> Datase
     :param spec: Specification container with analysis configuration.
     :return: Transformed dataset with 'features' column."""
     kwargs = build_map_call(spec, verbose)
-
-    context = WaveletContext(spec=spec, verbose=verbose)
-    with WaveletAnalyze(context) as analyzer:  # type: ignore
-        dataset = dataset.map(
-            analyzer,
-            **kwargs,  # type: ignore
-        )
+    compile_progress = _start_first_compile_progress()
+    try:
+        context = WaveletContext(spec=spec, verbose=verbose)
+        if compile_progress is not None:
+            compile_progress.update(1)
+        with WaveletAnalyze(context) as analyzer:  # type: ignore
+            if compile_progress is not None:
+                compile_progress.update(1)
+            dataset = dataset.map(
+                analyzer,
+                **kwargs,  # type: ignore
+            )
+            if compile_progress is not None:
+                compile_progress.update(1)
+    finally:
+        _finish_first_compile_progress(compile_progress)
     return dataset
 
 

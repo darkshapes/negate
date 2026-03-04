@@ -53,7 +53,12 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
         assert isinstance(file_or_folder_path, Path)
 
         if file_or_folder_path.is_dir():
-            for img_path in tqdm(file_or_folder_path.iterdir(), total=len(os.listdir(str(file_or_folder_path))), desc="Creating dataset...", disable=not verbose):
+            for img_path in tqdm(
+                file_or_folder_path.iterdir(),
+                total=len(os.listdir(str(file_or_folder_path))),
+                desc="Scanning and validating image files for dataset",
+                disable=False,
+            ):
                 if not (img_path.is_file() and img_path.suffix.lower() in valid_extensions):
                     continue
                 try:
