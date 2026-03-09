@@ -78,6 +78,7 @@ dev = ["pyright>=1.1.408", "pytest>=9.0.2", "pytest-asyncio>=1.3.0", "ruff>=0.14
 Homepage = "https://github.com/darkshapes/negate"
 
 [project.scripts]
+ngte = "negate.__main__:main"
 negate = "negate.__main__:main"
 
 [tool.uv]
