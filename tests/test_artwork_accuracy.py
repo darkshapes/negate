@@ -96,7 +96,7 @@ class TestArtworkDetection:
         print(f"Features:   {benchmark_data['X'].shape[1]}")
         assert benchmark_data["n_human"] >= 50
         assert benchmark_data["n_ai"] >= 50
-        assert benchmark_data["X"].shape[1] == 39
+        assert benchmark_data["X"].shape[1] == 49
 
     def test_svm_cross_validation(self, benchmark_data):
         """SVM with RBF kernel — paper's best binary model (97.9% reported)."""
