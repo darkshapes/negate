@@ -84,7 +84,9 @@ class Residual:
 
         h, w = numeric_image.shape
         center_h, center_w = h // 2, w // 2
-        spectral_centroid = float(np.sum(log_mag * fftfreq(h)[:, None] + log_mag.T * fftfreq(w)[None, :]) / (log_mag.sum() * 2 + 1e-10))
+        row_contribution = np.sum(log_mag * fftfreq(h)[:, None])
+        col_contribution = np.sum(log_mag * fftfreq(w)[None, :])
+        spectral_centroid = float((row_contribution + col_contribution) / (log_mag.sum() * 2 + 1e-10))
         return {
             "spectral_centroid": float(spectral_centroid),
             "high_freq_ratio": float((magnitude_spectrum[center_h:, center_w:] ** 2).sum() / (magnitude_spectrum**2).sum()),
