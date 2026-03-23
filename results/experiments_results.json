@@ -1,0 +1,150 @@
+{
+  "timestamp": "2026-03-23T09:40:54.308648",
+  "experiments": [
+    {
+      "name": "Artwork Features (Li & Stamp + FFT/DCT)",
+      "short_name": "Artwork (49)",
+      "n_features": 49,
+      "extract_time": "237s",
+      "results": {
+        "xgb": {
+          "accuracy": 0.79375,
+          "precision": 0.7936031984007996,
+          "recall": 0.794,
+          "f1": 0.7937499871093743,
+          "roc_auc": 0.88620775
+        },
+        "svm": {
+          "accuracy": 0.784,
+          "precision": 0.7862903225806451,
+          "recall": 0.78,
+          "f1": 0.7839965439447031,
+          "roc_auc": 0.868789625
+        },
+        "mlp": {
+          "accuracy": 0.79375,
+          "precision": 0.7930174563591023,
+          "recall": 0.795,
+          "f1": 0.7937496777338715,
+          "roc_auc": 0.88000325
+        }
+      }
+    },
+    {
+      "name": "Style Features (stroke/palette/composition/texture)",
+      "short_name": "Style (15)",
+      "n_features": 15,
+      "extract_time": "577s",
+      "results": {
+        "xgb": {
+          "accuracy": 0.7875,
+          "precision": 0.797004132231405,
+          "recall": 0.7715,
+          "f1": 0.787445586070034,
+          "roc_auc": 0.88307
+        },
+        "svm": {
+          "accuracy": 0.77175,
+          "precision": 0.7763091001525165,
+          "recall": 0.7635,
+          "f1": 0.7717344636769341,
+          "roc_auc": 0.8640375
+        },
+        "mlp": {
+          "accuracy": 0.77575,
+          "precision": 0.7847186370676303,
+          "recall": 0.76,
+          "f1": 0.7756943581817265,
+          "roc_auc": 0.87112
+        }
+      }
+    },
+    {
+      "name": "Artwork + Style Combined",
+      "short_name": "Art+Style (64)",
+      "n_features": 64,
+      "extract_time": "combined",
+      "results": {
+        "xgb": {
+          "accuracy": 0.83475,
+          "precision": 0.8396752917300863,
+          "recall": 0.8275,
+          "f1": 0.8347413135902956,
+          "roc_auc": 0.923393
+        },
+        "svm": {
+          "accuracy": 0.82225,
+          "precision": 0.8243583291394061,
+          "recall": 0.819,
+          "f1": 0.8222481224957938,
+          "roc_auc": 0.9038627499999999
+        },
+        "mlp": {
+          "accuracy": 0.828,
+          "precision": 0.82,
+          "recall": 0.8405,
+          "f1": 0.8279731208001251,
+          "roc_auc": 0.9148270000000001
+        }
+      }
+    },
+    {
+      "name": "CLIP ViT-B/32 Embeddings",
+      "short_name": "CLIP (512)",
+      "n_features": 512,
+      "extract_time": "112s",
+      "results": {
+        "xgb": {
+          "accuracy": 0.861,
+          "precision": 0.8620862587763289,
+          "recall": 0.8595,
+          "f1": 0.8609996872492963,
+          "roc_auc": 0.9425352499999999
+        },
+        "svm": {
+          "accuracy": 0.893,
+          "precision": 0.8949748743718593,
+          "recall": 0.8905,
+          "f1": 0.8929993312458202,
+          "roc_auc": 0.9628585000000001
+        },
+        "mlp": {
+          "accuracy": 0.8855,
+          "precision": 0.8839641434262948,
+          "recall": 0.8875,
+          "f1": 0.8854995419981679,
+          "roc_auc": 0.952217
+        }
+      }
+    },
+    {
+      "name": "CLIP + Artwork + Style (Everything)",
+      "short_name": "All Combined",
+      "n_features": 576,
+      "extract_time": "combined",
+      "results": {
+        "xgb": {
+          "accuracy": 0.87975,
+          "precision": 0.8853373921867073,
+          "recall": 0.8725,
+          "f1": 0.8797436790271289,
+          "roc_auc": 0.956134
+        },
+        "svm": {
+          "accuracy": 0.9,
+          "precision": 0.9004004004004004,
+          "recall": 0.8995,
+          "f1": 0.8999999749999937,
+          "roc_auc": 0.9657885
+        },
+        "mlp": {
+          "accuracy": 0.8835,
+          "precision": 0.8827345309381237,
+          "recall": 0.8845,
+          "f1": 0.8834998834998835,
+          "roc_auc": 0.9535750000000001
+        }
+      }
+    }
+  ]
+}
