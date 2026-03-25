@@ -1,0 +1,160 @@
+{
+  "timestamp": "2026-03-23T16:43:55.933744",
+  "results": [
+    {
+      "generator": "SD 2.1",
+      "uses_clip": true,
+      "handcrafted_xgb": {
+        "accuracy": 0.865,
+        "precision": 0.8489483747609943,
+        "recall": 0.888,
+        "roc_auc": 0.939208
+      },
+      "handcrafted_svm": {
+        "accuracy": 0.857,
+        "precision": 0.8577154308617234,
+        "recall": 0.856,
+        "roc_auc": 0.939508
+      },
+      "clip_xgb": {
+        "accuracy": 0.913,
+        "precision": 0.9089108910891089,
+        "recall": 0.918,
+        "roc_auc": 0.970512
+      },
+      "clip_svm": {
+        "accuracy": 0.961,
+        "precision": 0.9528487229862476,
+        "recall": 0.97,
+        "roc_auc": 0.9941260000000001
+      },
+      "handcrafted_best": 0.865,
+      "clip_best": 0.961,
+      "clip_advantage": 0.09599999999999997
+    },
+    {
+      "generator": "SDXL",
+      "uses_clip": true,
+      "handcrafted_xgb": {
+        "accuracy": 0.935,
+        "precision": 0.9190751445086706,
+        "recall": 0.954,
+        "roc_auc": 0.9791160000000001
+      },
+      "handcrafted_svm": {
+        "accuracy": 0.931,
+        "precision": 0.9284294234592445,
+        "recall": 0.934,
+        "roc_auc": 0.9827159999999999
+      },
+      "clip_xgb": {
+        "accuracy": 0.944,
+        "precision": 0.944,
+        "recall": 0.944,
+        "roc_auc": 0.9869559999999999
+      },
+      "clip_svm": {
+        "accuracy": 0.99,
+        "precision": 0.9880478087649402,
+        "recall": 0.992,
+        "roc_auc": 0.999656
+      },
+      "handcrafted_best": 0.935,
+      "clip_best": 0.99,
+      "clip_advantage": 0.05499999999999994
+    },
+    {
+      "generator": "SD 3",
+      "uses_clip": true,
+      "handcrafted_xgb": {
+        "accuracy": 0.833,
+        "precision": 0.8363636363636363,
+        "recall": 0.828,
+        "roc_auc": 0.9075080000000001
+      },
+      "handcrafted_svm": {
+        "accuracy": 0.854,
+        "precision": 0.8657024793388429,
+        "recall": 0.838,
+        "roc_auc": 0.913932
+      },
+      "clip_xgb": {
+        "accuracy": 0.92,
+        "precision": 0.9216867469879518,
+        "recall": 0.918,
+        "roc_auc": 0.9740960000000001
+      },
+      "clip_svm": {
+        "accuracy": 0.975,
+        "precision": 0.9702970297029703,
+        "recall": 0.98,
+        "roc_auc": 0.9947839999999999
+      },
+      "handcrafted_best": 0.854,
+      "clip_best": 0.975,
+      "clip_advantage": 0.121
+    },
+    {
+      "generator": "Midjourney v6",
+      "uses_clip": "unknown",
+      "handcrafted_xgb": {
+        "accuracy": 0.868,
+        "precision": 0.859375,
+        "recall": 0.88,
+        "roc_auc": 0.941412
+      },
+      "handcrafted_svm": {
+        "accuracy": 0.885,
+        "precision": 0.8888888888888888,
+        "recall": 0.88,
+        "roc_auc": 0.9592140000000001
+      },
+      "clip_xgb": {
+        "accuracy": 0.972,
+        "precision": 0.9796747967479674,
+        "recall": 0.964,
+        "roc_auc": 0.997228
+      },
+      "clip_svm": {
+        "accuracy": 0.995,
+        "precision": 0.9959919839679359,
+        "recall": 0.994,
+        "roc_auc": 0.999872
+      },
+      "handcrafted_best": 0.885,
+      "clip_best": 0.995,
+      "clip_advantage": 0.10999999999999999
+    },
+    {
+      "generator": "DALL-E 3",
+      "uses_clip": false,
+      "handcrafted_xgb": {
+        "accuracy": 0.987,
+        "precision": 0.9821782178217822,
+        "recall": 0.992,
+        "roc_auc": 0.9957779999999999
+      },
+      "handcrafted_svm": {
+        "accuracy": 0.976,
+        "precision": 0.9703557312252964,
+        "recall": 0.982,
+        "roc_auc": 0.995222
+      },
+      "clip_xgb": {
+        "accuracy": 0.955,
+        "precision": 0.9540918163672655,
+        "recall": 0.956,
+        "roc_auc": 0.990896
+      },
+      "clip_svm": {
+        "accuracy": 0.982,
+        "precision": 0.9781746031746031,
+        "recall": 0.986,
+        "roc_auc": 0.99888
+      },
+      "handcrafted_best": 0.987,
+      "clip_best": 0.982,
+      "clip_advantage": -0.0050000000000000044
+    }
+  ]
+}
