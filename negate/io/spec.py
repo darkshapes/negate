@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a pes */ -->
 
+
 import json
 import tomllib
 from dataclasses import dataclass
@@ -17,6 +18,7 @@ from negate.io.config import (
     NegateConfig,
     NegateDataPaths,
     NegateHyperParam,
+    NegateEnsembleConfig,
     NegateModelConfig,
     NegateTrainRounds,
     chip,
@@ -27,6 +29,7 @@ from negate.io.config import (
     negate_options,
     root_folder,
     train_rounds,
+    ensemble_config,
 )
 
 
@@ -93,6 +96,7 @@ class Spec:
         self,
         negate_options=negate_options,
         hyperparam_config=hyperparam_config,
+        ensemble_config=ensemble_config,
         data_paths=data_paths,
         model_config=model_config,
         chip=chip,
@@ -106,6 +110,7 @@ class Spec:
         self.apply: dict[str, torch.device | torch.dtype] = {"device": self.device, "dtype": self.dtype}
         self.np_dtype: np.typing.DTypeLike = chip.np_dtype
         self.hyper_param: NegateHyperParam = hyperparam_config
+        self.ensemble: NegateEnsembleConfig = ensemble_config
         self.train_rounds: NegateTrainRounds = train_rounds
         self.models: list[str] = [repo for repo in model_config.list_models]
         self.model = model_config.auto_model[0]

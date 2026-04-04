@@ -13,7 +13,14 @@ from tqdm import tqdm
 from negate.io.spec import Spec, root_folder
 
 
-def prepare_dataset(features_dataset: Dataset, spec: Spec):
+def prepare_dataset(features_dataset: Dataset, spec: Spec) -> np.ndarray:
+    """Transform nested wavelet feature dictionaries into a flat numerical matrix.\n
+    :param features_dataset: HuggingFace Dataset with 'results' column containing list of dicts.
+    :param spec: Specification container with dtype and ONNX configuration.
+    :return: 2D numpy array of shape (samples, features) ready for model input.
+    :raises KeyError: If 'results' column is missing from dataset.
+    """
+
     samples = features_dataset["results"]
     all_dicts = [d for row in samples for d in row]
 
@@ -89,6 +96,7 @@ def build_datasets(
     spec: Spec,
     genuine_path: Path | None = None,
     synthetic_path: Path | None = None,
+    concatenate: bool = True,
 ) -> Dataset:
     """Builds synthetic and genuine datasets.\n
     :param input_folder: Path to folder containing data. (optional)
