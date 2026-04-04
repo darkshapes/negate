@@ -17,9 +17,9 @@ feat_ext_path = ""         # Path to save the model in or null for default: [$HO
 
 [datasets]
 eval_data = ["tellif/ai_vs_real_image_semantically_similar"]
-genuine_data = ["KarimSayed/cat-breed-fiass-index"]
+genuine_data = ["huggan/wikiart"]                              #["KarimSayed/cat-breed-fiass-index"]
 genuine_local = []
-synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone", "ash12321/seedream-4.5-generated-2k"]
+synthetic_data = ["exdysa/nano-banana-pro-generated-1k-clone"] #, "ash12321/seedream-4.5-generated-2k"]
 synthetic_local = []
 
 [vae.library]
@@ -57,3 +57,16 @@ n_components = 0.95         # Number of components for dimensionality reduction
 num_boost_round = 200       # Number of boosting rounds
 test_size = 0.2             # 80/20 training split default
 verbose_eval = 20
+
+[ensemble]
+sample_size = 100
+n_folds = 5
+abstain_threshold = 0.3
+svm_c = 10.0
+mlp_hidden_layers = 100
+mlp_activation = "relu"
+mlp_max_iter = 1000
+cv = 3
+method = "sigmoid"
+gamma = "scale"
+kernel = "rbf"

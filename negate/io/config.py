@@ -115,6 +115,22 @@ class NegateDataPaths(NamedTuple):
     synthetic_local: list
 
 
+class NegateEnsembleConfig(NamedTuple):
+    """Configuration for ensemble detection and evaluation."""
+
+    sample_size: int
+    n_folds: int
+    abstain_threshold: float
+    svm_c: int
+    mlp_hidden_layers: int
+    mlp_activation: str
+    mlp_max_iter: int
+    cv: int
+    method: str
+    gamma: str
+    kernel: str
+
+
 class NegateModelConfig:
     """Model configuration with library auto-selection."""
 
@@ -271,7 +287,9 @@ class Chip:
         return self._np_dtype
 
 
-def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> tuple[NegateConfig, NegateHyperParam, NegateDataPaths, NegateModelConfig, Chip, NegateTrainRounds]:
+def load_config_options(
+    file_path_named: str = f"config{os.sep}config.toml",
+) -> tuple[NegateConfig, NegateHyperParam, NegateEnsembleConfig, NegateDataPaths, NegateModelConfig, Chip, NegateTrainRounds]:
     """Load configuration options.\n
     :return: Tuple of (NegateConfig, NegateHyperParam, NegateDataPaths)."""
 
@@ -285,10 +303,12 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
     dataset_cfg = data.pop("datasets", {})
     library_cfg = data.pop("library", {})
     rounds_cfg = data.pop("rounds", {})
+    ensemble_cfg = data.pop("ensemble", {})
 
     return (
         NegateConfig(**data),
         NegateHyperParam(**param_cfg),
+        NegateEnsembleConfig(**ensemble_cfg),
         NegateDataPaths(**dataset_cfg),
         NegateModelConfig(data=models | library_cfg, vae=vae),
         Chip(),
@@ -296,4 +316,4 @@ def load_config_options(file_path_named: str = f"config{os.sep}config.toml") -> 
     )
 
 
-negate_options, hyperparam_config, data_paths, model_config, chip, train_rounds = load_config_options()
+negate_options, hyperparam_config, ensemble_config, data_paths, model_config, chip, train_rounds = load_config_options()

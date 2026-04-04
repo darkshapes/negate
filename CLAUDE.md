@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+# CRITICAL RULES
+
+- Scan the existing codebase and reuse existing functions wherever possible.
+- Keep all imports within functions unless they must be mocked in a test.
+- If an import is small, performative, and significantly reduces needs for new code, use the library.
+- Write short Sphinx docstrings as a single line description, a single line for each parameter, and no empty lines.
+- On first line of docstrings use \n instead of line break.
+- Variable names must be `snake_case` sequence of descriptive words <=5 letters long
+- Keep labels consistent across the entire project.
+- In commit messages: use `+` for code adds, `-` for code subtractions, `~` for refactors/fixes.
+- Write full variable names at all times. No abbreviations.
+- Use descriptive variable names instead of comments.
+- No inline comments.
+- No emoji.
+- No global variables.
+- No semantic commit messages.
+
 ## Commands
 
 ```bash
