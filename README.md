@@ -24,23 +24,6 @@ A scanning, training, and research library for detecting the origin of digital i
 
 Negate is a modular system of image processing and feature extraction pipelines that measure machine aptitude of differentiating between synthetic and human-origin illustrations.
 
-### Included Methods
-
-| Texture                       | Color                             | VAE Loss | Residual      | Perturbation       | Noise/Jitter      |
-| ----------------------------- | --------------------------------- | -------- | ------------- | ------------------ | ----------------- |
-| local binary pattern          | histogram oriented gradient (hog) | l1       | spectral      | haar wavelet       | snr/noise entropy |
-| gray lvl co-occurrence matrix | variance                          | mse      | laplacian     | random resize crop | stroke features   |
-| energy                        | kurtosis                          | k1       | gaussian diff | patchification     |                   |
-| complexity                    | skew                              | bce      | sobel         |                    |                   |
-| microtexture                  | palette features                  |          |               |                    |                   |
-
-### Feature Processing Options
-
-- Decision Tree + PCA
-- SVM (RBF)
-- MLP
-- LR
-
 ## Quick Start
 
 ![MacOS](https://darkshapes.org/img/macos.svg)<sup> Terminal</sup>
@@ -79,6 +62,44 @@ Train a new model with the following command:
 ### Abstract
 
 Previous research has demonstrated the possibility of identifying deepfakes, synthetic images, illustrations and photographs. Yet generative models have since undergone dramatic improvements, challenging past identification research and calling into question the future efficacy of these developments. Most methods chose images easily discernible as synthetic by the naked eye of a trained artist, or evaluated their success against open models exclusively. In this work, we create a comprehensive analysis suite for decomposition and feature extraction of digital images to study the effectiveness of these methods. Then, using an ensemble of previous techniques, we train simple decision trees and SVM models on these features to achieve >70% accuracy in detecting synthetic vs. genuine illustrations. Our methods of training and inference require only consumer-grade hardware, use exclusively consensual datasets provided by artists and Creative-Commons sources, and provide reliable estimates against the modern image products of both open and black-box closed-source models.
+
+<sub>
+
+### Included Methods
+
+- local binary pattern
+- gray lvl co-occurrence matrix
+- energy
+- complexity
+- microtexture
+- histogram oriented gradient (hog)
+- variance
+- kurtosis
+- skew
+- palette features
+- spectral features
+- haar wavelet
+- laplacian
+- gaussian diff
+- snr/noise entropy
+- random resize crop
+- patchification
+- l1/mse/k1/bce
+
+  </sub>
+
+<sub>
+
+### Feature Processing Options
+
+- Decision Tree + PCA
+- SVM (RBF)
+- MLP
+- LR
+
+  </sub>
+</sub>
+</sub>
 
 ### Structure
 
