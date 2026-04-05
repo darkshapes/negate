@@ -1,0 +1,27 @@
+{
+  "Clean (original)": {
+    "fp": 0.0,
+    "detection": 0.9705882352941176,
+    "missed": 0.0196078431372549
+  },
+  "Twitter/X (JPEG Q85, max 4096px)": {
+    "fp": 0.0,
+    "detection": 0.9607843137254902,
+    "missed": 0.0196078431372549
+  },
+  "Instagram (JPEG Q75, max 1080px, sharpen)": {
+    "fp": 0.0,
+    "detection": 0.9313725490196079,
+    "missed": 0.029411764705882353
+  },
+  "Discord (JPEG Q80, 4MP limit)": {
+    "fp": 0.0,
+    "detection": 0.9607843137254902,
+    "missed": 0.0196078431372549
+  },
+  "Tumblr (JPEG Q65, max 1280px)": {
+    "fp": 0.0,
+    "detection": 0.9411764705882353,
+    "missed": 0.00980392156862745
+  }
+}
