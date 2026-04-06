@@ -1,0 +1,96 @@
+{
+  "training": {
+    "n_per_class": 3122,
+    "n_features": 916,
+    "cv_acc": 0.9694104001149638,
+    "cv_auc": 0.9955921334648258
+  },
+  "tellif": {
+    "bytedance-seedream-v4-text-to-image": {
+      "n": 20,
+      "detected": 18,
+      "uncertain": 2,
+      "missed": 0,
+      "rate": 0.9
+    },
+    "flux-pro-v1-1-ultra": {
+      "n": 9,
+      "detected": 5,
+      "uncertain": 4,
+      "missed": 0,
+      "rate": 0.5555555555555556
+    },
+    "gemini-25-flash-image": {
+      "n": 18,
+      "detected": 10,
+      "uncertain": 8,
+      "missed": 0,
+      "rate": 0.5555555555555556
+    },
+    "hidream-i1-full": {
+      "n": 9,
+      "detected": 8,
+      "uncertain": 1,
+      "missed": 0,
+      "rate": 0.8888888888888888
+    },
+    "hunyuan-image-v2-1-text-to-image": {
+      "n": 11,
+      "detected": 11,
+      "uncertain": 0,
+      "missed": 0,
+      "rate": 1.0
+    },
+    "ideogram-v2": {
+      "n": 9,
+      "detected": 8,
+      "uncertain": 1,
+      "missed": 0,
+      "rate": 0.8888888888888888
+    },
+    "imagen4-preview": {
+      "n": 9,
+      "detected": 9,
+      "uncertain": 0,
+      "missed": 0,
+      "rate": 1.0
+    },
+    "qwen-image": {
+      "n": 12,
+      "detected": 10,
+      "uncertain": 2,
+      "missed": 0,
+      "rate": 0.8333333333333334
+    },
+    "real": {
+      "n": 122,
+      "fp": 0,
+      "fp_rate": 0.0
+    },
+    "recraft-v3-text-to-image": {
+      "n": 9,
+      "detected": 4,
+      "uncertain": 5,
+      "missed": 0,
+      "rate": 0.4444444444444444
+    },
+    "stable-diffusion-v35-large": {
+      "n": 9,
+      "detected": 6,
+      "uncertain": 3,
+      "missed": 0,
+      "rate": 0.6666666666666666
+    },
+    "wan-v2-2-a14b-text-to-image": {
+      "n": 8,
+      "detected": 6,
+      "uncertain": 2,
+      "missed": 0,
+      "rate": 0.75
+    }
+  },
+  "importance": {
+    "handcrafted_pct": 0.17440815103386276,
+    "learned_pct": 0.8255918489661372
+  }
+}
