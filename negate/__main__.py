@@ -157,9 +157,11 @@ def _build_parser(
     train_parser.add_argument("-l", "--loop", action="store_true", help=blurb.loop)
     train_parser.add_argument("-f", "--features", choices=list_results, default=None, help=blurb.features_load)
 
-    combos_parser = subparsers.add_parser("combinations", help="Run all decompose/extract module combinations")
-    combos_parser.add_argument("path", help=blurb.unidentified_path)
-    combos_parser.add_argument("-v", "--verbose", action="store_true", help=blurb.verbose)
+    process_parser = subparsers.add_parser("process", help="Run all decompose/extract module combinations")
+    process_parser.add_argument("path", help=blurb.unidentified_path)
+    process_parser.add_argument("-v", "--verbose", action="store_true", help=blurb.verbose)
+    process_parser.add_argument("--transposed", default=None, help="Comma-separated transposed indices")
+    process_parser.add_argument("--combination", default=None, help="Comma-separated module names")
 
     vit_help = f"Vison {blurb.model_desc} {choices.default_vit}".strip()
     ae_help = f"Autoencoder {blurb.model_desc} {choices.default_vae}".strip()
@@ -305,23 +307,64 @@ def cmd(ctx: CmdContext) -> None:
             inference_results = (result for _, result in inference_result.items())
             compute_weighted_certainty(*inference_results, label=args.label)
 
-        case "combinations":
-            import json
-
-            from negate.run_combinations import run_all_combinations
+        case "process":
+            from negate.extract.unified import ExtractionModule, UnifiedExtractor
+            from negate.io.spec import Spec
+            from PIL import Image
 
             img_file_or_folder = Path(args.path)
-            CLI_LOGGER.info(f"Running all module combinations on {img_file_or_folder}...")
-            results = run_all_combinations(img_file_or_folder)
+            spec = Spec()
+            all_modules = list(ExtractionModule)
 
-            if args.verbose:
-                CLI_LOGGER.info(f"Single modules: {results['summary']['total_single_modules']}")
-                CLI_LOGGER.info(f"Module pairs: {results['summary']['total_module_pairs']}")
-                CLI_LOGGER.info("Feature counts per single module:")
-                for mod, count in results["summary"]["single_module_feature_counts"].items():
-                    CLI_LOGGER.info(f"  {mod}: {count} features")
+            # Parse options
+            transposed = args.transposed
+            if transposed is not None:
+                try:
+                    transposed = [int(x) for x in transposed.split(",")]
+                except ValueError:
+                    print("Error: transposed must be comma-separated integers")
+                    exit(1)
 
-            output_file = ctx.results_path / "combinations_results.json"
+            combo = args.combination
+            if combo is None:
+                combo = [mod.name for mod in all_modules]
+
+            CLI_LOGGER.info(f"Running process on {img_file_or_folder}...")
+            CLI_LOGGER.info(f"Transposed: {transposed}")
+            CLI_LOGGER.info(f"Combination: {combo}")
+
+            results: dict[str, Any] = {"transposed": {}, "combination": {}}
+
+            # Run transposed modules
+            if transposed:
+                for idx in transposed:
+                    if idx >= len(all_modules):
+                        print(f"Error: transposed index {idx} out of range")
+                        exit(1)
+                    try:
+                        extractor = UnifiedExtractor(spec, enable=[all_modules[idx]])
+                        features = extractor(Image.open(img_file_or_folder).convert("RGB"))
+                        results["transposed"][all_modules[idx].name] = features
+                        extractor.cleanup()
+                    except Exception as e:
+                        results["transposed"][all_modules[idx].name] = {}
+                        CLI_LOGGER.warning(f"Error processing module {all_modules[idx].name}: {e}")
+
+            # Run combination modules
+            for mod_name in combo:
+                if mod_name not in all_modules:
+                    print(f"Error: combination module {mod_name} not found")
+                    exit(1)
+                try:
+                    extractor = UnifiedExtractor(spec, enable=[ExtractionModule[mod_name]])
+                    features = extractor(Image.open(img_file_or_folder).convert("RGB"))
+                    results["combination"][mod_name] = features
+                    extractor.cleanup()
+                except Exception as e:
+                    results["combination"][mod_name] = {}
+                    CLI_LOGGER.warning(f"Error processing module {mod_name}: {e}")
+
+            output_file = ctx.results_path / "process_results.json"
             with open(output_file, "w") as f:
                 json.dump(results, f, indent=2, default=str)
             CLI_LOGGER.info(f"Results saved to {output_file}")

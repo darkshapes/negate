@@ -27,7 +27,7 @@ from torch import Tensor
 from negate.decompose.residuals import Residual
 from negate.decompose.wavelet import WaveletContext, WaveletAnalyze
 from negate.extract.feature_artwork import ArtworkExtract
-from negate.extract.feature_learned import LearnedExtract
+from negate.extract.feature_conv import LearnedExtract
 from negate.extract.feature_vae import VAEExtract
 from negate.extract.feature_vit import VITExtract
 from negate.io.spec import Spec
