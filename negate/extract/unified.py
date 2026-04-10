@@ -1,17 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
-"""Unified feature extraction interface with interchangeable analyzers.
-
-This module provides a unified interface that allows users to select which
-extraction modules to run and in what order. Each analyzer is independent
-and can be enabled/disabled via configuration.
-
-Usage:
-    >>> from negate.extract import UnifiedExtractor
-    >>> extractor = UnifiedExtractor(spec, enable=["artwork", "learned", "vae", "vit"])
-    >>> features = extractor(image)
-"""
+"""Unified feature extraction interface with interchangeable analyzers."""
 
 from __future__ import annotations
 
@@ -24,9 +14,18 @@ import torch
 from PIL import Image
 from torch import Tensor
 
+from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
+from negate.decompose.complex import ComplexFeatures
+from negate.decompose.edge import EdgeFeatures
+from negate.decompose.enhanced import EnhancedFeatures
+from negate.decompose.hog import HOGFeatures
+from negate.decompose.linework import LineworkFeatures
+from negate.decompose.numeric import NumericImage
+from negate.decompose.patch import PatchFeatures
 from negate.decompose.residuals import Residual
-from negate.decompose.wavelet import WaveletContext, WaveletAnalyze
-from negate.extract.feature_artwork import ArtworkExtract
+from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
+from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
+from negate.decompose.surface import SurfaceFeatures
 from negate.extract.feature_conv import LearnedExtract
 from negate.extract.feature_vae import VAEExtract
 from negate.extract.feature_vit import VITExtract
@@ -55,23 +54,7 @@ DEFAULT_ENABLED_MODULES = {
 
 
 class UnifiedExtractor:
-    """Unified feature extraction interface with interchangeable analyzers.
-
-    This class manages multiple extraction modules and allows users to select
-    which ones to run and in what order. Each analyzer produces its own set
-    of features that are merged into the final result.
-
-    Attributes:
-        spec: Configuration specification containing device/dtype settings.
-        enabled: Set of enabled extraction module names.
-        extractors: Dictionary mapping module names to extractor instances.
-
-    Example:
-        >>> from negate.io.spec import Spec
-        >>> spec = Spec()
-        >>> extractor = UnifiedExtractor(spec, enable=["artwork", "learned"])
-        >>> features = extractor(image)
-    """
+    """Unified feature extraction interface with interchangeable analyzers."""
 
     def __init__(self, spec: Spec, enable: Sequence[ExtractionModule | str] | None = None) -> None:
         """Initialize the unified extractor with selected modules.\n
@@ -94,10 +77,12 @@ class UnifiedExtractor:
 
     def _init_extractors(self) -> None:
         """Initialize enabled extraction modules."""
+        from negate.decompose.wavelet import WaveletContext
+
         for module in self.enabled:
             match module:
                 case ExtractionModule.ARTWORK:
-                    self.extractors[ExtractionModule.ARTWORK] = ArtworkExtract()
+                    self.extractors[ExtractionModule.ARTWORK] = ArtworkExtract(Image.new("RGB", (255, 255)))
                 case ExtractionModule.LEARNED:
                     self.extractors[ExtractionModule.LEARNED] = LearnedExtract()
                 case ExtractionModule.RESIDUAL:
@@ -117,28 +102,17 @@ class UnifiedExtractor:
         results: dict[str, float] = {}
 
         if ExtractionModule.ARTWORK in self.enabled:
-            artwork_features = self.extractors[ExtractionModule.ARTWORK](image)
-            results.update(artwork_features)
-
+            results.update(self.extractors[ExtractionModule.ARTWORK](image))
         if ExtractionModule.LEARNED in self.enabled:
-            learned_features = self.extractors[ExtractionModule.LEARNED](image)
-            results.update(learned_features)
-
+            results.update(self.extractors[ExtractionModule.LEARNED](image))
         if ExtractionModule.RESIDUAL in self.enabled:
-            residual_features = self.extractors[ExtractionModule.RESIDUAL](image)
-            results.update({k: v for k, v in residual_features.items() if isinstance(v, (int, float))})
-
+            results.update({k: v for k, v in self.extractors[ExtractionModule.RESIDUAL](image).items() if isinstance(v, (int, float))})
         if ExtractionModule.WAVELET in self.enabled:
-            wavelet_features = self._extract_wavelet(image)
-            results.update(wavelet_features)
-
+            results.update(self._extract_wavelet(image))
         if ExtractionModule.VAE in self.enabled:
-            vae_features = self._extract_vae(image)
-            results.update(vae_features)
-
+            results.update(self._extract_vae(image))
         if ExtractionModule.VIT in self.enabled:
-            vit_features = self._extract_vit(image)
-            results.update(vit_features)
+            results.update(self._extract_vit(image))
 
         return results
 
@@ -195,13 +169,7 @@ class UnifiedExtractor:
         import torchvision.transforms as T
 
         vae_extractor = self.extractors[ExtractionModule.VAE]
-        transform = T.Compose(
-            [
-                T.CenterCrop((512, 512)),
-                T.ToTensor(),
-                T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-            ]
-        )
+        transform = T.Compose([T.CenterCrop((512, 512)), T.ToTensor(), T.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5])])
 
         try:
             tensor = transform(image.convert("RGB")).unsqueeze(0).to(self.spec.device, dtype=self.spec.dtype)
@@ -295,16 +263,7 @@ class UnifiedExtractor:
 
 
 class ExtractorPipeline:
-    """Pipeline for running extractors in configurable order.
-
-    This class allows users to define a custom extraction pipeline with
-    specific extractors in specific order. Each extractor runs independently
-    and results are merged at the end.
-
-    Attributes:
-        spec: Configuration specification containing device/dtype settings.
-        pipeline: List of (module_name, extractor) tuples in execution order.
-    """
+    """Pipeline for running extractors in configurable order."""
 
     def __init__(self, spec: Spec, order: list[str] | None = None) -> None:
         """Initialize pipeline with specified order.\n
@@ -318,10 +277,12 @@ class ExtractorPipeline:
 
     def _build_pipeline(self) -> None:
         """Build the extraction pipeline based on order."""
+        from negate.decompose.wavelet import WaveletContext
+
         for module in self.order:
             match module:
                 case ExtractionModule.ARTWORK:
-                    self.pipeline[ExtractionModule.ARTWORK] = ArtworkExtract()
+                    self.pipeline[ExtractionModule.ARTWORK] = ArtworkExtract(NumericImage(Image.new("RGB", (255, 255))))
                 case ExtractionModule.LEARNED:
                     self.pipeline[ExtractionModule.LEARNED] = LearnedExtract()
                 case ExtractionModule.RESIDUAL:

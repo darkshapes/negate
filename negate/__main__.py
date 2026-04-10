@@ -162,6 +162,7 @@ def _build_parser(
     process_parser.add_argument("-v", "--verbose", action="store_true", help=blurb.verbose)
     process_parser.add_argument("--transposed", default=None, help="Comma-separated transposed indices")
     process_parser.add_argument("--combination", default=None, help="Comma-separated module names")
+    process_parser.add_argument("--train", choices=["convnext", "xgboost"], default=None, help="Train model after processing")
 
     vit_help = f"Vison {blurb.model_desc} {choices.default_vit}".strip()
     ae_help = f"Autoencoder {blurb.model_desc} {choices.default_vae}".strip()
@@ -308,6 +309,7 @@ def cmd(ctx: CmdContext) -> None:
             compute_weighted_certainty(*inference_results, label=args.label)
 
         case "process":
+            from negate.extract.combination import run_all_combinations
             from negate.extract.unified import ExtractionModule, UnifiedExtractor
             from negate.io.spec import Spec
             from PIL import Image
@@ -365,9 +367,46 @@ def cmd(ctx: CmdContext) -> None:
                     CLI_LOGGER.warning(f"Error processing module {mod_name}: {e}")
 
             output_file = ctx.results_path / "process_results.json"
+            import json
+
             with open(output_file, "w") as f:
                 json.dump(results, f, indent=2, default=str)
             CLI_LOGGER.info(f"Results saved to {output_file}")
+
+            # Continue to train if requested
+            if args.train:
+                from negate.io.spec import load_metadata
+                from negate.train import train_model, build_train_call, save_train_result
+                from negate.metrics.track import run_training_statistics
+                from negate.io.save import end_processing
+
+                # Load model spec from results
+                model_path = ctx.results_path / "process_results.json"
+                if not model_path.exists():
+                    print(f"Error: No results found at {model_path}")
+                    exit(1)
+
+                model_spec = {
+                    "model": "convnext" if args.train == "convnext" else "xgboost",
+                    "vae": "",
+                    "dtype": "float64",
+                    "device": "cpu",
+                    "opt": {
+                        "dim_factor": 3,
+                        "dim_patch": 16,
+                        "top_k": 20,
+                        "condense_factor": 2,
+                        "alpha": 0.01,
+                        "magnitude_sampling": "top_k",
+                    },
+                }
+
+                # Train model
+                train_result = train_model(features_ds=results, spec=spec)
+                timecode = end_processing(f"Training ({args.train})", start_ns)
+                save_train_result(train_result)
+                run_training_statistics(train_result=train_result, timecode=timecode, spec=spec)
+                CLI_LOGGER.info(f"Training ({args.train}) completed with accuracy: {train_result.get('accuracy', 0.0):.4f}")
 
         case _:
             raise NotImplementedError
