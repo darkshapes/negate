@@ -97,7 +97,9 @@ class WaveletAnalyze(ContextManager):
             decomposed_feat = {}
 
             vae_feat = self.context.vae(patch_spectrum)
-            condensed_feat = {"features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)}
+            condensed_feat = {
+                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)
+            }
 
             decomposed_feat: dict[str, float | tuple[int, int]] = self.ensemble_decompose(selected)
 
@@ -208,12 +210,10 @@ class WaveletAnalyze(ContextManager):
 
     def cleanup(self) -> None:
         """Free resources once discarded."""
-
         device_name = self.context.spec.device.type
-        del self.context.spec.device
         if device_name != "cpu":
-            self.gpu = getattr(torch, device_name)
-            self.gpu.empty_cache()  # type: ignore
+            gpu = getattr(torch, device_name)
+            gpu.empty_cache()
         gc.collect()
 
     def __enter__(self) -> "WaveletAnalyze":

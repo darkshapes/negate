@@ -117,7 +117,9 @@ class VAEExtract:
 
         autoencoder_cls = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
         try:
-            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
+            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(
+                self.spec.device
+            )  # type: ignore
         except (LocalEntryNotFoundError, OSError, AttributeError):
             if self.verbose is True:
                 print("Downloading model...")
@@ -206,13 +208,17 @@ class VAEExtract:
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
-
-        device_name = self.spec.device.type
-        del self.spec.device
-        if device_name != "cpu":
-            self.gpu = getattr(torch, device_name)
-            self.gpu.empty_cache()  # type: ignore
-        del self.vae
+        try:
+            device_name = self.spec.device.type
+            if device_name != "cpu":
+                gpu = getattr(torch, device_name)
+                gpu.empty_cache()
+        except Exception:
+            pass
+        try:
+            del self.vae
+        except Exception:
+            pass
         gc.collect()
 
     def __enter__(self) -> VAEExtract:
