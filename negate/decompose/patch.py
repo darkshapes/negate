@@ -5,10 +5,19 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
+from scipy.stats import entropy as scipy_entropy
 from skimage.feature import canny, local_binary_pattern
+
+from negate.decompose.numeric import NumericImage
+
+
+def entropy(counts: NDArray) -> float:
+    """Compute Shannon entropy from histogram counts."""
+    probs = counts / counts.sum()
+    probs = probs[probs > 0]
+    return -np.sum(probs * np.log2(probs))
 
 
 class PatchFeatures:

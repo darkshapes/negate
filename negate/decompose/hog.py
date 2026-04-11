@@ -14,6 +14,8 @@ from skimage.feature import hog
 from scipy.stats import entropy
 from skimage.color import rgb2gray
 
+from negate.decompose.numeric import NumericImage
+
 
 class HOGFeatures:
     """Extract HOG and JPEG features for AI detection."""

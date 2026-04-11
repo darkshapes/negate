@@ -12,6 +12,8 @@ from skimage.feature import canny
 from skimage.feature import graycomatrix, graycoprops
 from scipy.ndimage import sobel
 
+from negate.decompose.numeric import NumericImage
+
 
 class EdgeFeatures:
     """Extract edge co-occurrence features for AI detection."""

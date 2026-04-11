@@ -8,8 +8,17 @@ from __future__ import annotations
 from typing import Any
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import skew, kurtosis
+from scipy.stats import entropy as scipy_entropy, skew, kurtosis
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
+
+from negate.decompose.numeric import NumericImage
+
+
+def entropy(counts: NDArray) -> float:
+    """Compute Shannon entropy from histogram counts."""
+    probs = counts / counts.sum()
+    probs = probs[probs > 0]
+    return -np.sum(probs * np.log2(probs))
 
 
 class EnhancedFeatures:
@@ -52,7 +61,7 @@ class EnhancedFeatures:
             for x in range(0, w - block_size, block_size):
                 block = gray[y : y + block_size, x : x + block_size]
                 dct_block = dctn(block, type=2, norm="ortho")
-                ac_energy = float((dct_block**2).sum() - dct_block[0, 0] ** 2)
+                ac_energy = float((dct_block**2).sum() - dct_block[0, 0] ** 2)  # type: ignore
                 block_energies.append(ac_energy)
         block_energies = np.array(block_energies)
         features["dct_block_energy_mean"] = float(block_energies.mean())

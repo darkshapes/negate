@@ -5,73 +5,33 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
-from PIL import Image as PILImage
+from PIL.Image import Image as PILImage
+from PIL.Image import Resampling
+
 from scipy.stats import skew, kurtosis
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
 
-
-class NumericImage:
-    image: PILImage
-    TARGET_SIZE = (255, 255)
-
-    def __init__(self, image: PILImage) -> None:
-        self._image = image
-        self.to_gray()
-        self.to_rgb()
-        self.rgb2hsv()
-
-    @property
-    def gray(self) -> NDArray:
-        return self.shade
-
-    @property
-    def color(self):
-        return self.rgb
-
-    @property
-    def hsv(self):
-        return self._hsv
-
-    def to_gray(self) -> NDArray:
-        """Resize and convert to float64 grayscale."""
-        img = self._image.convert("L").resize(self.TARGET_SIZE, PILImage.BICUBIC)
-        self.shade = np.asarray(img, dtype=np.float64) / 255.0
-
-    def to_rgb(self) -> NDArray:
-        """Resize and convert to float64 RGB [0,1]."""
-        img = self._image.convert("RGB").resize(self.TARGET_SIZE, PILImage.BICUBIC)
-        self.rgb = np.asarray(img, dtype=np.float64) / 255.0
-
-    def rgb2hsv(self) -> NDArray:
-        """Convert RGB [0,1] array to HSV [0,1]."""
-        from colorsys import rgb_to_hsv
-
-        rgb = self.rgb.copy()
-        rgb = rgb / 255.0 if rgb.max() > 1 else rgb
-        h, w, c = rgb.shape
-        flat = rgb.reshape(-1, 3)
-        result = np.array([rgb_to_hsv(r, g, b) for r, g, b in flat])
-        self._hsv = result.T.reshape(h, w, 3)
+from negate.decompose.numeric import NumericImage
 
 
 class SurfaceFeatures:
     """Extract artwork features for AI detection."""
 
-    def __init__(self, image: PILImage) -> None:
-        """Initialize SurfaceFeatures with PIL image.\n
-        :param image: PIL Image.
+    def __init__(self, image: NumericImage) -> None:
+        """Initialize SurfaceFeatures with NumericImage.\n
+        :param image: NumericImage.
         """
-        self._numeric = NumericImage(image)
+        self.image = image
+        self._numeric = image
 
-    def __call__(self, image: PILImage) -> dict[str, float]:
+    def __call__(self) -> dict[str, float]:
         """Extract all features from the image.\n
         :returns: Dictionary of scalar features.
         """
-        gray = (NumericImage(image)).gray
-        rgb = (NumericImage(image)).color
+        gray = self._numeric.gray
+        rgb = self._numeric.color
         features: dict[str, float] = {}
         features |= self.brightness_features(gray)
         features |= self.color_features(rgb)
@@ -125,7 +85,7 @@ class SurfaceFeatures:
 
         hog_features = hog(gray, pixels_per_cell=(16, 16), cells_per_block=(2, 2), feature_vector=True)
         gray_uint8 = (gray * 255).astype(np.uint8)
-        edges_array = np.asarray(PilImage.fromarray(gray_uint8).convert("L").point(lambda x: 0 if x < 128 else 255, "1"))
+        edges_array = np.where(gray_uint8 < 128, 0, 255)
         features: dict[str, float] = {
             "hog_mean": float(hog_features.mean()),
             "hog_variance": float(hog_features.var()),
@@ -189,7 +149,7 @@ class SurfaceFeatures:
         row_freqs = fftfreq(height)[:, None] * np.ones((1, width))
         col_freqs = np.ones((height, 1)) * fftfreq(width)[None, :]
         spectral_centroid = float((np.sum(log_mag * np.abs(row_freqs)) + np.sum(log_mag * np.abs(col_freqs))) / (log_mag.sum() * 2 + 1e-10))
-        dct_coeffs = dctn(gray, type=2, norm="ortho")
+        dct_coeffs: NDArray = np.asarray(dctn(gray.astype(np.float64), type=2, norm="ortho")[0])
         dct_mag = np.abs(dct_coeffs)
         flat_dc_energy = float(dct_mag[0, 0] ** 2)
         detail_ac_energy = float((dct_mag**2).sum() - flat_dc_energy)

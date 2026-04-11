@@ -13,6 +13,8 @@ from skimage.feature import graycomatrix, graycoprops
 from skimage.feature import local_binary_pattern
 from scipy.ndimage import distance_transform_edt, label, sobel, binary_dilation
 
+from negate.decompose.numeric import NumericImage
+
 
 class LineworkFeatures:
     """Extract line work analysis features for AI detection."""
@@ -49,7 +51,7 @@ class LineworkFeatures:
         dist_map = distance_transform_edt(~edges_tight)
         stroke_regions = edges_loose
         if stroke_regions.sum() > 0:
-            thicknesses = dist_map[stroke_regions]
+            thicknesses = dist_map[stroke_regions]  # type: ignore[misc]
             thickness_mean = float(thicknesses.mean())
             thickness_std = float(thicknesses.std())
             thickness_cv = thickness_std / (thickness_mean + 1e-10)
@@ -59,7 +61,7 @@ class LineworkFeatures:
         labeled_edges, n_components = label(edges_tight)
         straightness_values = []
         for i in range(1, min(n_components + 1, 30)):
-            component = labeled_edges == i
+            component: NDArray = labeled_edges == i
             n_pixels = component.sum()
             if n_pixels < 5:
                 continue
@@ -96,3 +98,5 @@ class LineworkFeatures:
             "edge_sharpness_std": edge_sharpness_std,
             "medium_consistency": medium_consistency,
         }
+
+# type: ignore[reportGeneralTypeIssues]

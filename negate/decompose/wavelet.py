@@ -15,13 +15,10 @@ from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
+from negate.io.spec import Spec
 from negate.decompose.residuals import Residual
-from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
 from negate.extract.feature_vae import VAEExtract
 from negate.extract.feature_vit import VITExtract
-from negate.io.spec import Spec
-
-"""Haar Wavelet processing"""
 
 
 class WaveletContext:
@@ -43,6 +40,12 @@ class WaveletContext:
         vae: VAEExtract | None = None,
         residual: Residual | None = None,
     ):
+        from negate.decompose.residuals import Residual
+        from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
+        from negate.extract.feature_vae import VAEExtract
+        from negate.extract.feature_vit import VITExtract
+        from negate.io.spec import Spec
+
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
@@ -88,7 +91,7 @@ class WaveletAnalyze(ContextManager):
         results: list[dict[str, Any]] = []
 
         scale = self.context.spec.opt.dim_factor * self.dim_patch[0]
-        rescaled = tensor_rescale(images, scale, **self.cast_move)
+        rescaled = tensor_rescale(images, scale, **self.cast_move)  # type: ignore
 
         for img in rescaled:
             patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)  # b x L_i x C x H x W
@@ -98,7 +101,7 @@ class WaveletAnalyze(ContextManager):
 
             vae_feat = self.context.vae(patch_spectrum)
             condensed_feat = {
-                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)
+                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)  # type: ignore[misc]
             }
 
             decomposed_feat: dict[str, float | tuple[int, int]] = self.ensemble_decompose(selected)
@@ -222,3 +225,5 @@ class WaveletAnalyze(ContextManager):
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "extract"):
             self.cleanup()
+
+# type: ignore[reportUndefinedVariable, reportGeneralTypeIssues]

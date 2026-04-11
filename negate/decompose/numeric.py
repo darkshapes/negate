@@ -5,12 +5,10 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from PIL.Image import Image as PILImage
-from PIL.Image import BICUBIC
-
+from PIL.Image import Resampling
 
 _TARGET_SIZE = (255, 255)
 
@@ -39,17 +37,17 @@ class NumericImage:
     def hsv(self):
         return self._hsv
 
-    def to_gray(self) -> NDArray:
+    def to_gray(self) -> None:
         """Resize and convert to float64 grayscale."""
-        img = self._image.convert("L").resize(self.TARGET_SIZE, BICUBIC)
+        img = self._image.convert("L").resize(self.TARGET_SIZE, Resampling.BICUBIC)
         self.shade = np.asarray(img, dtype=np.float64) / 255.0
 
-    def to_rgb(self) -> NDArray:
+    def to_rgb(self) -> None:
         """Resize and convert to float64 RGB [0,1]."""
-        img = self._image.convert("RGB").resize(self.TARGET_SIZE, BICUBIC)
+        img = self._image.convert("RGB").resize(self.TARGET_SIZE, Resampling.BICUBIC)
         self.rgb = np.asarray(img, dtype=np.float64) / 255.0
 
-    def rgb2hsv(self) -> NDArray:
+    def rgb2hsv(self) -> None:
         """Convert RGB [0,1] array to HSV [0,1]."""
         from colorsys import hsv_to_rgb as rgb_to_hsv
 

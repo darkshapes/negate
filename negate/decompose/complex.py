@@ -12,6 +12,8 @@ from skimage.feature import canny
 from skimage.color import rgb2lab
 from scipy.ndimage import gaussian_filter, label, sobel, binary_dilation
 
+from negate.decompose.numeric import NumericImage
+
 
 class ComplexFeatures:
     """Extract complex artwork features for AI detection."""
@@ -110,7 +112,7 @@ class ComplexFeatures:
         stroke_edges = edges & stroke_dilated
         if stroke_edges.sum() > 5:
             labeled, n_components = label(binary_dilation(stroke_edges, iterations=1))
-            lengths = [n_pixels for i in range(1, min(n_components + 1, 50)) if (labeled == i).sum() > 3]
+            lengths: list[float] = [(labeled == i).sum() for i in range(1, min(n_components + 1, 50)) if (labeled == i).sum() > 3]
             roughness = float(stroke_edges.sum()) / (stroke_dilated.sum() + 1e-10)
             length_var = float(np.var(lengths)) if len(lengths) > 1 else 0.0
             edge_y, edge_x = np.where(stroke_edges)
@@ -181,3 +183,5 @@ class ComplexFeatures:
             "blend_saturation_dip": float(np.mean(sat_dips)) if sat_dips else 0.0,
             "blend_lightness_dip": float(np.mean(light_dips)) if light_dips else 0.0,
         }
+
+# type: ignore[reportGeneralTypeIssues]

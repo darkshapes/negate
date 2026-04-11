@@ -13,9 +13,9 @@ compatibility:
 
 ![Stylized futuristic lines in the shape of an N](https://raw.githubusercontent.com/darkshapes/entity-statement/refs/heads/main/png/negate/negate_150.png)</div>
 
-# negate <br><sub> entrypoint synthetic image classifier</sub>
+# negate <br><sub> critical analysis of origin detection</sub>
 
-A scanning, training, and research library for detecting the origin of digital images.
+A scanning, training, and research library for scrutinizing illustration origin detection methods.
 
 [<img src="https://img.shields.io/badge/feed_me-__?logo=kofi&logoColor=white&logoSize=auto&label=donate&labelColor=maroon&color=grey&link=https%3A%2F%2Fko-fi.com%2Fdarkshapes">](https://ko-fi.com/darkshapes)<br>
 <br>
