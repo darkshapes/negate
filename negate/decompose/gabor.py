@@ -5,10 +5,8 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
-from scipy.stats import entropy as scipy_entropy
 from skimage.filters import gabor
 
 from negate.decompose.numeric import NumericImage

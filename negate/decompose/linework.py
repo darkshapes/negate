@@ -5,13 +5,10 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from skimage.feature import canny
-from skimage.feature import graycomatrix, graycoprops
-from skimage.feature import local_binary_pattern
-from scipy.ndimage import distance_transform_edt, label, sobel, binary_dilation
+from scipy.ndimage import distance_transform_edt, label, sobel
 
 from negate.decompose.numeric import NumericImage
 
@@ -58,7 +55,7 @@ class LineworkFeatures:
         else:
             thickness_mean, thickness_std, thickness_cv = 0.0, 0.0, 0.0
         line_density = float(edges_tight.sum() / edges_tight.size)
-        labeled_edges, n_components = label(edges_tight)
+        labeled_edges, n_components = label(edges_tight)  # type: ignore
         straightness_values = []
         for i in range(1, min(n_components + 1, 30)):
             component: NDArray = labeled_edges == i
@@ -98,5 +95,3 @@ class LineworkFeatures:
             "edge_sharpness_std": edge_sharpness_std,
             "medium_consistency": medium_consistency,
         }
-
-# type: ignore[reportGeneralTypeIssues]

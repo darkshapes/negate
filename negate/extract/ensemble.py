@@ -10,10 +10,7 @@ Output: results/artwork_detection_results.pdf
 
 from __future__ import annotations
 
-from typing import Any, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
+from typing import Any
 
 from negate.decompose.surface import SurfaceFeatures
 from negate.io.datasets import build_datasets
@@ -81,13 +78,9 @@ def run_ensemble_cv(X: Any, y: Any, spec: Spec) -> tuple[dict[str, Any], Any, An
     skf = StratifiedKFold(n_splits=ens.n_folds, shuffle=True, random_state=hp.seed)
 
     models = {
-        "SVM": CalibratedClassifierCV(
-            SVC(C=ens.svm_c, gamma=ens.gamma, kernel=ens.kernel, random_state=hp.seed), cv=ens.cv, method=ens.method
-        ),
+        "SVM": CalibratedClassifierCV(SVC(C=ens.svm_c, gamma=ens.gamma, kernel=ens.kernel, random_state=hp.seed), cv=ens.cv, method=ens.method),
         "MLP": CalibratedClassifierCV(
-            MLPClassifier(
-                hidden_layer_sizes=(ens.mlp_hidden_layers,), activation=ens.mlp_activation, max_iter=ens.mlp_max_iter, random_state=hp.seed
-            ),
+            MLPClassifier(hidden_layer_sizes=(ens.mlp_hidden_layers,), activation=ens.mlp_activation, max_iter=ens.mlp_max_iter, random_state=hp.seed),
             cv=ens.cv,
             method=ens.method,
         ),
@@ -146,9 +139,7 @@ def run_ensemble_cv(X: Any, y: Any, spec: Spec) -> tuple[dict[str, Any], Any, An
     confident_preds[uncertain_mask] = -1  # Mark uncertain as -1
 
     results["Ensemble_With_Abstention"] = {
-        "accuracy": np.sum(confident_preds == y) / (y.shape[0] - np.sum(uncertain_mask))
-        if (y.shape[0] - np.sum(uncertain_mask)) > 0
-        else 0,
+        "accuracy": np.sum(confident_preds == y) / (y.shape[0] - np.sum(uncertain_mask)) if (y.shape[0] - np.sum(uncertain_mask)) > 0 else 0,
         "abstention_rate": np.mean(uncertain_mask),
     }
 

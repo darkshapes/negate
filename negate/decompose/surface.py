@@ -7,8 +7,6 @@ from __future__ import annotations
 
 import numpy as np
 from numpy.typing import NDArray
-from PIL.Image import Image as PILImage
-from PIL.Image import Resampling
 
 from scipy.stats import skew, kurtosis
 from skimage.feature import graycomatrix, graycoprops, local_binary_pattern
@@ -80,7 +78,6 @@ class SurfaceFeatures:
     def shape_features(self, gray: NDArray) -> dict[str, float]:
         """HOG statistics and edge length."""
         from skimage.feature import hog
-        from PIL import Image as PilImage
         import numpy as np
 
         hog_features = hog(gray, pixels_per_cell=(16, 16), cells_per_block=(2, 2), feature_vector=True)

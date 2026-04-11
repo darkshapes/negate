@@ -8,8 +8,11 @@ import logging
 import warnings
 from typing import Any
 
+from negate.io.logger import CLI_LOGGER
+
 __all__ = [
     "Blurb",
+    "CLI_LOGGER",
     "InferContext",
     "Spec",
     "build_train_call",
@@ -17,6 +20,7 @@ __all__ = [
     "compute_weighted_certainty",
     "configure_runtime_logging",
     "end_processing",
+    "get_cli_logger",
     "infer_origin",
     "load_metadata",
     "load_spec",
@@ -25,18 +29,21 @@ __all__ = [
     "run_training_statistics",
     "save_features",
     "save_train_result",
+    "set_root_folder",
     "train_model",
     "training_loop",
 ]
 
 _ATTR_SOURCES = {
     "Blurb": ("negate.io.blurb", "Blurb"),
+    "CLI_LOGGER": ("negate.io.logger", "CLI_LOGGER"),
     "InferContext": ("negate.inference", "InferContext"),
     "Spec": ("negate.io.spec", "Spec"),
     "build_train_call": ("negate.train", "build_train_call"),
     "chart_decompositions": ("negate.metrics.track", "chart_decompositions"),
     "compute_weighted_certainty": ("negate.metrics.heuristics", "compute_weighted_certainty"),
     "end_processing": ("negate.io.save", "end_processing"),
+    "get_cli_logger": ("negate.io.logger", "get_cli_logger"),
     "infer_origin": ("negate.inference", "infer_origin"),
     "load_metadata": ("negate.io.spec", "load_metadata"),
     "load_spec": ("negate.io.spec", "load_spec"),
@@ -45,6 +52,7 @@ _ATTR_SOURCES = {
     "run_training_statistics": ("negate.metrics.track", "run_training_statistics"),
     "save_features": ("negate.io.save", "save_features"),
     "save_train_result": ("negate.io.save", "save_train_result"),
+    "set_root_folder": ("negate.io.logger", "set_root_folder"),
     "train_model": ("negate.train", "train_model"),
     "training_loop": ("negate.train", "training_loop"),
 }

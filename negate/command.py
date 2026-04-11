@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 from typing import Any
+import time as timer_module
 
-from negate import configure_runtime_logging
+start_ns = timer_module.perf_counter()
 
 
 def cmd(ctx: Any) -> None:

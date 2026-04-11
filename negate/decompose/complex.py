@@ -78,9 +78,7 @@ class ComplexFeatures:
                     acf[lag] = float(np.corrcoef(original.ravel(), shifted.ravel())[0, 1])
         acf_tail = acf[3:]
         if len(acf_tail) > 2:
-            peaks = [
-                (i + 3, acf_tail[i]) for i in range(1, len(acf_tail) - 1) if acf_tail[i] > acf_tail[i - 1] and acf_tail[i] > acf_tail[i + 1]
-            ]
+            peaks = [(i + 3, acf_tail[i]) for i in range(1, len(acf_tail) - 1) if acf_tail[i] > acf_tail[i - 1] and acf_tail[i] > acf_tail[i + 1]]
             n_peaks = len(peaks)
             max_peak = max(p[1] for p in peaks) if peaks else 0.0
             decay_rate = float(acf[1] - acf[min(10, max_lag - 1)]) if max_lag > 10 else 0.0
@@ -183,5 +181,3 @@ class ComplexFeatures:
             "blend_saturation_dip": float(np.mean(sat_dips)) if sat_dips else 0.0,
             "blend_lightness_dip": float(np.mean(light_dips)) if light_dips else 0.0,
         }
-
-# type: ignore[reportGeneralTypeIssues]

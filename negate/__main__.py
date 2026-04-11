@@ -6,9 +6,7 @@
 from __future__ import annotations
 
 import argparse
-import logging
 import re
-import time as timer_module
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -21,44 +19,11 @@ BLURB_PATH = CONFIG_PATH / "blurb.toml"
 CONFIG_TOML_PATH = CONFIG_PATH / "config.toml"
 TIMESTAMP_PATTERN = re.compile(r"\d{8}_\d{6}")
 DEFAULT_INFERENCE_PAIR = ["20260225_185933", "20260225_221149"]
-start_ns = timer_module.perf_counter()
-CLI_LOGGER = logging.getLogger("negate.cli")
-if not CLI_LOGGER.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(message)s"))
-    CLI_LOGGER.addHandler(_handler)
-CLI_LOGGER.setLevel(logging.INFO)
-CLI_LOGGER.propagate = False
 
+from negate.io.logger import get_cli_logger, set_root_folder
 
-@dataclass
-class BlurbText:
-    """CLI help text defaults loaded from config/blurb.toml."""
-
-    pretrain: str = "Analyze and graph performance..."
-    train: str = "Train XGBoost model..."
-    infer: str = "Infer whether features..."
-
-    loop: str = "Toggle training across the range..."
-    features_load: str = "Train from an existing set of features"
-    verbose: str = "Verbose console output"
-    label_syn: str = "Mark image as synthetic (label = 1) for evaluation."
-    label_gne: str = "Mark image as genuine (label = 0) for evaluation."
-
-    gne_path: str = "Genunie/Human-origin image dataset path"
-    syn_path: str = "Synthetic image dataset path"
-    unidentified_path: str = "Path to the image or directory containing images of unidentified origin"
-
-    verbose_status: str = "Checking path "
-    verbose_dated: str = " using models dated "
-
-    infer_path_error: str = "Infer requires an image path."
-    model_error: str = "Warning: No valid model directories found in "
-    model_error_hint: str = " Create or add a trained model before running inference."
-    model_pair: str = "Two models must be provided for inference..."
-    model_pattern: str = "Model format must match pattern YYYYMMDD_HHMMSS..."
-
-    model_desc: str = "model to use. Default : "
+set_root_folder(ROOT_FOLDER)
+CLI_LOGGER = get_cli_logger()
 
 
 @dataclass
@@ -189,9 +154,6 @@ def _build_parser(blurb: BlurbText, choices: ModelChoices, list_results: list[st
     return parser
 
 
-you
-
-
 def main() -> None:
     blurb_text = _load_blurb_text()
     model_choices = _load_model_choices()
@@ -211,8 +173,7 @@ def main() -> None:
     )
     args = parser.parse_args(argv[1:])
 
-    from negate.io.blurb import Blurb
-    from negate.io.spec import Spec
+    from negate import Blurb, Spec
 
     spec = Spec()
     blurb = Blurb(spec)

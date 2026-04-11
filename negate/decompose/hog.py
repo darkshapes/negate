@@ -5,14 +5,12 @@
 
 from __future__ import annotations
 
-from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 from PIL import Image as PILImage
 from io import BytesIO
 from skimage.feature import hog
 from scipy.stats import entropy
-from skimage.color import rgb2gray
 
 from negate.decompose.numeric import NumericImage
 

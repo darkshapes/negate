@@ -23,6 +23,7 @@ relationship with any generator architecture.
 from __future__ import annotations
 
 import numpy as np
+
 import torch
 from numpy.typing import NDArray
 from PIL import Image
@@ -38,13 +39,13 @@ class LearnedExtract:
     """
 
     def __init__(self):
-        import timm
+        from timm import create_model
+        from timm.data.transforms_factory import create_transform
+        from timm.data.config import resolve_data_config
 
-        self._model = timm.create_model("convnext_tiny.fb_in22k", pretrained=True, num_classes=0)
+        self._model = create_model("convnext_tiny.fb_in22k", pretrained=True, num_classes=0)
         self._model.eval()
-        self._transform = timm.data.create_transform(
-            **timm.data.resolve_data_config(self._model.pretrained_cfg)
-        )
+        self._transform = create_transform(**resolve_data_config(self._model.pretrained_cfg))
 
     @torch.no_grad()
     def __call__(self, image: Image.Image) -> dict[str, float]:
@@ -59,7 +60,7 @@ class LearnedExtract:
         """Extract features from a batch of images. Returns (N, 768) array."""
         all_feats = []
         for i in range(0, len(images), batch_size):
-            batch_imgs = images[i:i + batch_size]
+            batch_imgs = images[i : i + batch_size]
             tensors = []
             for img in batch_imgs:
                 try:

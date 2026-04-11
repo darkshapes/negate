@@ -107,6 +107,9 @@ class VAEExtract:
 
         from huggingface_hub import snapshot_download
         from huggingface_hub.errors import LocalEntryNotFoundError
+        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+        from diffusers.models.autoencoders.autoencoder_dc import AutoencoderDC
+        from diffusers.models.autoencoders.autoencoder_kl_flux2 import AutoencoderKLFlux2
 
         from diffusers.models import autoencoders  # type: ignore
 
@@ -115,11 +118,9 @@ class VAEExtract:
         if getattr(self.spec.opt, "vae_slicing", False):
             self.vae.enable_slicing()
 
-        autoencoder_cls = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
+        autoencoder_cls: AutoencoderKL | AutoencoderDC | AutoencoderKLFlux2 = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
         try:
-            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(
-                self.spec.device
-            )  # type: ignore
+            vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
         except (LocalEntryNotFoundError, OSError, AttributeError):
             if self.verbose is True:
                 print("Downloading model...")

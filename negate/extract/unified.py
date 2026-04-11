@@ -14,22 +14,12 @@ import torch
 from PIL import Image
 from torch import Tensor
 
-from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
-from negate.decompose.complex import ComplexFeatures
-from negate.decompose.edge import EdgeFeatures
-from negate.decompose.enhanced import EnhancedFeatures
-from negate.decompose.hog import HOGFeatures
-from negate.decompose.linework import LineworkFeatures
-from negate.decompose.numeric import NumericImage
-from negate.decompose.patch import PatchFeatures
 from negate.decompose.residuals import Residual
-from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
-from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
-from negate.decompose.surface import SurfaceFeatures
-from negate.extract.feature_conv import LearnedExtract
-from negate.extract.feature_vae import VAEExtract
-from negate.extract.feature_vit import VITExtract
 from negate.io.spec import Spec
+
+from .feature_conv import LearnedExtract
+from .feature_vae import VAEExtract
+from .feature_vit import VITExtract
 
 
 class ExtractionModule(Enum):
@@ -77,7 +67,15 @@ class UnifiedExtractor:
 
     def _init_extractors(self) -> None:
         """Initialize enabled extraction modules."""
-        from negate.decompose.wavelet import WaveletContext
+        from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
+        from negate.decompose.complex import ComplexFeatures
+        from negate.decompose.edge import EdgeFeatures
+        from negate.decompose.enhanced import EnhancedFeatures
+        from negate.decompose.hog import HOGFeatures
+        from negate.decompose.linework import LineworkFeatures
+        from negate.decompose.numeric import NumericImage
+        from negate.decompose.patch import PatchFeatures
+        from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
 
         for module in self.enabled:
             match module:
@@ -277,7 +275,15 @@ class ExtractorPipeline:
 
     def _build_pipeline(self) -> None:
         """Build the extraction pipeline based on order."""
-        from negate.decompose.wavelet import WaveletContext
+        from negate.decompose.surface import SurfaceFeatures as ArtworkExtract
+        from negate.decompose.complex import ComplexFeatures
+        from negate.decompose.edge import EdgeFeatures
+        from negate.decompose.enhanced import EnhancedFeatures
+        from negate.decompose.hog import HOGFeatures
+        from negate.decompose.linework import LineworkFeatures
+        from negate.decompose.numeric import NumericImage
+        from negate.decompose.patch import PatchFeatures
+        from negate.decompose.wavelet import WaveletAnalyze, WaveletContext
 
         for module in self.order:
             match module:

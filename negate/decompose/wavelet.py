@@ -15,11 +15,6 @@ from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
 
-from negate.io.spec import Spec
-from negate.decompose.residuals import Residual
-from negate.extract.feature_vae import VAEExtract
-from negate.extract.feature_vit import VITExtract
-
 
 class WaveletContext:
     """Container for wavelet analysis dependencies."""
@@ -29,6 +24,7 @@ class WaveletContext:
     idwt: DWTInverse
     extract: VITExtract
     residual: Residual
+    vae: VAEExtract
 
     def __init__(
         self,
@@ -40,18 +36,13 @@ class WaveletContext:
         vae: VAEExtract | None = None,
         residual: Residual | None = None,
     ):
-        from negate.decompose.residuals import Residual
-        from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
-        from negate.extract.feature_vae import VAEExtract
-        from negate.extract.feature_vit import VITExtract
-        from negate.io.spec import Spec
 
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
-        self.extract = extract or VITExtract(spec, verbose=verbose)  # type: ignore
-        self.vae = vae or VAEExtract(spec, verbose=verbose)
         self.residual = residual or Residual(spec)
+        self.extract = extract or VITExtract(spec, verbose=verbose)
+        self.vae = vae or VAEExtract(spec, verbose=verbose)
         self.verbose = verbose
 
     def __enter__(self) -> WaveletContext:
@@ -86,6 +77,7 @@ class WaveletAnalyze(ContextManager):
         tensor in the list should correspond to a single image.
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A dict of processed fourier residual, wavelet and rrc data"""
+        from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
 
         images = dataset["image"]
         results: list[dict[str, Any]] = []
@@ -101,7 +93,7 @@ class WaveletAnalyze(ContextManager):
 
             vae_feat = self.context.vae(patch_spectrum)
             condensed_feat = {
-                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)  # type: ignore[misc]
+                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)
             }
 
             decomposed_feat: dict[str, float | tuple[int, int]] = self.ensemble_decompose(selected)
@@ -133,6 +125,8 @@ class WaveletAnalyze(ContextManager):
         :param img: Input tensor image to patchify.
         :returns: Tuple of (selected patch tensor, metadata dict, spectrum patches).
         """
+        from negate.decompose.scaling import patchify_image
+
         patched: Tensor = patchify_image(img, patch_size=self.dim_patch, stride=self.dim_patch)
 
         max_magnitudes: list[float] = []  # fixed type hint
@@ -225,5 +219,3 @@ class WaveletAnalyze(ContextManager):
     def __exit__(self, exc_type, exc, tb) -> None:
         if hasattr(self, "extract"):
             self.cleanup()
-
-# type: ignore[reportUndefinedVariable, reportGeneralTypeIssues]

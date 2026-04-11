@@ -105,7 +105,7 @@ class VITExtract:
         import gc
 
         if self.spec.device.type != "cpu":
-            gpu = self.spec.device or torch.cuda
+            gpu = getattr(torch, self.spec.device.type)
             gpu.empty_cache()
             del gpu
         del self.model
