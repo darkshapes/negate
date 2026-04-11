@@ -14,6 +14,9 @@ from datasets import Dataset
 from pytorch_wavelets import DWTForward, DWTInverse
 from torch import Tensor
 from torch.nn.functional import cosine_similarity
+from .residuals import Residual
+
+
 
 
 class WaveletContext:
@@ -41,9 +44,19 @@ class WaveletContext:
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
         self.residual = residual or Residual(spec)
-        self.extract = extract or VITExtract(spec, verbose=verbose)
-        self.vae = vae or VAEExtract(spec, verbose=verbose)
+        self.extract = extract or self._get_vit_extract(spec, verbose)
+        self.vae = vae or self._get_vae_extract(spec, verbose)
         self.verbose = verbose
+
+    def _get_vit_extract(self, spec: Spec, verbose: bool) -> VITExtract:
+        """Get VIT extractor instance."""
+        from ..extract.feature_vit import VITExtract
+        return VITExtract(spec, verbose=verbose)
+
+    def _get_vae_extract(self, spec: Spec, verbose: bool) -> VAEExtract:
+        """Get VAE extractor instance."""
+        from ..extract.feature_vae import VAEExtract
+        return VAEExtract(spec, verbose=verbose)
 
     def __enter__(self) -> WaveletContext:
         return self

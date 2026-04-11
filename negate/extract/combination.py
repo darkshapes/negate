@@ -11,7 +11,7 @@ from typing import Any
 
 from PIL import Image
 
-from negate.extract.unified import ExtractionModule, UnifiedExtractor
+from negate.extract.unified_core import ExtractionModule, UnifiedExtractor
 from negate.io.spec import Spec
 
 

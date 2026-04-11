@@ -128,7 +128,7 @@ def cmd(ctx: Any) -> None:
 
         case "process":
             from negate.extract.combination import run_all_combinations
-            from negate.extract.unified import ExtractionModule, UnifiedExtractor
+            from negate.extract.unified_core import ExtractionModule, UnifiedExtractor
             from negate.io.spec import Spec
             from PIL import Image
 

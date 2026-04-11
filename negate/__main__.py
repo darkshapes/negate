@@ -13,6 +13,8 @@ from pathlib import Path
 from sys import argv
 from typing import Any
 
+from negate.io.console import CLI_LOGGER, set_root_folder
+
 ROOT_FOLDER = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_FOLDER / "config"
 BLURB_PATH = CONFIG_PATH / "blurb.toml"
@@ -20,10 +22,7 @@ CONFIG_TOML_PATH = CONFIG_PATH / "config.toml"
 TIMESTAMP_PATTERN = re.compile(r"\d{8}_\d{6}")
 DEFAULT_INFERENCE_PAIR = ["20260225_185933", "20260225_221149"]
 
-from negate.io.logger import get_cli_logger, set_root_folder
-
 set_root_folder(ROOT_FOLDER)
-CLI_LOGGER = get_cli_logger()
 
 
 @dataclass
