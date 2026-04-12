@@ -54,8 +54,9 @@ class VAEExtract:
     """
 
     def __init__(self, spec: Spec, verbose: bool) -> None:
-        """Initialize the VAE extractor with configuration.\n
-        :param spec: Specification container with model config and hardware settings.\n
+        """Initialize the VAE extractor with configuration.
+
+        :param spec: Specification container with model config and hardware settings.
         :raises RuntimeError: If diffusers package is not installed.
         :raises ImportError: If required VAE library cannot be imported.
         """
@@ -80,9 +81,11 @@ class VAEExtract:
 
     @torch.inference_mode()
     def __call__(self, tensor: Tensor | list[Tensor]) -> dict[str, list[Tensor]]:
-        """Extract VAE features from a batch of images then use spectral contrast as divergence metric
+        """Extract VAE features from a batch of images then use spectral contrast as divergence metric.
+
         :param tensor: 4D image tensor
-        :return: Dictionary with 'features' list."""
+        :return: Dictionary with 'features' list.
+        """
         import torch
 
         features_list = []
@@ -107,6 +110,9 @@ class VAEExtract:
 
         from huggingface_hub import snapshot_download
         from huggingface_hub.errors import LocalEntryNotFoundError
+        from diffusers.models.autoencoders.autoencoder_kl import AutoencoderKL
+        from diffusers.models.autoencoders.autoencoder_dc import AutoencoderDC
+        from diffusers.models.autoencoders.autoencoder_kl_flux2 import AutoencoderKLFlux2
 
         from diffusers.models import autoencoders  # type: ignore
 
@@ -115,7 +121,7 @@ class VAEExtract:
         if getattr(self.spec.opt, "vae_slicing", False):
             self.vae.enable_slicing()
 
-        autoencoder_cls = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
+        autoencoder_cls: AutoencoderKL | AutoencoderDC | AutoencoderKLFlux2 = getattr(autoencoders, self.library.split(".")[-1], None)  # type: ignore
         try:
             vae_model = autoencoder_cls.from_pretrained(self.model.enum.value, torch_dtype=self.spec.dtype, local_files_only=True).to(self.spec.device)  # type: ignore
         except (LocalEntryNotFoundError, OSError, AttributeError):
@@ -130,8 +136,10 @@ class VAEExtract:
 
     def next_model(self, index: int = 1) -> None:
         """Cycle the model and its library to the next available option.
+
         :param index: The vae in the config index to load
-        :returns: None"""
+        :returns: None
+        """
         vae_options = [*self.spec.model_config.list_vae]
         self.model, self.library = vae_options[index]
         del self.vae
@@ -139,9 +147,11 @@ class VAEExtract:
         self.create_vae()
 
     def _extract_special(self, batch):
-        """Handle SANA and AuraEqui models.\n
+        """Handle SANA and AuraEqui models.
+
         :param batch: Tensor of image + patches.
-        :return: NumPy mean latent."""
+        :return: NumPy mean latent.
+        """
 
         from diffusers.models.autoencoders.vae import DiagonalGaussianDistribution
         import torch
@@ -157,7 +167,8 @@ class VAEExtract:
 
     @torch.inference_mode()
     def latent_drift(self, tensors: Tensor) -> dict[str, float]:
-        """Compute L1/MSE/KL/BCE loss between input and VAE reconstruction.\n
+        """Compute L1/MSE/KL/BCE loss between input and VAE reconstruction.
+
         :param tensor: 4D image tensor
         """
 
@@ -180,8 +191,10 @@ class VAEExtract:
     @torch.inference_mode()
     def forward(self, dataset: Dataset) -> dict[str, list]:
         """Extract VAE features from a batch of images.
+
         :param dataset: HuggingFace Dataset with 'image' column.
-        :return: Dictionary with 'features' list."""
+        :return: Dictionary with 'features' list.
+        """
         assert self.vae is not None
         features_list = []
         patch_stack = []
@@ -206,13 +219,17 @@ class VAEExtract:
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
-
-        device_name = self.spec.device.type
-        del self.spec.device
-        if device_name != "cpu":
-            self.gpu = getattr(torch, device_name)
-            self.gpu.empty_cache()  # type: ignore
-        del self.vae
+        try:
+            device_name = self.spec.device.type
+            if device_name != "cpu":
+                gpu = getattr(torch, device_name)
+                gpu.empty_cache()
+        except RuntimeError:
+            pass
+        try:
+            del self.vae
+        except RuntimeError:
+            pass
         gc.collect()
 
     def __enter__(self) -> VAEExtract:

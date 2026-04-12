@@ -14,7 +14,8 @@ from negate.io.spec import Spec, root_folder
 
 
 def prepare_dataset(features_dataset: Dataset, spec: Spec) -> np.ndarray:
-    """Transform nested wavelet feature dictionaries into a flat numerical matrix.\n
+    """Transform nested wavelet feature dictionaries into a flat numerical matrix.
+
     :param features_dataset: HuggingFace Dataset with 'results' column containing list of dicts.
     :param spec: Specification container with dtype and ONNX configuration.
     :return: 2D numpy array of shape (samples, features) ready for model input.
@@ -37,11 +38,13 @@ def prepare_dataset(features_dataset: Dataset, spec: Spec) -> np.ndarray:
 
 
 def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int | None = None) -> Dataset:
-    """Load a remote dataset and attach a default label.\n
+    """Load a remote dataset and attach a default label.
+
     :param repo: Repository ID of the dataset.
     :param folder_path: Local path to cache the dataset.
     :param label: The default label to assign to all images in the dataset
-    :return: Dataset with a ``label`` column added and NaNs removed."""
+    :return: Dataset with a ``label`` column added and NaNs removed.
+    """
 
     remote_dataset = load_dataset(repo, cache_dir=str(folder_path), split=split).cast_column("image", Image(decode=True, mode="RGB"))
     if label is not None:
@@ -49,10 +52,14 @@ def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int 
     return remote_dataset
 
 
-def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None, verbose: bool = False) -> Dataset:
-    """Generates a dataset from an image file or folder of images.\n
+def generate_dataset(
+    file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None, verbose: bool = False
+) -> Dataset:
+    """Generates a dataset from an image file or folder of images.
+
     :param folder_path: Path to the folder containing image files.
-    :return: Dataset containing images and labels with NaNs removed."""
+    :return: Dataset containing images and labels with NaNs removed.
+    """
 
     if isinstance(file_or_folder_path, Path):
         validated_paths = []
@@ -71,8 +78,8 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
                 try:
                     with PillowImage.open(img_path) as _verification:
                         pass
-                except Exception as _unreadable_file:
-                    continue
+                except ValueError as exc:
+                    raise ValueError(f"Invalid image file: {img_path}") from exc
                 validated_paths.append({"image": str(img_path)})
         elif file_or_folder_path.is_file() and file_or_folder_path.suffix.lower() in valid_extensions:
             validated_paths.append({"image": str(file_or_folder_path)})
@@ -84,7 +91,7 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
 
     try:  # Fallback: keep the raw bytes if decoding fails.
         dataset = dataset.cast_column("image", Image(decode=True, mode="RGB"))
-    except Exception:
+    except ValueError:
         dataset = dataset.cast_column("image", Image())
 
     if label is not None:
@@ -98,9 +105,11 @@ def build_datasets(
     synthetic_path: Path | None = None,
     concatenate: bool = True,
 ) -> Dataset:
-    """Builds synthetic and genuine datasets.\n
+    """Builds synthetic and genuine datasets.
+
     :param input_folder: Path to folder containing data. (optional)
-    :return: Dataset containing synthetic and genuine images."""
+    :return: Dataset containing synthetic and genuine images.
+    """
 
     synthetic_input_folder = root_folder / ".datasets"
     synthetic_input_folder.mkdir(parents=True, exist_ok=True)

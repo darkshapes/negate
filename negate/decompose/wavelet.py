@@ -8,6 +8,8 @@ from __future__ import annotations
 import gc
 from typing import Any, ContextManager
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 from datasets import Dataset
@@ -17,9 +19,11 @@ from torch.nn.functional import cosine_similarity
 
 from negate.decompose.residuals import Residual
 from negate.decompose.scaling import condense_tensors, patchify_image, tensor_rescale
-from negate.extract.feature_vae import VAEExtract
-from negate.extract.feature_vit import VITExtract
 from negate.io.spec import Spec
+
+if TYPE_CHECKING:
+    from negate.extract.feature_vae import VAEExtract
+    from negate.extract.feature_vit import VITExtract
 
 """Haar Wavelet processing"""
 
@@ -30,7 +34,7 @@ class WaveletContext:
     spec: Spec
     dwt: DWTForward
     idwt: DWTInverse
-    extract: VITExtract
+    extract: "VITExtract"
     residual: Residual
 
     def __init__(
@@ -39,14 +43,17 @@ class WaveletContext:
         verbose: bool,
         dwt: DWTForward | None = None,
         idwt: DWTInverse | None = None,
-        extract: VITExtract | None = None,
-        vae: VAEExtract | None = None,
+        extract: "VITExtract" | None = None,
+        vae: "VAEExtract" | None = None,
         residual: Residual | None = None,
     ):
+        from negate.extract.feature_vae import VAEExtract
+        from negate.extract.feature_vit import VITExtract
+
         self.spec = spec
         self.dwt = dwt or DWTForward(J=2, wave="haar")
         self.idwt = idwt or DWTInverse(wave="haar")
-        self.extract = extract or VITExtract(spec, verbose=verbose)  # type: ignore
+        self.extract = extract or VITExtract(spec, verbose=verbose)
         self.vae = vae or VAEExtract(spec, verbose=verbose)
         self.residual = residual or Residual(spec)
         self.verbose = verbose
@@ -84,7 +91,8 @@ class WaveletAnalyze(ContextManager):
         :param dataset: dataset with key "image", a `list` of 1 x C x H_i x W_i tensors, where i denotes the i-th image in the list
         :returns: A dict of processed fourier residual, wavelet and rrc data"""
 
-        images = dataset["image"]
+        # Extract images from dataset properly
+        images = [row["image"] for row in dataset]
         results: list[dict[str, Any]] = []
 
         scale = self.context.spec.opt.dim_factor * self.dim_patch[0]
@@ -97,7 +105,9 @@ class WaveletAnalyze(ContextManager):
             decomposed_feat = {}
 
             vae_feat = self.context.vae(patch_spectrum)
-            condensed_feat = {"features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)}
+            condensed_feat = {
+                "features_dc": condense_tensors(vae_feat["features"], self.context.spec.opt.condense_factor, self.context.spec.opt.top_k)
+            }
 
             decomposed_feat: dict[str, float | tuple[int, int]] = self.ensemble_decompose(selected)
 

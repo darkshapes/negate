@@ -102,15 +102,13 @@ class VITExtract:
 
     def cleanup(self) -> None:
         """Free the VAE and GPU memory."""
-
         import gc
 
         if self.spec.device.type != "cpu":
-            gpu: torch.device = self.spec.device
-            gpu.empty_cache()  # type: ignore
+            gpu = getattr(torch, self.spec.device.type)
+            gpu.empty_cache()
             del gpu
         del self.model
-        del self.spec.device
         gc.collect()
 
     def __enter__(self) -> VITExtract:

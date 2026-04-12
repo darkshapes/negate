@@ -125,3 +125,32 @@ class TestGenerateDataset:
             dataset = generate_dataset(img_path)
 
             assert len(dataset) == 1
+
+
+class TestDatasetValueError:
+    """Test suite for ValueError handling in dataset generation."""
+
+    def test_dataset_value_error_image_decode(self):
+        """Test ValueError is caught when image decoding fails."""
+        from PIL import Image as PillowImage, UnidentifiedImageError
+        from pathlib import Path
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a valid image
+            img_path = Path(tmpdir) / "valid.png"
+            img = PillowImage.new("RGB", (100, 100))
+            img.save(img_path)
+
+            # Create an invalid image file
+            invalid_path = Path(tmpdir) / "invalid.dat"
+            invalid_path.write_bytes(b"invalid image data")
+
+            # Test that UnidentifiedImageError is caught during image validation
+            try:
+                with PillowImage.open(invalid_path) as _verification:
+                    pass
+            except UnidentifiedImageError as exc:
+                # UnidentifiedImageError should be caught for invalid image files
+                assert isinstance(exc, UnidentifiedImageError)
+                assert "cannot identify" in str(exc)

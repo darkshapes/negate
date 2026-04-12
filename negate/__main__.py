@@ -1,17 +1,19 @@
 # SPDX-License-Identifier: MPL-2.0 AND LicenseRef-Commons-Clause-License-Condition-1.0
 # <!-- // /*  d a r k s h a p e s */ -->
 
+"""CLI entry point for the Negate package."""
+
 from __future__ import annotations
 
 import argparse
-import logging
 import re
-import time as timer_module
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from sys import argv
 from typing import Any
+
+from negate.io.console import CLI_LOGGER, set_root_folder
 
 ROOT_FOLDER = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_FOLDER / "config"
@@ -19,50 +21,8 @@ BLURB_PATH = CONFIG_PATH / "blurb.toml"
 CONFIG_TOML_PATH = CONFIG_PATH / "config.toml"
 TIMESTAMP_PATTERN = re.compile(r"\d{8}_\d{6}")
 DEFAULT_INFERENCE_PAIR = ["20260225_185933", "20260225_221149"]
-start_ns = timer_module.perf_counter()
-CLI_LOGGER = logging.getLogger("negate.cli")
-if not CLI_LOGGER.handlers:
-    _handler = logging.StreamHandler()
-    _handler.setFormatter(logging.Formatter("%(message)s"))
-    CLI_LOGGER.addHandler(_handler)
-CLI_LOGGER.setLevel(logging.INFO)
-CLI_LOGGER.propagate = False
 
-
-@dataclass
-class BlurbText:
-    """CLI help text defaults loaded from config/blurb.toml."""
-
-    # Commands
-    pretrain: str = "Analyze and graph performance..."
-    train: str = "Train XGBoost model..."
-    infer: str = "Infer whether features..."
-
-    # Flags
-    loop: str = "Toggle training across the range..."
-    features_load: str = "Train from an existing set of features"
-    verbose: str = "Verbose console output"
-    label_syn: str = "Mark image as synthetic (label = 1) for evaluation."
-    label_gne: str = "Mark image as genuine (label = 0) for evaluation."
-
-    # Dataset paths
-    gne_path: str = "Genunie/Human-origin image dataset path"
-    syn_path: str = "Synthetic image dataset path"
-    unidentified_path: str = "Path to the image or directory containing images of unidentified origin"
-
-    # Verbose output
-    verbose_status: str = "Checking path "
-    verbose_dated: str = " using models dated "
-
-    # Errors
-    infer_path_error: str = "Infer requires an image path."
-    model_error: str = "Warning: No valid model directories found in "
-    model_error_hint: str = " Create or add a trained model before running inference."
-    model_pair: str = "Two models must be provided for inference..."
-    model_pattern: str = "Model format must match pattern YYYYMMDD_HHMMSS..."
-
-    # Shared phrasing
-    model_desc: str = "model to use. Default : "
+set_root_folder(ROOT_FOLDER)
 
 
 @dataclass
@@ -87,7 +47,7 @@ class CmdContext:
     list_model: list[str] | None
 
 
-def load_spec(model_version: str | Path = "config"):
+def load_spec(model_version: str | Path = "config") -> Any:
     """Backwards-compatible export used by tests and callers."""
 
     from negate.io.spec import load_spec as _load_spec
@@ -155,6 +115,13 @@ def _build_parser(blurb: BlurbText, choices: ModelChoices, list_results: list[st
     train_parser.add_argument("-l", "--loop", action="store_true", help=blurb.loop)
     train_parser.add_argument("-f", "--features", choices=list_results, default=None, help=blurb.features_load)
 
+    process_parser = subparsers.add_parser("process", help="Run all decompose/extract module combinations")
+    process_parser.add_argument("path", help=blurb.unidentified_path)
+    process_parser.add_argument("-v", "--verbose", action="store_true", help=blurb.verbose)
+    process_parser.add_argument("--transposed", default=None, help="Comma-separated transposed indices")
+    process_parser.add_argument("--combination", default=None, help="Comma-separated module names")
+    process_parser.add_argument("--train", choices=["convnext", "xgboost"], default=None, help="Train model after processing")
+
     vit_help = f"Vison {blurb.model_desc} {choices.default_vit}".strip()
     ae_help = f"Autoencoder {blurb.model_desc} {choices.default_vae}".strip()
     infer_model_help = f"Trained {blurb.model_desc} {inference_pair}".strip()
@@ -186,123 +153,6 @@ def _build_parser(blurb: BlurbText, choices: ModelChoices, list_results: list[st
     return parser
 
 
-def cmd(ctx: CmdContext) -> None:
-    args = ctx.args
-
-    from negate import configure_runtime_logging
-
-    configure_runtime_logging()
-
-    match args.cmd:
-        case "pretrain":
-            from negate.io.save import end_processing, save_features
-            from negate.metrics.track import chart_decompositions
-            from negate.train import build_train_call, pretrain
-
-            origin_ds = build_train_call(args=args, path_result=ctx.results_path, spec=ctx.spec)
-            features_ds = pretrain(origin_ds, ctx.spec)
-            end_processing("Pretraining", start_ns)
-            save_features(features_ds)
-            chart_decompositions(features_dataset=features_ds, spec=ctx.spec)
-
-        case "train":
-            from negate.io.save import end_processing, save_train_result
-            from negate.metrics.track import run_training_statistics
-            from negate.train import build_train_call, train_model, training_loop
-
-            origin_ds = build_train_call(args=args, path_result=ctx.results_path, spec=ctx.spec)
-            if args.loop is True:
-                training_loop(image_ds=origin_ds, spec=ctx.spec)
-            else:
-                train_result = train_model(features_ds=origin_ds, spec=ctx.spec)
-                timecode = end_processing("Training", start_ns)
-                save_train_result(train_result)
-                run_training_statistics(train_result=train_result, timecode=timecode, spec=ctx.spec)
-
-        case "infer":
-            from tqdm import tqdm
-
-            from negate.inference import InferContext, infer_origin, preprocessing
-            from negate.io.datasets import generate_dataset
-            from negate.io.spec import load_metadata
-            from negate.metrics.heuristics import compute_weighted_certainty
-
-            if args.path is None:
-                raise ValueError(ctx.blurb.infer_path_error)
-            if ctx.list_model is None or not ctx.list_model:
-                raise ValueError(f"{ctx.blurb.model_error} {ctx.models_path} {ctx.blurb.model_error_hint}")
-
-            img_file_or_folder = Path(args.path)
-            if not isinstance(args.model, list) and not isinstance(args.model, tuple):
-                raise ValueError(ctx.blurb.model_pair)
-
-            negate_models: dict[str, Path] = {}
-            model_specs: dict[str, Any] = {}
-            model_metadata: dict[str, Any] = {}
-            for saved_model in args.model:
-                negate_models[saved_model] = ctx.models_path / saved_model
-                if not negate_models[saved_model].exists():
-                    raise ValueError(ctx.blurb.model_pattern)
-                model_specs[saved_model] = load_spec(saved_model)
-                model_metadata[saved_model] = load_metadata(saved_model)
-
-            if args.verbose:
-                import warnings
-
-                warnings.filterwarnings("default", category=UserWarning)
-                warnings.filterwarnings("default", category=DeprecationWarning)
-                CLI_LOGGER.info(f"{ctx.blurb.verbose_status} {img_file_or_folder}' {ctx.blurb.verbose_dated} {args.model}")
-
-            CLI_LOGGER.info("Preparing feature dataset and loading selected models...")
-            origin_ds = generate_dataset(img_file_or_folder, verbose=args.verbose)
-            feature_cache: dict[str, Any] = {}
-            feature_key_by_model: dict[str, str] = {}
-            for saved_model, model_spec in model_specs.items():
-                feature_key = "|".join(
-                    [
-                        str(model_spec.model),
-                        str(model_spec.vae),
-                        str(model_spec.dtype),
-                        str(model_spec.device),
-                        str(model_spec.opt.dim_factor),
-                        str(model_spec.opt.dim_patch),
-                        str(model_spec.opt.top_k),
-                        str(model_spec.opt.condense_factor),
-                        str(model_spec.opt.alpha),
-                        str(model_spec.opt.magnitude_sampling),
-                    ]
-                )
-                feature_key_by_model[saved_model] = feature_key
-                if feature_key not in feature_cache:
-                    feature_cache[feature_key] = preprocessing(origin_ds, model_spec, verbose=args.verbose)
-
-            inference_result = {}
-            for saved_model, model_data in tqdm(
-                negate_models.items(),
-                total=len(negate_models),
-                desc="Running inference with each selected model",
-                disable=False,
-            ):
-                context = InferContext(
-                    spec=model_specs[saved_model],
-                    model_version=model_data,
-                    train_metadata=model_metadata[saved_model],
-                    label=args.label,
-                    file_or_folder_path=img_file_or_folder,
-                    dataset_feat=feature_cache[feature_key_by_model[saved_model]],
-                    run_heuristics=False,
-                    model=True,
-                    verbose=args.verbose,
-                )
-                inference_result[saved_model] = infer_origin(context)
-
-            inference_results = (result for _, result in inference_result.items())
-            compute_weighted_certainty(*inference_results, label=args.label)
-
-        case _:
-            raise NotImplementedError
-
-
 def main() -> None:
     blurb_text = _load_blurb_text()
     model_choices = _load_model_choices()
@@ -322,8 +172,7 @@ def main() -> None:
     )
     args = parser.parse_args(argv[1:])
 
-    from negate.io.blurb import Blurb
-    from negate.io.spec import Spec
+    from negate import Blurb, Spec
 
     spec = Spec()
     blurb = Blurb(spec)

@@ -58,3 +58,33 @@ class Blurb:
 
     def vit_model_blurb(self) -> str:
         return f"Vison {self.model_desc} {self.default_vit}"
+
+
+@dataclass
+class BlurbText:
+    """CLI help text defaults loaded from config/blurb.toml."""
+
+    pretrain: str = "Analyze and graph performance..."
+    train: str = "Train XGBoost model..."
+    infer: str = "Infer whether features..."
+
+    loop: str = "Toggle training across the range..."
+    features_load: str = "Train from an existing set of features"
+    verbose: str = "Verbose console output"
+    label_syn: str = "Mark image as synthetic (label = 1) for evaluation."
+    label_gne: str = "Mark image as genuine (label = 0) for evaluation."
+
+    gne_path: str = "Genunie/Human-origin image dataset path"
+    syn_path: str = "Synthetic image dataset path"
+    unidentified_path: str = "Path to the image or directory containing images of unidentified origin"
+
+    verbose_status: str = "Checking path "
+    verbose_dated: str = " using models dated "
+
+    infer_path_error: str = "Infer requires an image path."
+    model_error: str = "Warning: No valid model directories found in "
+    model_error_hint: str = " Create or add a trained model before running inference."
+    model_pair: str = "Two models must be provided for inference..."
+    model_pattern: str = "Model format must match pattern YYYYMMDD_HHMMSS..."
+
+    model_desc: str = "model to use. Default : "

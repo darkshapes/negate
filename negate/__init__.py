@@ -4,9 +4,10 @@
 from __future__ import annotations
 
 import importlib
-import logging
-import warnings
 from typing import Any
+from negate.io.console import configure_runtime_logging
+from negate.io.console import get_cli_logger
+from negate.io.console import set_root_folder
 
 __all__ = [
     "Blurb",
@@ -15,8 +16,8 @@ __all__ = [
     "build_train_call",
     "chart_decompositions",
     "compute_weighted_certainty",
-    "configure_runtime_logging",
     "end_processing",
+    "get_cli_logger",
     "infer_origin",
     "load_metadata",
     "load_spec",
@@ -25,6 +26,7 @@ __all__ = [
     "run_training_statistics",
     "save_features",
     "save_train_result",
+    "set_root_folder",
     "train_model",
     "training_loop",
 ]
@@ -37,6 +39,7 @@ _ATTR_SOURCES = {
     "chart_decompositions": ("negate.metrics.track", "chart_decompositions"),
     "compute_weighted_certainty": ("negate.metrics.heuristics", "compute_weighted_certainty"),
     "end_processing": ("negate.io.save", "end_processing"),
+    "get_cli_logger": ("negate.io.logging", "get_cli_logger"),
     "infer_origin": ("negate.inference", "infer_origin"),
     "load_metadata": ("negate.io.spec", "load_metadata"),
     "load_spec": ("negate.io.spec", "load_spec"),
@@ -45,42 +48,10 @@ _ATTR_SOURCES = {
     "run_training_statistics": ("negate.metrics.track", "run_training_statistics"),
     "save_features": ("negate.io.save", "save_features"),
     "save_train_result": ("negate.io.save", "save_train_result"),
+    "set_root_folder": ("negate.io.logging", "set_root_folder"),
     "train_model": ("negate.train", "train_model"),
     "training_loop": ("negate.train", "training_loop"),
 }
-
-_LOGGING_CONFIGURED = False
-
-
-def configure_runtime_logging() -> None:
-    """Apply quiet logging defaults for third-party ML stacks."""
-
-    global _LOGGING_CONFIGURED
-    if _LOGGING_CONFIGURED:
-        return
-
-    warnings.filterwarnings("ignore", category=UserWarning)
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-
-    try:
-        from datasets import logging as ds_logging, disable_progress_bars as ds_disable_progress_bars
-        from diffusers.utils import logging as df_logging
-        from huggingface_hub import logging as hf_logging
-        from huggingface_hub.utils.tqdm import disable_progress_bars as hf_disable_progress_bars
-        from timm.utils.log import setup_default_logging
-        from transformers import logging as tf_logging
-    except Exception:
-        # Keep startup resilient when optional deps are absent.
-        _LOGGING_CONFIGURED = True
-        return
-
-    setup_default_logging(logging.ERROR)
-    for logger in [df_logging, ds_logging, hf_logging, tf_logging]:
-        logger.set_verbosity_error()
-
-    ds_disable_progress_bars()
-    hf_disable_progress_bars()
-    _LOGGING_CONFIGURED = True
 
 
 def __getattr__(name: str) -> Any:
