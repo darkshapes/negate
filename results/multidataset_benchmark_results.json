@@ -1,0 +1,130 @@
+{
+  "feature_count": 148,
+  "exp1_baselines": {
+    "Defactify": {
+      "accuracy": 0.8867,
+      "auc": 0.8953
+    },
+    "Hemg": {
+      "accuracy": 0.8085,
+      "auc": 0.9004
+    },
+    "tellif": {
+      "accuracy": 0.8286,
+      "auc": 0.9201
+    }
+  },
+  "exp2_cross_dataset": {
+    "Defactify->Hemg": {
+      "accuracy": 0.501,
+      "auc": 0.4467
+    },
+    "Hemg->Defactify": {
+      "accuracy": 0.4208,
+      "auc": 0.4029
+    },
+    "Combined->Defactify": {
+      "accuracy": 1.0,
+      "auc": 1.0
+    },
+    "Combined->Hemg": {
+      "accuracy": 1.0,
+      "auc": 1.0
+    },
+    "Combined->tellif": {
+      "accuracy": 0.6653,
+      "auc": 0.7792
+    }
+  },
+  "exp3_generator_diversity": {
+    "1_gen_train": {
+      "accuracy": 0.5656,
+      "auc": 0.6508,
+      "train_generators": [
+        "Midjourney_v6"
+      ],
+      "test_generators": [
+        "SD_3",
+        "SDXL",
+        "DALL-E_3",
+        "SD_2.1"
+      ]
+    },
+    "2_gen_train": {
+      "accuracy": 0.6639,
+      "auc": 0.6237,
+      "train_generators": [
+        "Midjourney_v6",
+        "SD_3"
+      ],
+      "test_generators": [
+        "SDXL",
+        "DALL-E_3",
+        "SD_2.1"
+      ]
+    },
+    "3_gen_train": {
+      "accuracy": 0.8604,
+      "auc": 0.8254,
+      "train_generators": [
+        "Midjourney_v6",
+        "SD_3",
+        "SDXL"
+      ],
+      "test_generators": [
+        "DALL-E_3",
+        "SD_2.1"
+      ]
+    },
+    "4_gen_train": {
+      "accuracy": 0.8792,
+      "auc": 0.8269,
+      "train_generators": [
+        "Midjourney_v6",
+        "SD_3",
+        "SDXL",
+        "DALL-E_3"
+      ],
+      "test_generators": [
+        "SD_2.1"
+      ]
+    },
+    "5_gen_cv": {
+      "accuracy": 0.8867,
+      "auc": 0.8953,
+      "train_generators": [
+        "DALL-E_3",
+        "Midjourney_v6",
+        "SDXL",
+        "SD_2.1",
+        "SD_3"
+      ],
+      "test_generators": [
+        "DALL-E_3",
+        "Midjourney_v6",
+        "SDXL",
+        "SD_2.1",
+        "SD_3"
+      ]
+    }
+  },
+  "exp4_domain_transfer": {
+    "Photos->Art": {
+      "accuracy": 0.501,
+      "auc": 0.4467
+    },
+    "Art->Photos": {
+      "accuracy": 0.4208,
+      "auc": 0.4029
+    },
+    "Photos_self_CV": {
+      "accuracy": 0.8867,
+      "auc": 0.8953
+    },
+    "Art_self_CV": {
+      "accuracy": 0.8085,
+      "auc": 0.9004
+    }
+  },
+  "elapsed_seconds": 2964.0
+}
