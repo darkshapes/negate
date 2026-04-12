@@ -47,31 +47,36 @@ class SurfaceFeatures:
 
     def brightness_features(self, gray: NDArray) -> dict[str, float]:
         """Mean and entropy of pixel brightness."""
+        gray_clean = np.nan_to_num(gray, nan=0.0, posinf=1.0, neginf=0.0)
+        gray_clipped = np.clip(gray_clean, 0, 1)
         return {
             "mean_brightness": float(gray.mean()),
-            "entropy_brightness": float(self.entropy(np.histogram(gray, bins=256, range=(0, 1))[0] + 1e-10)),
+            "entropy_brightness": float(self.entropy(np.histogram(gray_clipped, bins=256, range=(0, 1))[0] + 1e-10)),
         }
 
     def color_features(self, rgb: NDArray) -> dict[str, float]:
         """RGB and HSV histogram statistics."""
         features: dict[str, float] = {}
+        rgb_clean = np.nan_to_num(rgb, nan=0.0, posinf=1.0, neginf=0.0)
+        rgb_clipped = np.clip(rgb_clean, 0, 1)
         for i, name in enumerate(("red", "green", "blue")):
-            channel = rgb[:, :, i].ravel()
+            channel = rgb_clipped[:, :, i].ravel()
             features[f"{name}_mean"] = float(channel.mean())
             features[f"{name}_variance"] = float(channel.var())
             features[f"{name}_kurtosis"] = float(kurtosis(channel))
             features[f"{name}_skewness"] = float(skew(channel))
-        rgb_flat = rgb.reshape(-1, 3)
-        rgb_hist = np.histogramdd(rgb_flat, bins=32)[0]
+        rgb_flat = rgb_clipped.reshape(-1, 3)
+        rgb_hist = np.histogramdd(rgb_flat, bins=32, range=[[0, 1], [0, 1], [0, 1]])[0]
         features["rgb_entropy"] = float(self.entropy(rgb_hist.ravel() + 1e-10))
-        hsv = self._numeric.hsv
+        hsv = np.nan_to_num(self._numeric.hsv, nan=0.0, posinf=1.0, neginf=0.0)
+        hsv_clipped = np.clip(hsv, 0, 1)
         for i, name in enumerate(("hue", "saturation", "value")):
-            channel = hsv[:, :, i].ravel()
+            channel = hsv_clipped[:, :, i].ravel()
             features[f"{name}_variance"] = float(channel.var())
             features[f"{name}_kurtosis"] = float(kurtosis(channel))
             features[f"{name}_skewness"] = float(skew(channel))
-        hsv_flat = hsv.reshape(-1, 3)
-        hsv_hist = np.histogramdd(hsv_flat, bins=32)[0]
+        hsv_flat = hsv_clipped.reshape(-1, 3)
+        hsv_hist = np.histogramdd(hsv_flat, bins=32, range=[[0, 1], [0, 1], [0, 1]])[0]
         features["hsv_entropy"] = float(self.entropy(hsv_hist.ravel() + 1e-10))
         return features
 
@@ -97,11 +102,13 @@ class SurfaceFeatures:
         """Noise entropy and signal-to-noise ratio."""
         from skimage.restoration import estimate_sigma
 
-        sigma = estimate_sigma(gray)
-        noise = gray - np.clip(gray, gray.mean() - 2 * sigma, gray.mean() + 2 * sigma)
-        noise_hist = np.histogram(noise.ravel(), bins=256)[0]
+        gray_clean = np.nan_to_num(gray, nan=0.0, posinf=1.0, neginf=0.0)
+        sigma = estimate_sigma(gray_clean)
+        noise = gray_clean - np.clip(gray_clean, gray_clean.mean() - 2 * sigma, gray_clean.mean() + 2 * sigma)
+        noise_clean = np.nan_to_num(noise, nan=0.0)
+        noise_hist = np.histogram(noise_clean.ravel(), bins=256)[0]
         noise_ent = float(self.entropy(noise_hist + 1e-10))
-        signal_power = float(gray.var())
+        signal_power = float(gray_clean.var())
         noise_power = float(sigma**2) if sigma > 0 else 1e-10
         snr = float(10 * np.log10(signal_power / noise_power + 1e-10))
         return {"noise_entropy": noise_ent, "snr": snr}
@@ -146,8 +153,10 @@ class SurfaceFeatures:
         row_freqs = fftfreq(height)[:, None] * np.ones((1, width))
         col_freqs = np.ones((height, 1)) * fftfreq(width)[None, :]
         spectral_centroid = float((np.sum(log_mag * np.abs(row_freqs)) + np.sum(log_mag * np.abs(col_freqs))) / (log_mag.sum() * 2 + 1e-10))
-        dct_coeffs: NDArray = np.asarray(dctn(gray.astype(np.float64), type=2, norm="ortho")[0])
+        dct_coeffs: NDArray = dctn(gray.astype(np.float64), type=2, norm="ortho")
         dct_mag = np.abs(dct_coeffs)
+        if dct_mag.ndim == 1:
+            dct_mag = dct_mag.reshape(height, width)
         flat_dc_energy = float(dct_mag[0, 0] ** 2)
         detail_ac_energy = float((dct_mag**2).sum() - flat_dc_energy)
         phase_coherence = float(phase.std())

@@ -52,7 +52,9 @@ def load_remote_dataset(repo: str, folder_path: Path, split="train", label: int 
     return remote_dataset
 
 
-def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None, verbose: bool = False) -> Dataset:
+def generate_dataset(
+    file_or_folder_path: Path | list[dict[str, PillowImage.Image]], label: int | None = None, verbose: bool = False
+) -> Dataset:
     """Generates a dataset from an image file or folder of images.
 
     :param folder_path: Path to the folder containing image files.
@@ -76,8 +78,8 @@ def generate_dataset(file_or_folder_path: Path | list[dict[str, PillowImage.Imag
                 try:
                     with PillowImage.open(img_path) as _verification:
                         pass
-                except ValueError:
-                    continue
+                except ValueError as exc:
+                    raise ValueError(f"Invalid image file: {img_path}") from exc
                 validated_paths.append({"image": str(img_path)})
         elif file_or_folder_path.is_file() and file_or_folder_path.suffix.lower() in valid_extensions:
             validated_paths.append({"image": str(file_or_folder_path)})

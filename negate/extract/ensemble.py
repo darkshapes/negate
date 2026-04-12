@@ -33,13 +33,16 @@ def load_and_extract(spec: Spec) -> tuple[Any, Any, list[str], Any, Any]:
 
     print(f"Loading {sample_size} human art + {sample_size} AI images...")
 
+    from negate.decompose.numeric import NumericImage
+
     dataset = build_datasets(spec, genuine_repo, synthetic_repo)
-    extractor = SurfaceFeatures
     features: list[dict[str, float]] = []
     labels: list[int] = []
 
     for row in tqdm(dataset, desc="Extracting artwork features"):
-        features.append(extractor(row["image"]))  # type: ignore
+        numeric_img = NumericImage(row["image"])  # type: ignore
+        extractor = SurfaceFeatures(numeric_img)
+        features.append(extractor())
         labels.append(row["label"])  # type: ignore
 
     df = pd.DataFrame(features).fillna(0)
@@ -78,9 +81,13 @@ def run_ensemble_cv(X: Any, y: Any, spec: Spec) -> tuple[dict[str, Any], Any, An
     skf = StratifiedKFold(n_splits=ens.n_folds, shuffle=True, random_state=hp.seed)
 
     models = {
-        "SVM": CalibratedClassifierCV(SVC(C=ens.svm_c, gamma=ens.gamma, kernel=ens.kernel, random_state=hp.seed), cv=ens.cv, method=ens.method),
+        "SVM": CalibratedClassifierCV(
+            SVC(C=ens.svm_c, gamma=ens.gamma, kernel=ens.kernel, random_state=hp.seed), cv=ens.cv, method=ens.method
+        ),
         "MLP": CalibratedClassifierCV(
-            MLPClassifier(hidden_layer_sizes=(ens.mlp_hidden_layers,), activation=ens.mlp_activation, max_iter=ens.mlp_max_iter, random_state=hp.seed),
+            MLPClassifier(
+                hidden_layer_sizes=(ens.mlp_hidden_layers,), activation=ens.mlp_activation, max_iter=ens.mlp_max_iter, random_state=hp.seed
+            ),
             cv=ens.cv,
             method=ens.method,
         ),
@@ -91,15 +98,17 @@ def run_ensemble_cv(X: Any, y: Any, spec: Spec) -> tuple[dict[str, Any], Any, An
     for name, model in models.items():
         probs = cross_val_predict(model, X_s, y, cv=skf, method="predict_proba")[:, 1]  # type: ignore
         model_probs[name] = probs
-        model_preds[name] = int(probs > 0.5)
+        model_preds[name] = np.where(probs > 0.5, 1, 0)
 
     xgb_probs = np.zeros(len(y))
     for train_idx, test_idx in skf.split(X_s, y):
+        from dataclasses import asdict
+
         params = {
             "sample_size": ens.sample_size,
             "abstain_threshold": ens.abstain_threshold,
             "n_folds": ens.n_folds,
-            **hp,  # type: ignore
+            **asdict(hp),
         }
         dtrain = xgb.DMatrix(X_s[train_idx], label=y[train_idx])
         dtest = xgb.DMatrix(X_s[test_idx])
@@ -139,11 +148,15 @@ def run_ensemble_cv(X: Any, y: Any, spec: Spec) -> tuple[dict[str, Any], Any, An
     confident_preds[uncertain_mask] = -1  # Mark uncertain as -1
 
     results["Ensemble_With_Abstention"] = {
-        "accuracy": np.sum(confident_preds == y) / (y.shape[0] - np.sum(uncertain_mask)) if (y.shape[0] - np.sum(uncertain_mask)) > 0 else 0,
+        "accuracy": np.sum(confident_preds == y) / (y.shape[0] - np.sum(uncertain_mask))
+        if (y.shape[0] - np.sum(uncertain_mask)) > 0
+        else 0,
         "abstention_rate": np.mean(uncertain_mask),
     }
 
-    full_xgb_params = {**spec.hyper_param}  # type: ignore
+    from dataclasses import asdict
+
+    full_xgb_params = asdict(spec.hyper_param)
     full_model = xgb.train(full_xgb_params, xgb.DMatrix(X_s, label=y), num_boost_round=spec.train_rounds.num_boost_round)
 
     return results, ensemble_probs, ensemble_preds, full_model

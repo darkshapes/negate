@@ -39,9 +39,9 @@ def run_all_combinations(image_path: Path | str) -> dict[str, Any]:
             extractor = UnifiedExtractor(spec, enable=[module])
             all_extractors.append(extractor)
             features = extractor(image)
-            results["single_modules"][module.name] = features
-            single_results[module.name] = len(features)
-        except RuntimeError:
+            results["single_modules"][module.name] = features if features else {}
+            single_results[module.name] = len(features) if features else 0
+        except Exception:
             results["single_modules"][module.name] = {}
             single_results[module.name] = 0
 
@@ -51,9 +51,9 @@ def run_all_combinations(image_path: Path | str) -> dict[str, Any]:
             extractor = UnifiedExtractor(spec, enable=[mod1, mod2])
             all_extractors.append(extractor)
             features = extractor(image)
-            results["module_pairs"][pair_name] = features
-            pair_results[pair_name] = len(features)
-        except RuntimeError:
+            results["module_pairs"][pair_name] = features if features else {}
+            pair_results[pair_name] = len(features) if features else 0
+        except Exception:
             results["module_pairs"][pair_name] = {}
             pair_results[pair_name] = 0
 

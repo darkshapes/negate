@@ -130,6 +130,8 @@ class UnifiedExtractor:
         :param image: Input PIL image.
         :returns: Dictionary of wavelet features.
         """
+        from negate.decompose.wavelet import WaveletAnalyze
+
         wavelet_ctx = self.extractors[ExtractionModule.WAVELET]
         analyzer = WaveletAnalyze(wavelet_ctx)
 

@@ -132,7 +132,7 @@ class TestDatasetValueError:
 
     def test_dataset_value_error_image_decode(self):
         """Test ValueError is caught when image decoding fails."""
-        from PIL import Image as PillowImage
+        from PIL import Image as PillowImage, UnidentifiedImageError
         from pathlib import Path
         import tempfile
 
@@ -146,11 +146,11 @@ class TestDatasetValueError:
             invalid_path = Path(tmpdir) / "invalid.dat"
             invalid_path.write_bytes(b"invalid image data")
 
-            # Test that ValueError is caught during image validation
+            # Test that UnidentifiedImageError is caught during image validation
             try:
                 with PillowImage.open(invalid_path) as _verification:
                     pass
-            except ValueError as exc:
-                # ValueError should be caught for invalid image files
-                assert isinstance(exc, ValueError)
-                assert "invalid image data" in str(exc) or "cannot identify" in str(exc) or "corrupt" in str(exc).lower()
+            except UnidentifiedImageError as exc:
+                # UnidentifiedImageError should be caught for invalid image files
+                assert isinstance(exc, UnidentifiedImageError)
+                assert "cannot identify" in str(exc)
