@@ -8,6 +8,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 import time as timer_module
+from negate.io.console import configure_runtime_logging, CLI_LOGGER
 
 start_ns = timer_module.perf_counter()
 
