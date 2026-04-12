@@ -14,6 +14,8 @@ from sys import argv
 from typing import Any
 
 from negate.io.console import CLI_LOGGER, set_root_folder
+from negate.io.blurb import BlurbText
+from negate.extract.unified_core import ExtractionModule
 
 ROOT_FOLDER = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT_FOLDER / "config"
@@ -106,7 +108,9 @@ def _load_model_choices() -> ModelChoices:
     return choices
 
 
-def _build_parser(blurb: BlurbText, choices: ModelChoices, list_results: list[str], list_model: list[str], inference_pair: list[str]) -> argparse.ArgumentParser:
+def _build_parser(
+    blurb: BlurbText, choices: ModelChoices, list_results: list[str], list_model: list[str], inference_pair: list[str]
+) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Negate CLI")
     subparsers = parser.add_subparsers(dest="cmd", required=True)
 
@@ -115,11 +119,13 @@ def _build_parser(blurb: BlurbText, choices: ModelChoices, list_results: list[st
     train_parser.add_argument("-l", "--loop", action="store_true", help=blurb.loop)
     train_parser.add_argument("-f", "--features", choices=list_results, default=None, help=blurb.features_load)
 
-    process_parser = subparsers.add_parser("process", help="Run all decompose/extract module combinations")
+    module_list = ", ".join(mod.name for mod in ExtractionModule)
+    process_help = f"Run all decompose/extract module combinations. Available modules: {module_list}"
+    process_parser = subparsers.add_parser("process", help=process_help)
     process_parser.add_argument("path", help=blurb.unidentified_path)
     process_parser.add_argument("-v", "--verbose", action="store_true", help=blurb.verbose)
     process_parser.add_argument("--transposed", default=None, help="Comma-separated transposed indices")
-    process_parser.add_argument("--combination", default=None, help="Comma-separated module names")
+    process_parser.add_argument("--combination", default=None, help=f"Comma-separated module names from: {module_list}")
     process_parser.add_argument("--train", choices=["convnext", "xgboost"], default=None, help="Train model after processing")
 
     vit_help = f"Vison {blurb.model_desc} {choices.default_vit}".strip()
