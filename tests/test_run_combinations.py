@@ -7,7 +7,7 @@ from pathlib import Path
 from PIL import Image
 import tempfile
 import pytest
-from negate.run_combinations import run_all_combinations
+from negate.extract.combination import run_all_combinations
 
 
 def _create_test_image(path: Path, size: tuple = (100, 100)) -> None:
@@ -91,6 +91,7 @@ class TestCombinationRuntimeError:
             # Test that RuntimeError is caught during extraction
             try:
                 from negate.extract.unified_core import UnifiedExtractor
+
                 spec = Spec()
                 extractor = UnifiedExtractor(spec, enable=[ExtractionModule.LEARNED])
                 features = extractor(Image.open(img_path))
