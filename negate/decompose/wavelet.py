@@ -73,7 +73,7 @@ class WaveletContext:
                 gray = np.array(image.convert("L"))
                 coeffs = self._compute_wavelet(gray)
                 results.append({"coeffs": coeffs.tolist()})
-            except Exception:
+            except (ValueError, TypeError, OSError):
                 results.append({"coeffs": []})
         return {"results": results}
 
