@@ -225,6 +225,7 @@ class TestUnifiedExtractorExceptions:
             img_path = Path(tmpdir) / "test.png"
             _create_test_image(img_path)
             image = Image.open(img_path)
+            import torch
 
             spec = Spec()
             spec.device = torch.device("cuda")  # type: ignore
@@ -240,7 +241,6 @@ class TestFeatureConvValueError:
     def test_feature_conv_value_error_transform(self):
         """Test ValueError is caught when transform fails."""
         from PIL import Image
-        import torch
         from negate.extract.feature_conv import LearnedExtract
 
         extractor = LearnedExtract()
@@ -322,6 +322,7 @@ class TestVAECleanupRuntimeError:
             img_path = Path(tmpdir) / "test.png"
             img = Image.new("RGB", (100, 100))
             img.save(img_path)
+            import torch
 
             # Test that RuntimeError is caught during cleanup
             spec = Spec()

@@ -198,11 +198,6 @@ def wavelet_context(mock_spec_cpu, mock_vit_extract, mock_vae_extract) -> Wavele
     context = WaveletContext(
         spec=mock_spec_cpu,
         verbose=False,
-        dwt=dwt,
-        idwt=idwt,
-        extract=mock_vit_extract,
-        vae=mock_vae_extract,
-        residual=residual,
     )
     return context
 
@@ -249,9 +244,7 @@ def mock_idwt() -> MagicMock:
 
 
 @pytest.fixture
-def wavelet_analyze_mock(
-    mock_spec_cpu, mock_vit_extract, mock_vae_extract, mock_dwt, mock_idwt
-) -> WaveletAnalyze:
+def wavelet_analyze_mock(mock_spec_cpu, mock_vit_extract, mock_vae_extract, mock_dwt, mock_idwt) -> WaveletAnalyze:
     """Create WaveletAnalyze instance with mocked DWT transforms on CPU."""
     dwt = DWTForward(J=2, wave="haar")
     idwt = DWTInverse(wave="haar")
@@ -274,38 +267,26 @@ def wavelet_analyze_mock(
 class TestWaveletContext:
     """Tests for WaveletContext class."""
 
-    def test_initialization_with_defaults(
-        self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class
-    ) -> None:
+    def test_initialization_with_defaults(self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class) -> None:
         """Test WaveletContext initialization with default parameters."""
-        with patch(
-            "negate.extract.feature_vit.VITExtract", mock_vit_extract_class
-        ), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
+        with patch("negate.extract.feature_vit.VITExtract", mock_vit_extract_class), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
             context = WaveletContext(spec=mock_spec_cpu, verbose=False)
             assert context.dwt is not None
             assert context.idwt is not None
             assert context.residual is not None
             assert context.verbose is False
 
-    def test_initialization_with_custom_dwt(
-        self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class
-    ) -> None:
+    def test_initialization_with_custom_dwt(self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class) -> None:
         """Test WaveletContext with custom DWTForward instance."""
         custom_dwt = DWTForward(J=3, wave="haar")
-        with patch(
-            "negate.extract.feature_vit.VITExtract", mock_vit_extract_class
-        ), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
+        with patch("negate.extract.feature_vit.VITExtract", mock_vit_extract_class), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
             context = WaveletContext(spec=mock_spec_cpu, verbose=False, dwt=custom_dwt)
             assert context.dwt == custom_dwt
 
-    def test_initialization_with_custom_idwt(
-        self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class
-    ) -> None:
+    def test_initialization_with_custom_idwt(self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class) -> None:
         """Test WaveletContext with custom DWTInverse instance."""
         custom_idwt = DWTInverse(wave="haar")
-        with patch(
-            "negate.extract.feature_vit.VITExtract", mock_vit_extract_class
-        ), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
+        with patch("negate.extract.feature_vit.VITExtract", mock_vit_extract_class), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
             context = WaveletContext(spec=mock_spec_cpu, verbose=False, idwt=custom_idwt)
             assert context.idwt == custom_idwt
 
@@ -343,17 +324,13 @@ class TestWaveletContext:
 
     def test_spec_attribute_set(self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class) -> None:
         """Test that spec attribute is properly set."""
-        with patch(
-            "negate.extract.feature_vit.VITExtract", mock_vit_extract_class
-        ), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
+        with patch("negate.extract.feature_vit.VITExtract", mock_vit_extract_class), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
             context = WaveletContext(spec=mock_spec_cpu, verbose=False)
             assert context.spec == mock_spec_cpu
 
     def test_verbose_attribute_set(self, mock_spec_cpu, mock_vit_extract_class, mock_vae_extract_class) -> None:
         """Test verbose flag is properly set."""
-        with patch(
-            "negate.extract.feature_vit.VITExtract", mock_vit_extract_class
-        ), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
+        with patch("negate.extract.feature_vit.VITExtract", mock_vit_extract_class), patch("negate.extract.feature_vae.VAEExtract", mock_vae_extract_class):
             context = WaveletContext(spec=mock_spec_cpu, verbose=True)
             assert context.verbose is True
 
@@ -386,9 +363,7 @@ class TestWaveletAnalyze:
         assert "min_base" in result
         assert "max_base" in result
 
-    def test_ensemble_decompose_with_mock_extract(
-        self, wavelet_analyze_mock, mock_vit_extract, mock_vae_extract
-    ) -> None:
+    def test_ensemble_decompose_with_mock_extract(self, wavelet_analyze_mock, mock_vit_extract, mock_vae_extract) -> None:
         """Test ensemble_decompose with mocked extractors."""
         with patch.object(Residual, "__call__", return_value={"residual": 0.5}):
             with patch.object(mock_vit_extract, "__call__", return_value=[torch.randn(768)]):
@@ -514,9 +489,7 @@ class TestEnsembleDecompose:
         assert "min_warp" in result
         assert "max_warp" in result
 
-    def test_decompose_with_different_alpha(
-        self, mock_spec_cpu, mock_vit_extract, mock_vae_extract, mock_dwt, mock_idwt
-    ) -> None:
+    def test_decompose_with_different_alpha(self, mock_spec_cpu, mock_vit_extract, mock_vae_extract, mock_dwt, mock_idwt) -> None:
         """Test decomposition with different alpha values."""
         for alpha in [0.1, 0.5, 0.9]:
             mock_spec_cpu.opt = NegateConfig(
