@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from negate.decompose.surface import SurfaceFeatures
 from negate.io.datasets import build_datasets, generate_dataset
 from negate.io.spec import Spec, root_folder
-from negate.negate.extract.ensemble import load_and_extract, run_ensemble_cv, main
+from negate.extract.ensemble import load_and_extract, run_ensemble_cv, main
 
 
 @pytest.fixture
@@ -181,7 +181,7 @@ class TestMain:
 
     def test_main_uses_load_and_extract(self) -> None:
         """Verify main function calls load_and_extract."""
-        import negate.negate.extract.ensemble as ensemble_module
+        import negate.extract.ensemble as ensemble_module
         import inspect
 
         source = inspect.getsource(ensemble_module.main)
@@ -189,7 +189,7 @@ class TestMain:
 
     def test_main_uses_run_ensemble_cv(self) -> None:
         """Verify main function calls run_ensemble_cv."""
-        import negate.negate.extract.ensemble as ensemble_module
+        import negate.extract.ensemble as ensemble_module
         import inspect
 
         source = inspect.getsource(ensemble_module.main)
