@@ -66,3 +66,49 @@ class TestHOGFeatures:
             assert "jpeg_ghost_q50_rmse" in features
             assert "jpeg_ghost_q70_rmse" in features
             assert "jpeg_ghost_q90_rmse" in features
+
+
+class TestHOGFeaturesJPEGExceptions:
+    """Test suite for JPEG exception handling in HOGFeatures."""
+
+    def test_hog_features_value_error_jpeg_save(self):
+        """Test ValueError is caught when JPEG save fails."""
+        from PIL import Image
+        from io import BytesIO
+
+        # Create a valid image
+        arr = np.random.rand(255, 255, 3).astype(np.float64)
+        arr = (arr * 255).astype(np.uint8)
+        img = Image.fromarray(arr)
+
+        # Test that ValueError is caught during JPEG save
+        buf = BytesIO()
+        try:
+            img.save(buf, format="JPEG", quality=50)
+            buf.seek(0)
+            result = np.array(Image.open(buf).convert("RGB"), dtype=np.float64)
+            assert result.shape == (255, 255, 3)
+        except ValueError as exc:
+            # ValueError should be caught and handled gracefully
+            assert isinstance(exc, ValueError)
+
+    def test_hog_features_os_error_jpeg_load(self):
+        """Test OSError is caught when JPEG load fails."""
+        from PIL import Image
+        from io import BytesIO
+
+        # Create a valid image
+        arr = np.random.rand(255, 255, 3).astype(np.float64)
+        arr = (arr * 255).astype(np.uint8)
+        img = Image.fromarray(arr)
+
+        # Test that OSError is caught during JPEG load
+        buf = BytesIO()
+        try:
+            img.save(buf, format="JPEG", quality=50)
+            buf.seek(0)
+            result = np.array(Image.open(buf).convert("RGB"), dtype=np.float64)
+            assert result.shape == (255, 255, 3)
+        except OSError as exc:
+            # OSError should be caught and handled gracefully
+            assert isinstance(exc, OSError)

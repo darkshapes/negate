@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 import time as timer_module
 
@@ -12,8 +13,9 @@ start_ns = timer_module.perf_counter()
 
 
 def cmd(ctx: Any) -> None:
-    """Execute CLI command based on parsed arguments.\n
-    :param ctx: Command context with parsed args and runtime dependencies.\n
+    """Execute CLI command based on parsed arguments.
+
+    :param ctx: Command context with parsed args and runtime dependencies.
     """
 
     args = ctx.args
@@ -51,7 +53,7 @@ def cmd(ctx: Any) -> None:
 
             from negate.inference import InferContext, infer_origin, preprocessing
             from negate.io.datasets import generate_dataset
-            from negate.io.spec import load_metadata
+            from negate.io.spec import load_metadata, load_spec
             from negate.metrics.heuristics import compute_weighted_certainty
 
             if args.path is None:
@@ -130,6 +132,7 @@ def cmd(ctx: Any) -> None:
             from negate.extract.combination import run_all_combinations
             from negate.extract.unified_core import ExtractionModule, UnifiedExtractor
             from negate.io.spec import Spec
+            from negate.io.console import CLI_LOGGER
             from PIL import Image
 
             img_file_or_folder = Path(args.path)
@@ -148,94 +151,16 @@ def cmd(ctx: Any) -> None:
             if combo is None:
                 combo = [mod.name for mod in all_modules]
 
-            CLI_LOGGER.info(f"Running process on {img_file_or_folder}...")
-            CLI_LOGGER.info(f"Transposed: {transposed}")
-            CLI_LOGGER.info(f"Combination: {combo}")
+            if args.verbose:
+                import warnings
 
-            results: dict[str, Any] = {"transposed": {}, "combination": {}}
+                warnings.filterwarnings("default", category=UserWarning)
+                warnings.filterwarnings("default", category=DeprecationWarning)
+                CLI_LOGGER.info(f"Processing {img_file_or_folder} with modules {combo}")
 
-            if transposed:
-                for idx in transposed:
-                    if idx >= len(all_modules):
-                        print(f"Error: transposed index {idx} out of range")
-                        exit(1)
-                    try:
-                        extractor = UnifiedExtractor(spec, enable=[all_modules[idx]])
-                        features = extractor(Image.open(img_file_or_folder).convert("RGB"))
-                        results["transposed"][all_modules[idx].name] = features
-                        extractor.cleanup()
-                    except Exception as e:
-                        results["transposed"][all_modules[idx].name] = {}
-                        CLI_LOGGER.warning(f"Error processing module {all_modules[idx].name}: {e}")
+            results = run_all_combinations(img_file_or_folder)
+            print(f"Results: {results['summary']}")
 
-            for mod_name in combo:
-                if mod_name not in all_modules:
-                    print(f"Error: combination module {mod_name} not found")
-                    exit(1)
-                try:
-                    extractor = UnifiedExtractor(spec, enable=[ExtractionModule[mod_name]])
-                    features = extractor(Image.open(img_file_or_folder).convert("RGB"))
-                    results["combination"][mod_name] = features
-                    extractor.cleanup()
-                except Exception as e:
-                    results["combination"][mod_name] = {}
-                    CLI_LOGGER.warning(f"Error processing module {mod_name}: {e}")
-
-            output_file = ctx.results_path / "process_results.json"
-            import json
-
-            with open(output_file, "w") as f:
-                json.dump(results, f, indent=2, default=str)
-            CLI_LOGGER.info(f"Results saved to {output_file}")
-
-            if args.train:
-                from negate.io.spec import load_metadata
-                from negate.train import train_model, build_train_call, save_train_result
-                from negate.metrics.track import run_training_statistics
-                from negate.io.save import end_processing
-
-                model_path = ctx.results_path / "process_results.json"
-                if not model_path.exists():
-                    print(f"Error: No results found at {model_path}")
-                    exit(1)
-
-                model_spec = {
-                    "model": "convnext" if args.train == "convnext" else "xgboost",
-                    "vae": "",
-                    "dtype": "float64",
-                    "device": "cpu",
-                    "opt": {
-                        "dim_factor": 3,
-                        "dim_patch": 16,
-                        "top_k": 20,
-                        "condense_factor": 2,
-                        "alpha": 0.01,
-                        "magnitude_sampling": "top_k",
-                    },
-                }
-
-                train_result = train_model(features_ds=results, spec=spec)
-                timecode = end_processing(f"Training ({args.train})", start_ns)
-                save_train_result(train_result)
-                run_training_statistics(train_result=train_result, timecode=timecode, spec=spec)
-                CLI_LOGGER.info(f"Training ({args.train}) completed with accuracy: {train_result.get('accuracy', 0.0):.4f}")
-
-        case _:
-            raise NotImplementedError
-
-
-if __name__ == "__main__":
-    from negate.io.spec import Spec
-
-    spec = Spec()
-    blurb = Blurb(spec)
-    cmd(
-        CmdContext(
-            args=None,
-            blurb=blurb,
-            spec=spec,
-            results_path=None,
-            models_path=None,
-            list_model=None,
-        )
-    )
+        case "help":
+            CLI_LOGGER.info("Usage: negate <command> [options]")
+            CLI_LOGGER.info("Commands: pretrain, train, infer, process, help")

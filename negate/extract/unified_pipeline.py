@@ -100,7 +100,7 @@ class ExtractorPipeline:
                 feat = image_features[0]
                 if isinstance(feat, Tensor):
                     return {"vit_features_mean": float(feat.mean()), "vit_features_std": float(feat.std())}
-        except Exception:
+        except RuntimeError:
             pass
         return {}
 

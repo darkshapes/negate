@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import logging
+import warnings
 from typing import Any
 
 __all__ = ["CLI_LOGGER", "configure_runtime_logging", "get_cli_logger", "set_root_folder"]
@@ -14,8 +15,10 @@ ROOT_FOLDER = None  # type: ignore
 
 
 def get_cli_logger() -> logging.Logger:
-    """Get or create the CLI logger with StreamHandler.\n
-    :returns: Configured CLI logger instance."""
+    """Get or create the CLI logger with StreamHandler.
+
+    :returns: Configured CLI logger instance.
+    """
 
     logger = logging.getLogger("negate.cli")
     if not logger.handlers:
@@ -31,16 +34,20 @@ CLI_LOGGER = get_cli_logger()
 
 
 def set_root_folder(root_folder) -> None:
-    """Set the root folder path for logger configuration.\n
-    :param root_folder: Path object representing the root folder."""
+    """Set the root folder path for logger configuration.
+
+    :param root_folder: Path object representing the root folder.
+    """
 
     global ROOT_FOLDER
     ROOT_FOLDER = root_folder
 
 
 def configure_runtime_logging() -> None:
-    """Apply quiet logging defaults for third-party ML stacks.\n
-    Silences progress bars and sets verbosity to error level for optional dependencies."""
+    """Apply quiet logging defaults for third-party ML stacks.
+
+    Silences progress bars and sets verbosity to error level for optional dependencies.
+    """
 
     warnings.filterwarnings("ignore", category=UserWarning)
     warnings.filterwarnings("ignore", category=DeprecationWarning)
@@ -52,7 +59,7 @@ def configure_runtime_logging() -> None:
         from huggingface_hub.utils.tqdm import disable_progress_bars as hf_disable_progress_bars
         from timm.utils.log import setup_default_logging
         from transformers import logging as tf_logging
-    except Exception:
+    except ImportError:
         return
 
     setup_default_logging(logging.ERROR)

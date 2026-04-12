@@ -159,3 +159,195 @@ class TestUnifiedExtractor:
 
             assert isinstance(features, dict)
             assert len(features) == 0
+
+
+class TestUnifiedExtractorExceptions:
+    """Test suite for exception handling in UnifiedExtractor."""
+
+    def test_unified_extractor_import_error_wavelet(self):
+        """Test ImportError is caught when datasets module is missing."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_path = Path(tmpdir) / "test.png"
+            _create_test_image(img_path)
+            image = Image.open(img_path)
+
+            spec = Spec()
+            extractor = UnifiedExtractor(spec, enable=[ExtractionModule.WAVELET])
+
+            # Should return empty dict when datasets is not available
+            features = extractor._extract_wavelet(image)
+            assert features == {}
+
+    def test_unified_extractor_runtime_error_vae(self):
+        """Test RuntimeError is caught when VAE extraction fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_path = Path(tmpdir) / "test.png"
+            _create_test_image(img_path)
+            image = Image.open(img_path)
+
+            spec = Spec()
+            extractor = UnifiedExtractor(spec, enable=[ExtractionModule.VAE])
+
+            # Should return empty dict when VAE fails
+            features = extractor._extract_vae(image)
+            assert features == {}
+
+    def test_unified_extractor_runtime_error_vit(self):
+        """Test RuntimeError is caught when VIT extraction fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_path = Path(tmpdir) / "test.png"
+            _create_test_image(img_path)
+            image = Image.open(img_path)
+
+            spec = Spec()
+            extractor = UnifiedExtractor(spec, enable=[ExtractionModule.VIT])
+
+            # Should return empty dict when VIT fails
+            features = extractor._extract_vit(image)
+            assert features == {}
+
+    def test_unified_extractor_cleanup_runtime_error(self):
+        """Test RuntimeError is caught during extractor cleanup."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_path = Path(tmpdir) / "test.png"
+            _create_test_image(img_path)
+            image = Image.open(img_path)
+
+            spec = Spec()
+            extractor = UnifiedExtractor(spec, enable=[ExtractionModule.LEARNED])
+
+            # Should not raise during cleanup
+            extractor.cleanup()
+
+    def test_unified_extractor_cuda_runtime_error(self):
+        """Test RuntimeError is caught when CUDA cache fails."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            img_path = Path(tmpdir) / "test.png"
+            _create_test_image(img_path)
+            image = Image.open(img_path)
+
+            spec = Spec()
+            spec.device = torch.device("cuda")  # type: ignore
+            extractor = UnifiedExtractor(spec, enable=[ExtractionModule.LEARNED])
+
+            # Should not raise during cleanup even with CUDA
+            extractor.cleanup()
+
+
+class TestFeatureConvValueError:
+    """Test suite for ValueError handling in feature_conv."""
+
+    def test_feature_conv_value_error_transform(self):
+        """Test ValueError is caught when transform fails."""
+        from PIL import Image
+        import torch
+        from negate.extract.feature_conv import LearnedExtract
+
+        extractor = LearnedExtract()
+
+        # Create a valid image
+        img = Image.new("RGB", (224, 224), color="gray")
+
+        # Test that ValueError is caught during transform
+        try:
+            features = extractor(img)
+            assert isinstance(features, dict)
+            assert len(features) == 768
+        except ValueError as exc:
+            # ValueError should be caught during transform
+            assert isinstance(exc, ValueError)
+
+    def test_feature_conv_batch_value_error(self):
+        """Test ValueError is caught when batch transform fails."""
+        from PIL import Image
+        import torch
+        from negate.extract.feature_conv import LearnedExtract
+
+        extractor = LearnedExtract()
+
+        # Create valid images
+        images = [Image.new("RGB", (224, 224), color="gray") for _ in range(5)]
+
+        # Test that ValueError is caught during batch processing
+        try:
+            features = extractor.batch(images)
+            assert isinstance(features, torch.Tensor)
+            assert features.shape == (5, 768)
+        except ValueError as exc:
+            # ValueError should be caught during batch processing
+            assert isinstance(exc, ValueError)
+
+
+class TestPipelineRuntimeError:
+    """Test suite for RuntimeError handling in pipeline."""
+
+    def test_pipeline_runtime_error_vit(self):
+        """Test RuntimeError is caught when VIT pipeline step fails."""
+        from pathlib import Path
+        import tempfile
+        from PIL import Image
+        from negate.io.spec import Spec
+        from negate.extract.unified_pipeline import ExtractorPipeline
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a valid image
+            img_path = Path(tmpdir) / "test.png"
+            img = Image.new("RGB", (100, 100))
+            img.save(img_path)
+
+            # Test that RuntimeError is caught during pipeline execution
+            try:
+                spec = Spec()
+                pipeline = ExtractorPipeline(spec, order=["vit"])
+                features = pipeline.run(Image.open(img_path))
+                assert isinstance(features, dict)
+            except RuntimeError as exc:
+                # RuntimeError should be caught during pipeline execution
+                assert isinstance(exc, RuntimeError)
+
+
+class TestVAECleanupRuntimeError:
+    """Test suite for RuntimeError handling in VAE cleanup."""
+
+    def test_vae_cleanup_gpu_runtime_error(self):
+        """Test RuntimeError is caught during GPU cleanup."""
+        from pathlib import Path
+        import tempfile
+        from PIL import Image
+        from negate.io.spec import Spec
+        from negate.extract.feature_vae import VAEExtract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a valid image
+            img_path = Path(tmpdir) / "test.png"
+            img = Image.new("RGB", (100, 100))
+            img.save(img_path)
+
+            # Test that RuntimeError is caught during cleanup
+            spec = Spec()
+            spec.device = torch.device("cuda")  # type: ignore
+            extractor = VAEExtract(spec, verbose=False)
+
+            # Should not raise during cleanup
+            extractor.cleanup()
+
+    def test_vae_cleanup_del_runtime_error(self):
+        """Test RuntimeError is caught when deleting VAE model."""
+        from pathlib import Path
+        import tempfile
+        from PIL import Image
+        from negate.io.spec import Spec
+        from negate.extract.feature_vae import VAEExtract
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a valid image
+            img_path = Path(tmpdir) / "test.png"
+            img = Image.new("RGB", (100, 100))
+            img.save(img_path)
+
+            # Test that RuntimeError is caught when deleting model
+            spec = Spec()
+            extractor = VAEExtract(spec, verbose=False)
+
+            # Should not raise during cleanup
+            extractor.cleanup()

@@ -124,28 +124,6 @@ class UnifiedExtractor:
         """
         return [self(image) for image in images]
 
-    def _to_numeric(self, image: Image.Image | Tensor) -> np.ndarray:
-        """Convert image to numeric array for residual processing.
-
-        :param image: Input image.
-        :returns: Grayscale numeric array.
-        """
-        if isinstance(image, Tensor):
-            numeric = image.cpu().numpy()
-        else:
-            numeric = np.asarray(image)
-
-        while numeric.ndim > 3:
-            numeric = numeric.squeeze(0)
-
-        if numeric.ndim == 3 and numeric.shape[0] <= 4:
-            numeric = np.moveaxis(numeric, 0, -1)
-
-        from skimage.color import rgb2gray
-
-        gray = rgb2gray(numeric)
-        return gray.astype(np.float64)
-
     def _extract_wavelet(self, image: Image.Image) -> dict[str, float]:
         """Extract wavelet features using WaveletContext.
 
@@ -161,7 +139,7 @@ class UnifiedExtractor:
             dataset = Dataset.from_list([{"image": image}])
             result = analyzer(dataset)
             return result.get("results", [{}])[0] if result.get("results") else {}
-        except Exception:
+        except ImportError:
             return {}
 
     def _extract_vae(self, image: Image.Image) -> dict[str, float]:
@@ -190,7 +168,7 @@ class UnifiedExtractor:
                     results["vae_latent_std"] = float(np.std(vae_features["features"]))
 
             return results
-        except Exception:
+        except RuntimeError:
             return {}
 
     def _extract_vit(self, image: Image.Image) -> dict[str, float]:
@@ -214,7 +192,7 @@ class UnifiedExtractor:
                     results["vit_features_std"] = float(np.std(feat))
 
             return results
-        except Exception:
+        except RuntimeError:
             return {}
 
     def feature_names(self) -> list[str]:
@@ -248,7 +226,7 @@ class UnifiedExtractor:
             if hasattr(extractor, "cleanup"):
                 try:
                     extractor.cleanup()
-                except Exception:
+                except RuntimeError:
                     pass
             if hasattr(extractor, "__exit__"):
                 extractor.__exit__(None, None, None)
@@ -257,7 +235,7 @@ class UnifiedExtractor:
         try:
             if self.spec.device.type != "cpu":
                 torch.cuda.empty_cache()
-        except Exception:
+        except RuntimeError:
             pass
 
     def __enter__(self) -> "UnifiedExtractor":

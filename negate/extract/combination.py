@@ -41,7 +41,7 @@ def run_all_combinations(image_path: Path | str) -> dict[str, Any]:
             features = extractor(image)
             results["single_modules"][module.name] = features
             single_results[module.name] = len(features)
-        except Exception:
+        except RuntimeError:
             results["single_modules"][module.name] = {}
             single_results[module.name] = 0
 
@@ -53,7 +53,7 @@ def run_all_combinations(image_path: Path | str) -> dict[str, Any]:
             features = extractor(image)
             results["module_pairs"][pair_name] = features
             pair_results[pair_name] = len(features)
-        except Exception:
+        except RuntimeError:
             results["module_pairs"][pair_name] = {}
             pair_results[pair_name] = 0
 

@@ -65,7 +65,7 @@ class LearnedExtract:
             for img in batch_imgs:
                 try:
                     tensors.append(self._transform(img.convert("RGB")))
-                except Exception:
+                except ValueError:
                     tensors.append(torch.zeros(3, 224, 224))
             batch_tensor = torch.stack(tensors)
             feats = self._model(batch_tensor).numpy()

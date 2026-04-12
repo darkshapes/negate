@@ -60,7 +60,7 @@ class HOGFeatures:
                 resaved = np.array(PILImage.open(buf).convert("RGB"), dtype=np.float64)
                 arr_f = arr.astype(np.float64)
                 rmse = float(np.sqrt(((arr_f - resaved) ** 2).mean()))
-            except Exception:
+            except (ValueError, OSError):
                 rmse = 0.0
             features[f"jpeg_ghost_q{q}_rmse"] = rmse
             rmses.append(rmse)

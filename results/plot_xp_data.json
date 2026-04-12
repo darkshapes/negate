@@ -1,0 +1,12 @@
+[
+    {
+        "metric": "a",
+        "value": 1,
+        "model_name": "test_model"
+    },
+    {
+        "metric": "b",
+        "value": 2,
+        "model_name": "test_model"
+    }
+]

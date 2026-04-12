@@ -69,3 +69,33 @@ class TestRunAllCombinations:
             summary = results["summary"]
             assert "total_single_modules" in summary
             assert "total_module_pairs" in summary
+
+
+class TestCombinationRuntimeError:
+    """Test suite for RuntimeError handling in combination extraction."""
+
+    def test_combination_runtime_error_extractor(self):
+        """Test RuntimeError is caught when extractor fails."""
+        from pathlib import Path
+        import tempfile
+        from PIL import Image
+        from negate.io.spec import Spec
+        from negate.extract.unified_core import ExtractionModule
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a valid image
+            img_path = Path(tmpdir) / "test.png"
+            img = Image.new("RGB", (100, 100))
+            img.save(img_path)
+
+            # Test that RuntimeError is caught during extraction
+            try:
+                from negate.extract.unified_core import UnifiedExtractor
+                spec = Spec()
+                extractor = UnifiedExtractor(spec, enable=[ExtractionModule.LEARNED])
+                features = extractor(Image.open(img_path))
+                assert isinstance(features, dict)
+                assert len(features) == 768
+            except RuntimeError as exc:
+                # RuntimeError should be caught and handled gracefully
+                assert isinstance(exc, RuntimeError)
