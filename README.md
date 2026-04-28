@@ -57,6 +57,14 @@ Train a new model with the following command:
 > type a `path` to an image file or directory of image files to add genuine human origin assets to the dataset
 > add synthetic images using _`-s`_ before a `path`
 
+## Empty Model Cache
+
+Remove all models and datasets related to this project:
+
+```
+hf cache rm dataset/tellif/ai_vs_real_image_semantically_similar dataset/huggan/wikiart dataset/KarimSayed/cat-breed-fiass-index dataset/exdysa/nano-banana-pro-generated-1k-clone dataset/ash12321/seedream-4.5-generated-2k dataset/darkshapes/a_slice dataset/exdysa/rnd_synthetic_img dataset/boshik/Illustrations dataset/huggan/ae_photos model/exdysa/dc-ae-f32c32-sana-1.1-diffusers model/tonera/FLUX.2-klein-9B-Int8-TorchAo model/Freepik/F-Lite-Texture model/black-forest-labs/FLUX.2-dev model/Tongyi-MAI/Z-Image model/exdysa/mitsua-vae-SAFETENSORS model/timm/vit_base_patch16_dinov3.lvd1689m model/nvidia/C-RADIOv4-SO400M model/facebook/dinov3-vitl16-pretrain-sat493m model/timm/MobileCLIP2-S4-OpenCLIP
+```
+
 ## Technical Details & Research Results
 
 ### Abstract
